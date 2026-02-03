@@ -36,6 +36,7 @@ from dvt.artifacts.schemas.base import Writable
 from dvt.clients.jinja import MacroStack, get_rendered
 from dvt.clients.jinja_static import statically_extract_macro_calls
 from dvt.config import Project, RuntimeConfig
+from dvt.config.project import get_project_yml_path
 from dvt.constants import (
     MANIFEST_FILE_NAME,
     PARTIAL_PARSE_FILE_NAME,
@@ -1070,10 +1071,10 @@ class ManifestLoader:
         connection_keys.sort()
         profile_hash = FileHash.from_contents(pprint.pformat(connection_keys))
 
-        # Create a FileHashes for dbt_project for all dependencies
+        # Create a FileHashes for project yml for all dependencies (dvt_project.yml or dbt_project.yml)
         project_hashes = {}
         for name, project in all_projects.items():
-            path = os.path.join(project.project_root, "dvt_project.yml")
+            path = get_project_yml_path(project.project_root)
             with open(path) as fp:
                 project_hashes[name] = FileHash.from_contents(fp.read())
 

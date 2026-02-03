@@ -501,12 +501,20 @@ class DebugTask(BaseTask):
             fire_event(DebugCmdOut(msg=f"      Status: {status}"))
 
     def _debug_computes(self) -> None:
-        """Display compute engines from computes.yml."""
-        fire_event(DebugCmdOut(msg="\n--- Compute Engines ---"))
+        """Display the current project's default compute only (from project vars or 'default')."""
+        fire_event(DebugCmdOut(msg="\n--- Compute (current project default only) ---"))
+        compute_name = "default"
+        if os.path.exists(self.project_path):
+            try:
+                partial = PartialProject.from_project_root(str(self.project_dir), verify_version=False)
+                vars_config = (partial.project_dict or {}).get("vars") or {}
+                compute_name = vars_config.get("dvt_default_compute", "default")
+            except Exception:
+                pass
         computes_path = Path(self.profiles_dir) / "computes.yml" if self.profiles_dir else COMPUTES_PATH
         if not computes_path.exists():
-            fire_event(DebugCmdOut(msg="  No computes.yml found. Using default local Spark."))
-            fire_event(DebugCmdOut(msg="  default: type=spark, master=local[*]"))
+            fire_event(DebugCmdOut(msg=f"  No computes.yml found. Project default compute: {compute_name}"))
+            fire_event(DebugCmdOut(msg="  (Using default local Spark when running.)"))
             try:
                 from pyspark.sql import SparkSession  # noqa: F401
                 fire_event(DebugCmdOut(msg="  PySpark: ✓ available"))
@@ -515,18 +523,23 @@ class DebugTask(BaseTask):
             return
         try:
             raw = load_yaml_text(dbt_common.clients.system.load_file_contents(str(computes_path)))
-            computes = (raw or {}).get("computes") or {}
+            all_computes = (raw or {}).get("computes") or {}
         except Exception as e:
             fire_event(DebugCmdOut(msg=f"  Error reading computes.yml: {e}"))
             return
-        for name, cfg in computes.items():
-            if not isinstance(cfg, dict):
-                continue
-            fire_event(DebugCmdOut(msg=f"\n  {name}:"))
-            fire_event(DebugCmdOut(msg=f"    Type: {cfg.get('type', 'spark')}"))
-            fire_event(DebugCmdOut(msg=f"    Master: {cfg.get('master', 'N/A')}"))
-            for k, v in list((cfg.get("config") or {}).items())[:5]:
-                fire_event(DebugCmdOut(msg=f"    {k}: {v}"))
+        if compute_name not in all_computes:
+            fire_event(DebugCmdOut(msg=f"  Compute '{compute_name}' (project default) not found in computes.yml."))
+            fire_event(DebugCmdOut(msg=f"  Available: {', '.join(all_computes.keys()) or 'none'}"))
+            return
+        cfg = all_computes[compute_name]
+        if not isinstance(cfg, dict):
+            fire_event(DebugCmdOut(msg=f"  Compute '{compute_name}' is misconfigured."))
+            return
+        fire_event(DebugCmdOut(msg=f"\n  {compute_name} (project default):"))
+        fire_event(DebugCmdOut(msg=f"    Type: {cfg.get('type', 'spark')}"))
+        fire_event(DebugCmdOut(msg=f"    Master: {cfg.get('master', 'N/A')}"))
+        for k, v in list((cfg.get("config") or {}).items())[:5]:
+            fire_event(DebugCmdOut(msg=f"    {k}: {v}"))
         try:
             from pyspark.sql import SparkSession  # noqa: F401
             fire_event(DebugCmdOut(msg="\n  PySpark: ✓ available"))

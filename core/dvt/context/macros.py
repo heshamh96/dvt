@@ -68,7 +68,8 @@ class MacroNamespace(Mapping):
     def get_from_package(self, package_name: Optional[str], name: str) -> Optional[MacroGenerator]:
         if package_name is None:
             return self.get(name)
-        elif package_name == GLOBAL_PROJECT_NAME:
+        elif package_name in (GLOBAL_PROJECT_NAME, "dbt"):
+            # "dbt" is used by dbt-adapter packages (e.g. dbt-postgres); resolve from internal namespace
             return self.global_project_namespace.get(name)
         elif package_name in self.packages:
             return self.packages[package_name].get(name)

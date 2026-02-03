@@ -135,7 +135,7 @@ debug_show_targets = _create_option_and_track_env_var(
 debug_show_computes = _create_option_and_track_env_var(
     "--computes",
     envvar=None,
-    help="List compute engines only.",
+    help="Show the current project's default compute only (from vars.dvt_default_compute or 'default').",
     is_flag=True,
 )
 

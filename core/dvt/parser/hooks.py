@@ -1,6 +1,8 @@
+import os
 from dataclasses import dataclass
 from typing import Iterable, Iterator, List, Tuple, Union
 
+from dvt.config.project import get_project_yml_path
 from dvt.context.context_config import ContextConfig
 from dvt.contracts.files import FilePath
 from dvt.contracts.graph.nodes import HookNode
@@ -67,14 +69,16 @@ class HookSearcher(Iterable[HookBlock]):
 
 class HookParser(SimpleParser[HookBlock, HookNode]):
 
-    # Hooks are only in the dvt_project.yml file for the project
+    # Hooks are only in the project yml file (dvt_project.yml or dbt_project.yml for adapter packages)
     def get_path(self) -> FilePath:
         # There ought to be an existing file object for this, but
         # until that is implemented use a dummy modification time
+        project_yml_full = get_project_yml_path(self.project.project_root)
+        relative_path = os.path.basename(project_yml_full)
         path = FilePath(
             project_root=self.project.project_root,
             searched_path=".",
-            relative_path="dvt_project.yml",
+            relative_path=relative_path,
             modification_time=0.0,
         )
         return path

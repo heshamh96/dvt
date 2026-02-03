@@ -77,9 +77,12 @@ Validator Error:
 {error}
 """
 
+# Adapter packages (e.g. dbt-postgres) use dbt_project.yml; DVT projects use dvt_project.yml
+DBT_COMPAT_PROJECT_FILE_NAME = "dbt_project.yml"
+
 MISSING_DBT_PROJECT_ERROR = """\
-No {DBT_PROJECT_FILE_NAME} found at expected path {path}
-Verify that each entry within packages.yml (and their transitive dependencies) contains a file named {DBT_PROJECT_FILE_NAME}
+No {DBT_PROJECT_FILE_NAME} or {DBT_COMPAT_PROJECT_FILE_NAME} found at expected path {path}
+Verify that each entry within packages.yml (and their transitive dependencies) contains a project file (dvt_project.yml or dbt_project.yml).
 """
 
 
@@ -191,17 +194,25 @@ def value_or(value: Optional[T], default: T) -> T:
         return value
 
 
+def get_project_yml_path(project_root: str) -> str:
+    """Return path to project yaml (dvt_project.yml or dbt_project.yml). Raises if neither exists."""
+    project_root = os.path.normpath(project_root)
+    for name in (DBT_PROJECT_FILE_NAME, DBT_COMPAT_PROJECT_FILE_NAME):
+        p = os.path.join(project_root, name)
+        if path_exists(p):
+            return p
+    raise DvtProjectError(
+        MISSING_DBT_PROJECT_ERROR.format(
+            path=project_root,
+            DBT_PROJECT_FILE_NAME=DBT_PROJECT_FILE_NAME,
+            DBT_COMPAT_PROJECT_FILE_NAME=DBT_COMPAT_PROJECT_FILE_NAME,
+        )
+    )
+
+
 def load_raw_project(project_root: str, validate: bool = False) -> Dict[str, Any]:
     project_root = os.path.normpath(project_root)
-    project_yaml_filepath = os.path.join(project_root, DBT_PROJECT_FILE_NAME)
-
-    # get the project.yml contents
-    if not path_exists(project_yaml_filepath):
-        raise DvtProjectError(
-            MISSING_DBT_PROJECT_ERROR.format(
-                path=project_yaml_filepath, DBT_PROJECT_FILE_NAME=DBT_PROJECT_FILE_NAME
-            )
-        )
+    project_yaml_filepath = get_project_yml_path(project_root)
 
     project_dict = _load_yaml(project_yaml_filepath, validate=validate)
 

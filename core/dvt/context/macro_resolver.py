@@ -183,7 +183,8 @@ class TestMacroNamespace:
         macro = None
         if package_name is None:
             macro = self.macro_resolver.macros_by_name.get(name)
-        elif package_name == GLOBAL_PROJECT_NAME:
+        elif package_name in (GLOBAL_PROJECT_NAME, "dbt"):
+            # "dbt" is used by dbt-adapter packages (e.g. dbt-postgres); resolve from internal namespace
             macro = self.macro_resolver.internal_packages_namespace.get(name)
         elif package_name in self.macro_resolver.packages:
             macro = self.macro_resolver.packages[package_name].get(name)
