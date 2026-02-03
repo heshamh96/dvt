@@ -1,0 +1,58 @@
+# dev-team-federation
+
+**Agent Name**: dev-team-federation  
+**Description**: Federation engine team responsible for Spark-based cross-database query execution, predicate pushdown, and SQL dialect translation.
+
+## Scope
+
+This agent handles:
+- Spark federation engine (`core/dvt/federation/`)
+- Query planning and execution routing
+- Predicate pushdown optimization
+- SQL dialect translation (using sqlglot)
+- Spark session management from `computes.yml`
+- Cross-database JOIN execution
+- JDBC connectivity for federation
+
+## Repository and Branch Context
+
+- **Repository**: All work is done in the DVT repository (`git@github.com:heshamh96/dvt.git`)
+- **Default Branch**: Development happens on the **dev** branch
+- **Rebase Strategy**: Codebase is built on dbt-core; preserve ability to rebase **dev** onto **upstream/main** (dbt-core) without breaking changes
+- **Branch Flow**: dev → uat → prod (via PRs)
+
+## Key Files and Directories
+
+- `core/dvt/federation/engine.py` - SparkEngine class
+- `core/dvt/federation/planner.py` - Query planning and routing
+- `core/dvt/federation/executor.py` - Query execution
+- `core/dvt/federation/optimizer.py` - Predicate pushdown optimization
+- `core/dvt/federation/dialect.py` - SQL dialect translation
+- `~/.dvt/computes.yml` - Spark compute configurations
+- `core/dvt/execution/resolver.py` - Execution path resolution (Rule 3)
+
+## DVT Rules Reference
+
+- **Rule 1**: Compute Resolution (CLI > model config > computes.yml default)
+- **Rule 3**: Execution Path Resolution (pushdown vs federation)
+- **Rule 4**: Materialization Rules (federation-specific: view → table coercion, ephemeral in-memory)
+- **Rule 7.5**: `dvt run` command (federation execution)
+
+## Instructions
+
+1. **Enforce Rule 3** - Federation path is used when model target differs from any upstream target
+2. **Implement predicate pushdown** - WHERE clauses must be pushed to source databases (Rule 3.4)
+3. **Respect compute hierarchy** from Rule 1 - validate compute exists in computes.yml (no fallback)
+4. **Handle materialization coercion** - Views on federation path become tables with DVT001 warning (Rule 4.4)
+5. **Use sqlglot** for SQL translation - ensure cross-dialect compatibility
+6. **Test with multiple databases** - Verify federation works across PostgreSQL, Snowflake, MySQL, etc.
+
+## When to Use This Agent
+
+Use dev-team-federation when:
+- Implementing or modifying federation engine
+- Working on Spark session management
+- Optimizing query execution (predicate pushdown)
+- Translating SQL between dialects
+- Implementing cross-database JOINs
+- Working on computes.yml integration

@@ -1,0 +1,104 @@
+# DVT Team Agents
+
+This document provides an index of all **dev-team-*** sub-agents used in DVT development. Each agent has a specific scope and set of responsibilities.
+
+## Overview
+
+All sub-agents follow these principles:
+- **Repository**: Work is done in the DVT repository (`git@github.com:heshamh96/dvt.git`)
+- **Default Branch**: Development happens on the **dev** branch
+- **Rebase Strategy**: Codebase is built on dbt-core; preserve ability to rebase **dev** onto **upstream/main** (dbt-core) without breaking changes
+- **Branch Flow**: dev → uat → prod (via PRs)
+
+## Agent Roster
+
+| Agent ID | Cursor Rule File | Scope | When to Use |
+|----------|------------------|-------|-------------|
+| **dev-team-architecture** | `.cursor/rules/dev-team-architecture.mdc` | Design, DVT rules compliance, cross-cutting concerns | When making architectural decisions, reviewing DVT RULES compliance, or working on execution path resolution |
+| **dev-team-backend** | `.cursor/rules/dev-team-backend.mdc` | CLI commands, configuration, manifest, DAG | When implementing CLI commands (`dvt init`, `dvt compile`, `dvt run`), config loading, or DAG construction |
+| **dev-team-federation** | `.cursor/rules/dev-team-federation.mdc` | Spark federation engine, cross-database queries | When working on federation engine, Spark integration, predicate pushdown, or SQL dialect translation |
+| **dev-team-adapters** | `.cursor/rules/dev-team-adapters.mdc` | Database adapters, JDBC connectivity, target management | When implementing adapters, JDBC connectivity, or `dvt target` commands |
+| **dev-team-mdm-types** | `.cursor/rules/dev-team-mdm-types.mdc` | MDM database, datatype mappings, type conversion | When working on MDM database, type system, column naming rules, or schema caching |
+| **dev-team-qa** | `.cursor/rules/dev-team-qa.mdc` | Testing, test infrastructure, CI test jobs | When writing tests, setting up test infrastructure, or working on CI test workflows |
+| **dev-team-deploy** | `.cursor/rules/dev-team-deploy.mdc` | Build, CI/CD, release management, branch strategy | When setting up CI/CD workflows, managing releases, or enforcing branch strategy |
+| **dev-team-docs** | `.cursor/rules/dev-team-docs.mdc` | Documentation, `dvt docs` command | When writing documentation, implementing `dvt docs`, or maintaining contributor guides |
+
+## How to Use Agents
+
+### For AI Assistants
+
+When working on a specific area, reference the appropriate agent's Cursor rule file. For example:
+- Working on federation engine? Use `dev-team-federation` rules
+- Writing tests? Use `dev-team-qa` rules
+- Implementing CLI commands? Use `dev-team-backend` rules
+
+### For Human Developers
+
+1. **Identify your task** - Determine which agent's scope your work falls into
+2. **Read the agent's rule file** - Check `.cursor/rules/dev-team-<name>.mdc` for specific guidelines
+3. **Follow the instructions** - Each agent has specific instructions for their domain
+4. **Reference DVT RULES** - All agents reference the canonical DVT RULES from `dvt_implementation_plan.md`
+
+## Agent Responsibilities Summary
+
+### dev-team-architecture
+- Ensures compliance with DVT RULES
+- Reviews architectural decisions
+- Maintains consistency with dvt-core-features
+- Handles execution path resolution logic
+
+### dev-team-backend
+- Implements CLI commands
+- Manages configuration loading
+- Builds manifest and DAG
+- Handles project initialization
+
+### dev-team-federation
+- Implements Spark federation engine
+- Optimizes query execution (predicate pushdown)
+- Translates SQL between dialects
+- Manages Spark sessions
+
+### dev-team-adapters
+- Implements database adapters
+- Manages JDBC connectivity
+- Handles target management (`dvt target`)
+- Provides pushdown capabilities
+
+### dev-team-mdm-types
+- Manages MDM database
+- Implements type conversion system
+- Handles column naming rules
+- Caches schema information
+
+### dev-team-qa
+- Writes and maintains tests
+- Sets up test infrastructure
+- Manages CI test workflows
+- Ensures code quality
+
+### dev-team-deploy
+- Sets up CI/CD pipelines
+- Manages releases and versioning
+- Enforces branch strategy
+- Handles build processes
+
+### dev-team-docs
+- Writes user documentation
+- Implements `dvt docs` command
+- Maintains contributor guides
+- Documents features and APIs
+
+## Important Reminders
+
+1. **Always work on the `dev` branch** - All development happens on `dev`
+2. **Respect branch flow** - dev → uat → prod (via PRs)
+3. **Preserve rebase compatibility** - Changes must be rebaseable onto dbt-core
+4. **Reference DVT RULES** - The canonical rules are in `dvt_implementation_plan.md`
+5. **Check feature dependencies** - Review `dvt-core-features/` before making changes
+
+## Related Documentation
+
+- [Branching and Rebase Strategy](./BRANCHING_AND_REBASE.md) - Git workflow documentation
+- `dvt_implementation_plan.md` - Canonical DVT RULES and implementation plan
+- `dvt-core-features/` - Feature specifications
