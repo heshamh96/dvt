@@ -9,7 +9,7 @@ from dvt._pydantic_shim import BaseSettings  # type: ignore
 from dvt.config.runtime import UnsetProfile, load_project
 from dvt.constants import MANIFEST_FILE_NAME, RUN_RESULTS_FILE_NAME
 from dvt.events.types import ArtifactUploadSkipped, ArtifactUploadSuccess
-from dvt.exceptions import DbtProjectError
+from dvt.exceptions import DvtProjectError
 from dbt_common.events.functions import fire_event
 from dbt_common.exceptions import DbtBaseException as DbtException
 
@@ -94,12 +94,12 @@ def upload_artifacts(project_dir, target_path, command):
             project_dir, version_check=False, profile=UnsetProfile(), cli_vars=None
         )
         if not project.dbt_cloud or "tenant_hostname" not in project.dbt_cloud:
-            raise DbtProjectError("dbt_cloud.tenant_hostname not found in dvt_project.yml")
+            raise DvtProjectError("dbt_cloud.tenant_hostname not found in dvt_project.yml")
         tenant_hostname = project.dbt_cloud["tenant_hostname"]
         if not tenant_hostname:
-            raise DbtProjectError("dbt_cloud.tenant_hostname is empty in dvt_project.yml")
+            raise DvtProjectError("dbt_cloud.tenant_hostname is empty in dvt_project.yml")
     except Exception as e:
-        raise DbtProjectError(
+        raise DvtProjectError(
             f"Error reading dbt_cloud.tenant_hostname from dvt_project.yml: {str(e)}"
         )
 

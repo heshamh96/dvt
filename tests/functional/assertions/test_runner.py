@@ -1,14 +1,14 @@
 import os
 from typing import Callable, List, Optional
 
-from dvt.cli.main import dbtRunner, dbtRunnerResult
+from dvt.cli.main import dvtRunner, dvtRunnerResult
 from dvt.contracts.graph.manifest import Manifest
 from dvt.tests.util import get_run_results
 from dbt_common.events.base_types import EventMsg
 
 
 def assert_run_results_have_compiled_node_attributes(
-    args: List[str], result: dbtRunnerResult
+    args: List[str], result: dvtRunnerResult
 ) -> None:
     commands_with_run_results = ["build", "compile", "docs", "run", "test"]
     if not [a for a in args if a in commands_with_run_results] or not result.success:
@@ -24,17 +24,17 @@ def assert_run_results_have_compiled_node_attributes(
 _STANDARD_ASSERTIONS = [assert_run_results_have_compiled_node_attributes]
 
 
-class dbtTestRunner(dbtRunner):
+class dbtTestRunner(dvtRunner):
     def __init__(
         self,
         manifest: Optional[Manifest] = None,
         callbacks: Optional[List[Callable[[EventMsg], None]]] = None,
-        exit_assertions: Optional[List[Callable[[List[str], dbtRunnerResult], None]]] = None,
+        exit_assertions: Optional[List[Callable[[List[str], dvtRunnerResult], None]]] = None,
     ):
         self.exit_assertions = exit_assertions if exit_assertions else _STANDARD_ASSERTIONS
         super().__init__(manifest, callbacks)
 
-    def invoke(self, args: List[str], **kwargs) -> dbtRunnerResult:
+    def invoke(self, args: List[str], **kwargs) -> dvtRunnerResult:
         result = super().invoke(args, **kwargs)
 
         for assertion in self.exit_assertions:

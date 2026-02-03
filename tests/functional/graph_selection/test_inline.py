@@ -1,6 +1,6 @@
 import pytest
 
-from dvt.cli.exceptions import DbtUsageException
+from dvt.cli.exceptions import DvtUsageException
 from dvt.tests.util import run_dbt, run_dbt_and_capture, write_file
 
 selectors_yml = """
@@ -56,9 +56,9 @@ class TestCompileInlineWithSelector:
         # put back non-disabled dbt_project and check for mutually exclusive error message
         # for --select and --inline
         write_file(dbt_project_yml, project.project_root, "dvt_project.yml")
-        with pytest.raises(DbtUsageException):
+        with pytest.raises(DvtUsageException):
             run_dbt(["compile", "--select", "first_model", "--inline", "select 1 as id"])
 
         # check for mutually exclusive --selector and --inline
-        with pytest.raises(DbtUsageException):
+        with pytest.raises(DvtUsageException):
             run_dbt(["compile", "--selector", "test_selector", "--inline", "select 1 as id"])

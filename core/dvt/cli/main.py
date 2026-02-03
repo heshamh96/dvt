@@ -13,7 +13,7 @@ from dvt.artifacts.schemas.catalog import CatalogArtifact
 from dvt.artifacts.schemas.run import RunExecutionResult
 from dvt.cli import params as p
 from dvt.cli import requires
-from dvt.cli.exceptions import DbtInternalException, DbtUsageException
+from dvt.cli.exceptions import DvtInternalException, DvtUsageException
 from dvt.cli.requires import setup_manifest
 from dvt.contracts.graph.manifest import Manifest
 from dvt.mp_context import get_mp_context
@@ -21,8 +21,8 @@ from dbt_common.events.base_types import EventMsg
 
 
 @dataclass
-class dbtRunnerResult:
-    """Contains the result of an invocation of the dbtRunner"""
+class dvtRunnerResult:
+    """Contains the result of an invocation of the dvtRunner"""
 
     success: bool
 
@@ -38,7 +38,7 @@ class dbtRunnerResult:
 
 
 # Programmatic invocation
-class dbtRunner:
+class dvtRunner:
     def __init__(
         self,
         manifest: Optional[Manifest] = None,
@@ -50,49 +50,49 @@ class dbtRunner:
             callbacks = []
         self.callbacks = callbacks
 
-    def invoke(self, args: List[str], **kwargs) -> dbtRunnerResult:
+    def invoke(self, args: List[str], **kwargs) -> dvtRunnerResult:
         try:
-            dbt_ctx = cli.make_context(cli.name, args.copy())
-            dbt_ctx.obj = {
+            dvt_ctx = cli.make_context(cli.name, args.copy())
+            dvt_ctx.obj = {
                 "manifest": self.manifest,
                 "callbacks": self.callbacks,
                 "dbt_runner_command_args": args,
             }
 
             for key, value in kwargs.items():
-                dbt_ctx.params[key] = value
+                dvt_ctx.params[key] = value
                 # Hack to set parameter source to custom string
-                dbt_ctx.set_parameter_source(key, "kwargs")  # type: ignore
+                dvt_ctx.set_parameter_source(key, "kwargs")  # type: ignore
 
-            result, success = cli.invoke(dbt_ctx)
-            return dbtRunnerResult(
+            result, success = cli.invoke(dvt_ctx)
+            return dvtRunnerResult(
                 result=result,
                 success=success,
             )
         except requires.ResultExit as e:
-            return dbtRunnerResult(
+            return dvtRunnerResult(
                 result=e.result,
                 success=False,
             )
         except requires.ExceptionExit as e:
-            return dbtRunnerResult(
+            return dvtRunnerResult(
                 exception=e.exception,
                 success=False,
             )
         except (BadOptionUsage, NoSuchOption, UsageError) as e:
-            return dbtRunnerResult(
-                exception=DbtUsageException(e.message),
+            return dvtRunnerResult(
+                exception=DvtUsageException(e.message),
                 success=False,
             )
         except ClickExit as e:
             if e.exit_code == 0:
-                return dbtRunnerResult(success=True)
-            return dbtRunnerResult(
-                exception=DbtInternalException(f"unhandled exit code {e.exit_code}"),
+                return dvtRunnerResult(success=True)
+            return dvtRunnerResult(
+                exception=DvtInternalException(f"unhandled exit code {e.exit_code}"),
                 success=False,
             )
         except BaseException as e:
-            return dbtRunnerResult(
+            return dvtRunnerResult(
                 exception=e,
                 success=False,
             )

@@ -10,7 +10,7 @@ import dvt.version
 from dvt import deprecations
 from dvt.artifacts.schemas.freshness import FreshnessResult
 from dvt.artifacts.schemas.results import FreshnessStatus
-from dvt.cli.main import dbtRunner
+from dvt.cli.main import dvtRunner
 from dvt.tests.util import AnyFloat, AnyStringWith
 from tests.functional.sources.common_source_setup import BaseSourcesTest
 from tests.functional.sources.fixtures import (
@@ -396,7 +396,7 @@ class TestSourceFreshnessMacroOverride(SuccessfulSourceFreshnessTest):
             "test_loaded_at": project.adapter.quote("updated_at"),
         }
         events = []
-        dbtRunner(callbacks=[events.append]).invoke(
+        dvtRunner(callbacks=[events.append]).invoke(
             ["source", "freshness", "--vars", yaml.safe_dump(vars_dict)]
         )
         matches = list([e for e in events if e.info.name == "CollectFreshnessReturnSignature"])
@@ -419,14 +419,14 @@ class TestMetadataFreshnessFails:
             if e.info.name == "FreshnessConfigProblem" and e.info.level == "warn":
                 got_warning = True
 
-        runner = dbtRunner(callbacks=[warning_probe])
+        runner = dvtRunner(callbacks=[warning_probe])
         runner.invoke(["parse"])
 
         assert got_warning
 
     def test_metadata_freshness_unsupported_error_when_run(self, project):
 
-        runner = dbtRunner()
+        runner = dvtRunner()
         result = runner.invoke(["source", "freshness"])
         assert isinstance(result.result, FreshnessResult)
         assert len(result.result.results) == 1
@@ -533,7 +533,7 @@ class TestHooksInSourceFreshnessError:
             ):
                 run_result_error = e.info.msg
 
-        runner = dbtRunner(callbacks=[run_result_error_probe])
+        runner = dvtRunner(callbacks=[run_result_error_probe])
         runner.invoke(["source", "freshness"])
         assert 'relation "table_does_not_exist" does not exist' in run_result_error
 

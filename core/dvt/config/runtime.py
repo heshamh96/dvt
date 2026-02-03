@@ -30,7 +30,7 @@ from dvt.contracts.project import Configuration
 from dvt.events.types import UnusedResourceConfigPath
 from dvt.exceptions import (
     ConfigContractBrokenError,
-    DbtProjectError,
+    DvtProjectError,
     DbtRuntimeError,
     NonUniquePackageNameError,
     UninstalledPackagesFoundError,
@@ -42,7 +42,7 @@ from dbt_common.helper_types import DictDefaultEmptyStr, FQNPath, PathSet
 
 from .profile import Profile
 from .project import Project
-from .renderer import DbtProjectYamlRenderer, ProfileRenderer
+from .renderer import DvtProjectYamlRenderer, ProfileRenderer
 
 
 # Called by RuntimeConfig.collect_parts class method
@@ -55,7 +55,7 @@ def load_project(
     require_vars: bool = True,
 ) -> Project:
     # get the project with all of the provided information
-    project_renderer = DbtProjectYamlRenderer(profile, cli_vars, require_vars=require_vars)
+    project_renderer = DvtProjectYamlRenderer(profile, cli_vars, require_vars=require_vars)
     project = Project.from_project_root(
         project_root, project_renderer, verify_version=version_check, validate=validate
     )
@@ -207,8 +207,8 @@ class RuntimeConfig(Project, Profile, AdapterRequiredConfig):
         existing project's profile info, and create a new project file.
 
         :param project_root: A filepath to a dvt project.
-        :raises DbtProfileError: If the profile is invalid.
-        :raises DbtProjectError: If project is missing or invalid.
+        :raises DvtProfileError: If the profile is invalid.
+        :raises DvtProjectError: If project is missing or invalid.
         :returns: The new configuration.
         """
         # copy profile
@@ -216,7 +216,7 @@ class RuntimeConfig(Project, Profile, AdapterRequiredConfig):
         profile.validate()
 
         # load the new project and its packages. Don't pass cli variables.
-        renderer = DbtProjectYamlRenderer(profile)
+        renderer = DvtProjectYamlRenderer(profile)
         project = Project.from_project_root(
             project_root,
             renderer,
@@ -249,7 +249,7 @@ class RuntimeConfig(Project, Profile, AdapterRequiredConfig):
     def validate(self):
         """Validate the configuration against its contract.
 
-        :raises DbtProjectError: If the configuration fails validation.
+        :raises DvtProjectError: If the configuration fails validation.
         """
         try:
             Configuration.validate(self.serialize())
@@ -286,8 +286,8 @@ class RuntimeConfig(Project, Profile, AdapterRequiredConfig):
         load.
 
         :param args: The arguments as parsed from the cli.
-        :raises DbtProjectError: If the project is invalid or missing.
-        :raises DbtProfileError: If the profile is invalid or missing.
+        :raises DvtProjectError: If the project is invalid or missing.
+        :raises DvtProfileError: If the profile is invalid or missing.
         :raises DbtValidationError: If the cli variables are invalid.
         """
         project, profile = cls.collect_parts(args)
@@ -426,8 +426,8 @@ class RuntimeConfig(Project, Profile, AdapterRequiredConfig):
         for path in paths:
             try:
                 project = self.new_project(str(path))
-            except DbtProjectError as e:
-                raise DbtProjectError(
+            except DvtProjectError as e:
+                raise DvtProjectError(
                     f"Failed to read package: {e}",
                     result_type="invalid_project",
                     path=path,

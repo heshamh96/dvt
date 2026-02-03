@@ -2,7 +2,7 @@ import pathlib
 
 from test_profile_dir import environ
 
-from dvt.cli.main import dbtRunner
+from dvt.cli.main import dvtRunner
 
 jinjaesque_password = "no{{jinja{%re{#ndering"
 
@@ -46,7 +46,7 @@ class TestProfileParsing:
         self.write_profiles_yml(profiles_root, profile_with_jinjaesque_password)
 
         events = []
-        result = dbtRunner(callbacks=[events.append]).invoke(["parse"])
+        result = dvtRunner(callbacks=[events.append]).invoke(["parse"])
         assert result.success
 
         for e in events:
@@ -59,7 +59,7 @@ class TestProfileParsing:
 
         events = []
         with environ({"DBT_PASSWORD": jinjaesque_password}):
-            result = dbtRunner(callbacks=[events.append]).invoke(["parse"])
+            result = dvtRunner(callbacks=[events.append]).invoke(["parse"])
 
         assert result.success
         assert project.adapter.config.credentials.password == jinjaesque_password

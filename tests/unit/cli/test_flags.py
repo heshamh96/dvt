@@ -4,7 +4,7 @@ from typing import List, Optional
 import click
 import pytest
 
-from dvt.cli.exceptions import DbtUsageException
+from dvt.cli.exceptions import DvtUsageException
 from dvt.cli.flags import Flags
 from dvt.cli.main import cli
 from dvt.cli.types import Command
@@ -168,7 +168,7 @@ class TestFlags:
             "run", ["--warn-error", "--warn-error-options", '{"error": "all"}', "run"]
         )
 
-        with pytest.raises(DbtUsageException):
+        with pytest.raises(DvtUsageException):
             Flags(context)
 
     @pytest.mark.parametrize("warn_error", [True, False])
@@ -176,7 +176,7 @@ class TestFlags:
         project_flags.warn_error = warn_error
         context = self.make_dbt_context("run", ["--warn-error-options", '{"error": "all"}', "run"])
 
-        with pytest.raises(DbtUsageException):
+        with pytest.raises(DvtUsageException):
             Flags(context, project_flags)
 
     @pytest.mark.parametrize("warn_error", ["True", "False"])
@@ -185,7 +185,7 @@ class TestFlags:
         monkeypatch.setenv("DBT_WARN_ERROR_OPTIONS", '{"error":"all"}')
         context = self.make_dbt_context("run", ["run"])
 
-        with pytest.raises(DbtUsageException):
+        with pytest.raises(DvtUsageException):
             Flags(context)
 
     @pytest.mark.parametrize("warn_error", [True, False])
@@ -195,7 +195,7 @@ class TestFlags:
         project_flags.warn_error = warn_error
         context = self.make_dbt_context("run", ["--warn-error-options", '{"error": "all"}', "run"])
 
-        with pytest.raises(DbtUsageException):
+        with pytest.raises(DvtUsageException):
             Flags(context, project_flags)
 
     @pytest.mark.parametrize("warn_error", ["True", "False"])
@@ -203,7 +203,7 @@ class TestFlags:
         monkeypatch.setenv("DBT_WARN_ERROR", warn_error)
         context = self.make_dbt_context("run", ["--warn-error-options", '{"error": "all"}', "run"])
 
-        with pytest.raises(DbtUsageException):
+        with pytest.raises(DvtUsageException):
             Flags(context)
 
     @pytest.mark.parametrize("warn_error", ["True", "False"])
@@ -214,7 +214,7 @@ class TestFlags:
         monkeypatch.setenv("DBT_WARN_ERROR_OPTIONS", '{"error": "all"}')
         context = self.make_dbt_context("run", ["run"])
 
-        with pytest.raises(DbtUsageException):
+        with pytest.raises(DvtUsageException):
             Flags(context, project_flags)
 
     @pytest.mark.parametrize(
@@ -358,7 +358,7 @@ class TestFlags:
         parent_context = self.make_dbt_context("parent", ["--version-check"])
         context = self.make_dbt_context("child", ["--version-check"], parent_context)
 
-        with pytest.raises(DbtUsageException):
+        with pytest.raises(DvtUsageException):
             Flags(context)
 
     def test_global_flag_at_child_context(self):

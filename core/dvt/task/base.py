@@ -144,12 +144,12 @@ class ConfiguredTask(BaseTask):
         try:
             # This is usually RuntimeConfig
             config = RuntimeConfig.from_args(args)
-        except dvt.exceptions.DbtProjectError as exc:
+        except dvt.exceptions.DvtProjectError as exc:
             fire_event(LogDbtProjectError(exc=str(exc)))
 
             tracking.track_invalid_invocation(args=args, result_type=exc.result_type)
             raise dbt_common.exceptions.DbtRuntimeError("Could not run dvt") from exc
-        except dvt.exceptions.DbtProfileError as exc:
+        except dvt.exceptions.DvtProfileError as exc:
             all_profile_names = list(read_profiles(get_flags().PROFILES_DIR).keys())
             fire_event(LogDbtProfileError(exc=str(exc), profiles=all_profile_names))
             tracking.track_invalid_invocation(args=args, result_type=exc.result_type)

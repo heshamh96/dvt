@@ -3,7 +3,7 @@ import shutil
 import pytest
 
 from dvt.artifacts.resources.types import NodeType
-from dvt.cli.main import dbtRunner
+from dvt.cli.main import dvtRunner
 from dvt.cli.types import Command
 from dvt.events.types import NoNodesSelected
 from dvt.tests.util import run_dbt
@@ -90,15 +90,15 @@ class TestSelectResourceType:
         return EventCatcher(event_to_catch=NoNodesSelected)
 
     @pytest.fixture(scope="function")
-    def runner(self, catcher: EventCatcher) -> dbtRunner:
-        return dbtRunner(callbacks=[catcher.catch])
+    def runner(self, catcher: EventCatcher) -> dvtRunner:
+        return dvtRunner(callbacks=[catcher.catch])
 
     @pytest.mark.parametrize("resource_type", resource_types)
     def test_select_by_resource_type(
         self,
         resource_type: str,
         happy_path_project,
-        runner: dbtRunner,
+        runner: dvtRunner,
         catcher: EventCatcher,
     ) -> None:
         runner.invoke(["list", "--select", f"resource_type:{resource_type}"])

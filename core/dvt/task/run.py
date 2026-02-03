@@ -41,7 +41,7 @@ from dvt.events.types import (
 )
 from dvt.exceptions import CompilationError, DbtInternalError, DbtRuntimeError
 from dvt.graph import ResourceTypeSelector
-from dvt.graph.thread_pool import DbtThreadPool
+from dvt.graph.thread_pool import DvtThreadPool
 from dvt.hooks import get_hook_dict
 from dvt.materializations.incremental.microbatch import MicrobatchBuilder
 from dvt.node_types import NodeType, RunHookType
@@ -579,12 +579,12 @@ class MicrobatchModelRunner(ModelRunner):
         # The parent task is necessary because we need access to the `_submit_batch` and `submit` methods
         self._parent_task: Optional[RunTask] = None
         # The pool is necessary because we need to batches to be executed within the same thread pool
-        self._pool: Optional[DbtThreadPool] = None
+        self._pool: Optional[DvtThreadPool] = None
 
     def set_parent_task(self, parent_task: RunTask) -> None:
         self._parent_task = parent_task
 
-    def set_pool(self, pool: DbtThreadPool) -> None:
+    def set_pool(self, pool: DvtThreadPool) -> None:
         self._pool = pool
 
     @property
@@ -597,7 +597,7 @@ class MicrobatchModelRunner(ModelRunner):
         return self._parent_task
 
     @property
-    def pool(self) -> DbtThreadPool:
+    def pool(self) -> DvtThreadPool:
         if self._pool is None:
             raise DbtInternalError(
                 msg="Tried to access `pool` of `MicrobatchModelRunner` before it was set"
@@ -874,7 +874,7 @@ class RunTask(CompileTask):
         batches: Dict[int, BatchType],
         batch_idx: int,
         batch_results: List[RunResult],
-        pool: DbtThreadPool,
+        pool: DvtThreadPool,
         force_sequential_run: bool = False,
         skip: bool = False,
         incremental_batch: bool = True,

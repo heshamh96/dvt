@@ -1,6 +1,6 @@
 import os
 
-from dvt.cli.main import dbtRunner
+from dvt.cli.main import dvtRunner
 from dbt_common.events.base_types import EventLevel
 
 
@@ -14,7 +14,7 @@ def test_performance_report(project):
             nonlocal resource_report_level
             resource_report_level = e.info.level
 
-    runner = dbtRunner(callbacks=[check_for_report])
+    runner = dvtRunner(callbacks=[check_for_report])
 
     runner.invoke(["run"])
 

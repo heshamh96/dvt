@@ -8,11 +8,11 @@ from dvt.contracts.results import RunExecutionResult
 from dvt.utils import ExitCodes
 
 
-class DbtUsageException(Exception):
+class DvtUsageException(Exception):
     pass
 
 
-class DbtInternalException(Exception):
+class DvtInternalException(Exception):
     pass
 
 

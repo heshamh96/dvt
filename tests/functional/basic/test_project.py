@@ -4,8 +4,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from dvt.cli.main import dbtRunner
-from dvt.exceptions import DbtProjectError, ProjectContractError
+from dvt.cli.main import dvtRunner
+from dvt.exceptions import DvtProjectError, ProjectContractError
 from dvt.tests.util import run_dbt, update_config_file, write_config_file
 
 simple_model_sql = """
@@ -123,7 +123,7 @@ class TestProjectDbtCloudConfigString:
 
 class TestVersionSpecifierChecksComeBeforeYamlValidation:
     def test_version_specifier_checks_before_yaml_validation(self, project) -> None:
-        runner = dbtRunner()
+        runner = dvtRunner()
 
         # if no version specifier error, we should get a yaml validation error
         config_update = {"this-is-not-a-valid-key": "my-value-for-invalid-key"}
@@ -137,7 +137,7 @@ class TestVersionSpecifierChecksComeBeforeYamlValidation:
         update_config_file({"require-dvt-version": [">0.0.0", "<=0.0.1"]}, "dvt_project.yml")
         result = runner.invoke(["parse"])
         assert result.exception is not None
-        assert isinstance(result.exception, DbtProjectError)
+        assert isinstance(result.exception, DvtProjectError)
         assert "This version of dvt is not supported"
 
 
@@ -145,7 +145,7 @@ class TestArchiveNotAllowed:
     """At one point in time we supported an 'archive' key in projects, but no longer"""
 
     def test_archive_not_allowed(self, project):
-        runner = dbtRunner()
+        runner = dvtRunner()
 
         config_update = {
             "archive": {

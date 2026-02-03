@@ -5,7 +5,7 @@ from unittest import mock
 from unittest.mock import MagicMock, call, patch
 
 from dvt.constants import MANIFEST_FILE_NAME, RUN_RESULTS_FILE_NAME
-from dvt.exceptions import DbtProjectError
+from dvt.exceptions import DvtProjectError
 from dvt.utils.artifact_upload import (
     ArtifactUploadConfig,
     _retry_with_backoff,
@@ -286,7 +286,7 @@ class TestUploadArtifacts(unittest.TestCase):
         add_artifact_produced(os.path.join(self.target_path, MANIFEST_FILE_NAME))
 
         # Verify that the function raises an exception
-        with self.assertRaises(DbtProjectError) as context:
+        with self.assertRaises(DvtProjectError) as context:
             upload_artifacts(self.project_dir, self.target_path, self.command)
 
         self.assertIn("tenant_hostname not found", str(context.exception))

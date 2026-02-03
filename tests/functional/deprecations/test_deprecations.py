@@ -9,7 +9,7 @@ from pytest_mock import MockerFixture
 
 import dbt_common
 from dvt import deprecations
-from dvt.cli.main import dbtRunner
+from dvt.cli.main import dvtRunner
 from dvt.clients.registry import _get_cached
 from dvt.events.types import (
     ArgumentsPropertyInGenericTestDeprecation,
@@ -606,7 +606,7 @@ class TestModelsParamUsageRunnerDeprecation:
         event_catcher = EventCatcher(ModelParamUsageDeprecation)
 
         assert len(event_catcher.caught_events) == 0
-        dbtRunner(callbacks=[event_catcher.catch]).invoke(["ls", "--models", "some_model"])
+        dvtRunner(callbacks=[event_catcher.catch]).invoke(["ls", "--models", "some_model"])
         assert len(event_catcher.caught_events) == 1
 
 
@@ -629,7 +629,7 @@ class TestModelParamUsageRunnerDeprecation:
         event_catcher = EventCatcher(ModelParamUsageDeprecation)
 
         assert len(event_catcher.caught_events) == 0
-        dbtRunner(callbacks=[event_catcher.catch]).invoke(["ls", "--model", "some_model"])
+        dvtRunner(callbacks=[event_catcher.catch]).invoke(["ls", "--model", "some_model"])
         assert len(event_catcher.caught_events) == 1
 
 
@@ -651,7 +651,7 @@ class TestMParamUsageRunnerDeprecation:
         event_catcher = EventCatcher(ModelParamUsageDeprecation)
 
         assert len(event_catcher.caught_events) == 0
-        dbtRunner(callbacks=[event_catcher.catch]).invoke(["ls", "-m", "some_model"])
+        dvtRunner(callbacks=[event_catcher.catch]).invoke(["ls", "-m", "some_model"])
         assert len(event_catcher.caught_events) == 1
 
 
@@ -674,7 +674,7 @@ class TestSelectParamNoModelUsageRunnerDeprecation:
         event_catcher = EventCatcher(ModelParamUsageDeprecation)
 
         assert len(event_catcher.caught_events) == 0
-        dbtRunner(callbacks=[event_catcher.catch]).invoke(["ls", "--select", "some_model"])
+        dvtRunner(callbacks=[event_catcher.catch]).invoke(["ls", "--select", "some_model"])
         assert len(event_catcher.caught_events) == 0
 
 

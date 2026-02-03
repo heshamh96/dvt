@@ -1907,14 +1907,14 @@ def _process_refs(
 
             continue
         elif manifest.is_invalid_private_ref(node, target_model, dependencies):
-            raise dvt.exceptions.DbtReferenceError(
+            raise dvt.exceptions.DvtReferenceError(
                 unique_id=node.unique_id,
                 ref_unique_id=target_model.unique_id,
                 access=AccessType.Private,
                 scope=dbt_common.utils.cast_to_str(target_model.group),
             )
         elif manifest.is_invalid_protected_ref(node, target_model, dependencies):
-            raise dvt.exceptions.DbtReferenceError(
+            raise dvt.exceptions.DvtReferenceError(
                 unique_id=node.unique_id,
                 ref_unique_id=target_model.unique_id,
                 access=AccessType.Protected,

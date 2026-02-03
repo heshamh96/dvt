@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional
 from dvt import deprecations
 from dvt.clients import yaml_helper
 from dvt.events.types import InvalidOptionYAML
-from dvt.exceptions import DbtExclusivePropertyUseError, OptionNotYamlDictError
+from dvt.exceptions import DvtExclusivePropertyUseError, OptionNotYamlDictError
 from dbt_common.events.functions import fire_event
 from dbt_common.exceptions import DbtValidationError
 
@@ -46,7 +46,7 @@ def exclusive_primary_alt_value_setting(
 
     if primary_options and alt_options:
         where = f" in `{parent_config}`" if parent_config is not None else ""
-        raise DbtExclusivePropertyUseError(
+        raise DvtExclusivePropertyUseError(
             f"Only `{alt}` or `{primary}` can be specified{where}, not both"
         )
 

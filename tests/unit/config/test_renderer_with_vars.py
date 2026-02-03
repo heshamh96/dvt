@@ -2,12 +2,12 @@
 
 import pytest
 
-from dvt.config.renderer import DbtProjectYamlRenderer
+from dvt.config.renderer import DvtProjectYamlRenderer
 from dvt.context.base import BaseContext
 
 
 class TestRendererWithRequiredVars:
-    """Test that DbtProjectYamlRenderer doesn't raise errors for missing vars"""
+    """Test that DvtProjectYamlRenderer doesn't raise errors for missing vars"""
 
     def test_base_context_with_require_vars_false(self):
         """Test that BaseContext with require_vars=False returns None for missing vars"""
@@ -37,9 +37,9 @@ class TestRendererWithRequiredVars:
             var_func("missing_var")
 
     def test_dbt_project_yaml_renderer_doesnt_fail_on_missing_vars(self):
-        """Test that DbtProjectYamlRenderer with require_vars=False can render configs with missing vars"""
+        """Test that DvtProjectYamlRenderer with require_vars=False can render configs with missing vars"""
         # Pass require_vars=False to enable lenient mode (used by dbt deps)
-        renderer = DbtProjectYamlRenderer(profile=None, cli_vars={}, require_vars=False)
+        renderer = DvtProjectYamlRenderer(profile=None, cli_vars={}, require_vars=False)
 
         # This project config uses a var without a default value
         project_dict = {
@@ -58,8 +58,8 @@ class TestRendererWithRequiredVars:
         assert rendered["models"]["test_project"]["+dataset"] == "dqm_None"
 
     def test_dbt_project_yaml_renderer_with_provided_var(self):
-        """Test that DbtProjectYamlRenderer works correctly when var is provided"""
-        renderer = DbtProjectYamlRenderer(profile=None, cli_vars={"my_dataset": "prod"})
+        """Test that DvtProjectYamlRenderer works correctly when var is provided"""
+        renderer = DvtProjectYamlRenderer(profile=None, cli_vars={"my_dataset": "prod"})
 
         project_dict = {
             "name": "test_project",

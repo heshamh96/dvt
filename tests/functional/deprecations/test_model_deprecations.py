@@ -1,6 +1,6 @@
 import pytest
 
-from dvt.cli.main import dbtRunner
+from dvt.cli.main import dvtRunner
 from dvt.tests.util import run_dbt
 from dbt_common.exceptions import EventCompilationError
 
@@ -38,7 +38,7 @@ class TestModelDeprecationWarning:
 
     def test_deprecation_warning(self, project):
         events = []
-        dbtRunner(callbacks=[events.append]).invoke(["parse"])
+        dvtRunner(callbacks=[events.append]).invoke(["parse"])
         matches = list([e for e in events if e.info.name == "DeprecatedModel"])
         assert len(matches) == 1
         assert matches[0].data.model_name == "my_model"
@@ -63,7 +63,7 @@ class TestUpcomingReferenceDeprecationWarning:
 
     def test_deprecation_warning(self, project):
         events = []
-        dbtRunner(callbacks=[events.append]).invoke(["parse"])
+        dvtRunner(callbacks=[events.append]).invoke(["parse"])
         matches = list([e for e in events if e.info.name == "UpcomingReferenceDeprecation"])
         assert len(matches) == 1
         assert matches[0].data.model_name == "my_dependant_model"
@@ -91,7 +91,7 @@ class TestDeprecatedReferenceWarning:
 
     def test_deprecation_warning(self, project):
         events = []
-        dbtRunner(callbacks=[events.append]).invoke(["parse"])
+        dvtRunner(callbacks=[events.append]).invoke(["parse"])
         matches = list([e for e in events if e.info.name == "DeprecatedReference"])
         assert len(matches) == 1
         assert matches[0].data.model_name == "my_dependant_model"

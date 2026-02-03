@@ -11,7 +11,7 @@ from click import Context, Parameter, get_current_context
 from click.core import Command as ClickCommand
 from click.core import Group, ParameterSource
 
-from dvt.cli.exceptions import DbtUsageException
+from dvt.cli.exceptions import DvtUsageException
 from dvt.cli.resolvers import default_log_path, default_project_dir
 from dvt.cli.types import Command as CliCommand
 from dvt.config.project import read_project_flags
@@ -117,7 +117,7 @@ class Flags:
         seen_params = []
         for param in _get_params_by_source(ctx, ParameterSource.COMMANDLINE):
             if param in seen_params:
-                raise DbtUsageException(
+                raise DvtUsageException(
                     f"{param.lower()} was provided both before and after the subcommand, it can only be set either before or after.",
                 )
             seen_params.append(param)
@@ -146,7 +146,7 @@ class Flags:
                     if param_source == ParameterSource.DEFAULT:
                         continue
                     elif param_source != ParameterSource.ENVIRONMENT:
-                        raise DbtUsageException(
+                        raise DvtUsageException(
                             "Deprecated parameters can only be set via environment variables",
                         )
 
@@ -351,7 +351,7 @@ class Flags:
                 hasattr(self, flag) and flag.lower() not in params_assigned_from_default
             )
             if flag_set_by_user and set_flag:
-                raise DbtUsageException(
+                raise DvtUsageException(
                     f"{flag.lower()}: not allowed with argument {set_flag.lower()}"
                 )
             elif flag_set_by_user:
@@ -371,19 +371,19 @@ class Flags:
             # These `ifs`, combined with the parent `if` make it so that `event_time_start` and
             # `event_time_end` are mutually required
             if event_time_start is None:
-                raise DbtUsageException(
+                raise DvtUsageException(
                     "The flag `--event-time-end` was specified, but `--event-time-start` was not. "
                     "When specifying `--event-time-end`, `--event-time-start` must also be present."
                 )
             if event_time_end is None:
-                raise DbtUsageException(
+                raise DvtUsageException(
                     "The flag `--event-time-start` was specified, but `--event-time-end` was not. "
                     "When specifying `--event-time-start`, `--event-time-end` must also be present."
                 )
 
             # This `if` just is a sanity check that `event_time_start` is before `event_time_end`
             if event_time_start >= event_time_end:
-                raise DbtUsageException(
+                raise DvtUsageException(
                     "Value for `--event-time-start` must be less than `--event-time-end`"
                 )
 
@@ -396,7 +396,7 @@ class Flags:
 
         fire_buffered_deprecations()
 
-        # Handle firing deprecations of CLI aliases separately using argv or dbtRunner args
+        # Handle firing deprecations of CLI aliases separately using argv or dvtRunner args
         # because click doesn't make it possible to disambiguite which literal CLI option was used
         # and only preserves the 'canonical' representation.
         original_command_args = (

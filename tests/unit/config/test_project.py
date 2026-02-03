@@ -289,7 +289,7 @@ class TestProjectInitialization(BaseConfigTest):
 
     def test_invalid_project_name(self):
         self.default_project_data["name"] = "invalid-project-name"
-        with self.assertRaises(dvt.exceptions.DbtProjectError) as exc:
+        with self.assertRaises(dvt.exceptions.DvtProjectError) as exc:
             project_from_config_norender(self.default_project_data, project_root=self.project_dir)
 
         self.assertIn("invalid-project-name", str(exc.exception))
@@ -297,14 +297,14 @@ class TestProjectInitialization(BaseConfigTest):
     def test_no_project(self):
         os.remove(os.path.join(self.project_dir, "dvt_project.yml"))
         renderer = empty_project_renderer()
-        with self.assertRaises(dvt.exceptions.DbtProjectError) as exc:
+        with self.assertRaises(dvt.exceptions.DvtProjectError) as exc:
             dvt.config.Project.from_project_root(self.project_dir, renderer)
 
         self.assertIn("No dvt_project.yml", str(exc.exception))
 
     def test_invalid_version(self):
         self.default_project_data["require-dvt-version"] = "hello!"
-        with self.assertRaises(dvt.exceptions.DbtProjectError):
+        with self.assertRaises(dvt.exceptions.DvtProjectError):
             project_from_config_norender(self.default_project_data, project_root=self.project_dir)
 
     def test_unsupported_version(self):
@@ -349,7 +349,7 @@ class TestProjectInitialization(BaseConfigTest):
                 "models": models,
             }
         )
-        with self.assertRaises(dvt.exceptions.DbtProjectError) as exc:
+        with self.assertRaises(dvt.exceptions.DvtProjectError) as exc:
             project_from_config_rendered(self.default_project_data)
 
         assert "Cycle detected" in str(exc.exception)
@@ -463,7 +463,7 @@ class TestProjectFile(BaseConfigTest):
     def test_with_invalid_package(self):
         renderer = empty_project_renderer()
         self.write_packages({"invalid": ["not a package of any kind"]})
-        with self.assertRaises(dvt.exceptions.DbtProjectError):
+        with self.assertRaises(dvt.exceptions.DvtProjectError):
             dvt.config.Project.from_project_root(self.project_dir, renderer)
 
 
@@ -476,7 +476,7 @@ class TestVariableProjectFile(BaseConfigTest):
         self.write_project(self.default_project_data)
 
     def test_cli_and_env_vars(self):
-        renderer = dvt.config.renderer.DbtProjectYamlRenderer(None, {"cli_version": "0.1.2"})
+        renderer = dvt.config.renderer.DvtProjectYamlRenderer(None, {"cli_version": "0.1.2"})
         with mock.patch.dict(os.environ, self.env_override):
             safe_set_invocation_context()  # reset invocation context with new env
             project = dvt.config.Project.from_project_root(
@@ -566,7 +566,7 @@ class TestMultipleProjectFlags(BaseConfigTest):
         self.write_profile(self.default_profile_data)
 
     def test_setting_multiple_flags(self):
-        with pytest.raises(dvt.exceptions.DbtProjectError):
+        with pytest.raises(dvt.exceptions.DvtProjectError):
             set_from_args(self.args, None)
 
 
@@ -585,7 +585,7 @@ class TestGetRequiredVersion:
     def test_unsupported_version(self, project_dict: Dict[str, Any]) -> None:
         project_dict["require-dvt-version"] = ">99999.0.0"
         with pytest.raises(
-            dvt.exceptions.DbtProjectError, match="This version of dvt is not supported"
+            dvt.exceptions.DvtProjectError, match="This version of dvt is not supported"
         ):
             _get_required_version(project_dict=project_dict, verify_version=True)
 
@@ -602,7 +602,7 @@ class TestGetRequiredVersion:
     def test_unsupported_version_range(self, project_dict: Dict[str, Any]) -> None:
         project_dict["require-dvt-version"] = [">0.0.0", "<=0.0.1"]
         with pytest.raises(
-            dvt.exceptions.DbtProjectError, match="This version of dvt is not supported"
+            dvt.exceptions.DvtProjectError, match="This version of dvt is not supported"
         ):
             _get_required_version(project_dict=project_dict, verify_version=True)
 
@@ -614,7 +614,7 @@ class TestGetRequiredVersion:
     def test_impossible_version_range(self, project_dict: Dict[str, Any]) -> None:
         project_dict["require-dvt-version"] = [">99999.0.0", "<=0.0.1"]
         with pytest.raises(
-            dvt.exceptions.DbtProjectError,
+            dvt.exceptions.DvtProjectError,
             match="The package version requirement can never be satisfied",
         ):
             _get_required_version(project_dict=project_dict, verify_version=True)

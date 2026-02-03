@@ -57,7 +57,7 @@ class ParsingError(DbtRuntimeError):
         return "Parsing"
 
 
-class dbtPluginError(DbtRuntimeError):
+class dvtPluginError(DbtRuntimeError):
     CODE = 10020
     MESSAGE = "Plugin Error"
 
@@ -98,19 +98,19 @@ class FailFastError(DbtRuntimeError):
         return "FailFast"
 
 
-class DbtProjectError(DbtConfigError):
+class DvtProjectError(DbtConfigError):
     pass
 
 
-class DbtSelectorsError(DbtConfigError):
+class DvtSelectorsError(DbtConfigError):
     pass
 
 
-class DbtProfileError(DbtConfigError):
+class DvtProfileError(DbtConfigError):
     pass
 
 
-class DbtExclusivePropertyUseError(DbtConfigError):
+class DvtExclusivePropertyUseError(DbtConfigError):
     pass
 
 
@@ -674,7 +674,7 @@ class SnapshopConfigError(ParsingError):
         super().__init__(msg=self.msg)
 
 
-class DbtReferenceError(ParsingError):
+class DvtReferenceError(ParsingError):
     def __init__(self, unique_id: str, ref_unique_id: str, access: AccessType, scope: str) -> None:
         self.unique_id = unique_id
         self.ref_unique_id = ref_unique_id
@@ -1027,28 +1027,28 @@ class PackageNotFoundError(DependencyError):
 
 
 # config level exceptions
-class ProfileConfigError(DbtProfileError):
+class ProfileConfigError(DvtProfileError):
     def __init__(self, exc: ValidationError):
         self.exc = exc
         msg = self.validator_error_message(self.exc)
         super().__init__(msg=msg)
 
 
-class ProjectContractError(DbtProjectError):
+class ProjectContractError(DvtProjectError):
     def __init__(self, exc: ValidationError):
         self.exc = exc
         msg = self.validator_error_message(self.exc)
         super().__init__(msg=msg)
 
 
-class ProjectContractBrokenError(DbtProjectError):
+class ProjectContractBrokenError(DvtProjectError):
     def __init__(self, exc: ValidationError):
         self.exc = exc
         msg = self.validator_error_message(self.exc)
         super().__init__(msg=msg)
 
 
-class ConfigContractBrokenError(DbtProjectError):
+class ConfigContractBrokenError(DvtProjectError):
     def __init__(self, exc: ValidationError):
         self.exc = exc
         msg = self.validator_error_message(self.exc)

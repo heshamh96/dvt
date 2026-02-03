@@ -4,9 +4,9 @@ from unittest import mock
 import pytest
 
 from dvt.adapters.factory import FACTORY, reset_adapters
-from dvt.cli.exceptions import DbtUsageException
-from dvt.cli.main import dbtRunner
-from dvt.exceptions import DbtProjectError
+from dvt.cli.exceptions import DvtUsageException
+from dvt.cli.main import dvtRunner
+from dvt.exceptions import DvtProjectError
 from dvt.tests.util import read_file, write_file
 from dvt.version import __version__ as dbt_version
 from dbt_common.events.contextvars import get_node_info
@@ -14,8 +14,8 @@ from dbt_common.events.contextvars import get_node_info
 
 class TestDbtRunner:
     @pytest.fixture
-    def dvt(self) -> dbtRunner:
-        return dbtRunner()
+    def dvt(self) -> dvtRunner:
+        return dvtRunner()
 
     @pytest.fixture(scope="class")
     def models(self):
@@ -23,33 +23,33 @@ class TestDbtRunner:
             "models.sql": "select 1 as id",
         }
 
-    def test_group_invalid_option(self, dvt: dbtRunner) -> None:
+    def test_group_invalid_option(self, dvt: dvtRunner) -> None:
         res = dvt.invoke(["--invalid-option"])
-        assert type(res.exception) == DbtUsageException
+        assert type(res.exception) == DvtUsageException
 
-    def test_command_invalid_option(self, dvt: dbtRunner) -> None:
+    def test_command_invalid_option(self, dvt: dvtRunner) -> None:
         res = dvt.invoke(["deps", "--invalid-option"])
-        assert type(res.exception) == DbtUsageException
+        assert type(res.exception) == DvtUsageException
 
-    def test_command_mutually_exclusive_option(self, dvt: dbtRunner) -> None:
+    def test_command_mutually_exclusive_option(self, dvt: dvtRunner) -> None:
         res = dvt.invoke(["--warn-error", "--warn-error-options", '{"error": "all"}', "deps"])
-        assert type(res.exception) == DbtUsageException
+        assert type(res.exception) == DvtUsageException
         res = dvt.invoke(["deps", "--warn-error", "--warn-error-options", '{"error": "all"}'])
-        assert type(res.exception) == DbtUsageException
+        assert type(res.exception) == DvtUsageException
 
         res = dvt.invoke(["compile", "--select", "models", "--inline", "select 1 as id"])
-        assert type(res.exception) == DbtUsageException
+        assert type(res.exception) == DvtUsageException
 
-    def test_invalid_command(self, dvt: dbtRunner) -> None:
+    def test_invalid_command(self, dvt: dvtRunner) -> None:
         res = dvt.invoke(["invalid-command"])
-        assert type(res.exception) == DbtUsageException
+        assert type(res.exception) == DvtUsageException
 
-    def test_invoke_version(self, dvt: dbtRunner) -> None:
+    def test_invoke_version(self, dvt: dvtRunner) -> None:
         dvt.invoke(["--version"])
 
     def test_callbacks(self) -> None:
         mock_callback = mock.MagicMock()
-        dvt = dbtRunner(callbacks=[mock_callback])
+        dvt = dvtRunner(callbacks=[mock_callback])
         # the `debug` command is one of the few commands wherein you don't need
         # to have a project to run it and it will emit events
         dvt.invoke(["debug"])
@@ -62,7 +62,7 @@ class TestDbtRunner:
             if event.info.name == "NodeFinished":
                 raise Exception("This should let continue the execution registering the failure")
 
-        dvt = dbtRunner(callbacks=[callback_with_exception])
+        dvt = dvtRunner(callbacks=[callback_with_exception])
         result = dvt.invoke(["run", "--select", "models"])
 
         assert result is not None
@@ -88,14 +88,14 @@ class TestDbtRunner:
 
     def test_invoke_kwargs_project_dir(self, project, dvt):
         res = dvt.invoke(["run"], project_dir="some_random_project_dir")
-        assert type(res.exception) == DbtProjectError
+        assert type(res.exception) == DvtProjectError
 
         msg = "No dvt_project.yml found at expected path some_random_project_dir"
         assert msg in res.exception.msg
 
     def test_invoke_kwargs_profiles_dir(self, project, dvt):
         res = dvt.invoke(["run"], profiles_dir="some_random_profiles_dir")
-        assert type(res.exception) == DbtProjectError
+        assert type(res.exception) == DvtProjectError
         msg = "Could not find profile named 'test'"
         assert msg in res.exception.msg
 
@@ -109,7 +109,7 @@ class TestDbtRunner:
 
         reset_adapters()
         assert len(FACTORY.adapters) == 0
-        result = dbtRunner(manifest=manifest).invoke(["run"])
+        result = dvtRunner(manifest=manifest).invoke(["run"])
         # Check that the adapters are registered again.
         assert result.success
         assert len(FACTORY.adapters) == 1
@@ -120,7 +120,7 @@ class TestDbtRunner:
         dvt.invoke(args)
         assert args == args_before
 
-    def test_directory_does_not_change(self, project, dvt: dbtRunner) -> None:
+    def test_directory_does_not_change(self, project, dvt: dvtRunner) -> None:
         project_dir = os.getcwd()  # The directory where dvt_project.yml exists.
         os.chdir("../")
         cmd_execution_dir = os.getcwd()  # The directory where dvt command will be run
@@ -153,12 +153,12 @@ class TestDbtRunnerQueryComments:
         }
 
     def test_query_comment_saved_manifest(self, project, logs_dir):
-        dvt = dbtRunner()
+        dvt = dvtRunner()
         dvt.invoke(["build", "--select", "models"])
         result = dvt.invoke(["parse"])
         write_file("", logs_dir, "dvt.log")
         # pass in manifest from parse command
-        dvt = dbtRunner(result.result)
+        dvt = dvtRunner(result.result)
         dvt.invoke(["build", "--select", "models"])
         log_file = read_file(logs_dir, "dvt.log")
         assert f"comment: {dbt_version}" in log_file
@@ -176,6 +176,6 @@ class TestDbtRunnerHooks:
         return {"on-run-end": ["select 1;"]}
 
     def test_node_info_non_persistence(self, project):
-        dvt = dbtRunner()
+        dvt = dvtRunner()
         dvt.invoke(["run", "--select", "models"])
         assert get_node_info() == {}

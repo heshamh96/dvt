@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from dvt.exceptions import DbtProjectError
+from dvt.exceptions import DvtProjectError
 from dvt.tests.util import check_relations_equal, run_dbt, write_config_file
 
 models__disabled_one = """
@@ -427,7 +427,7 @@ class TestBadTarballDependency(object):
         write_config_file(bad_tarball_package_spec, "packages.yml")
 
         with pytest.raises(
-            DbtProjectError, match=r"The packages.yml file in this project is malformed"
+            DvtProjectError, match=r"The packages.yml file in this project is malformed"
         ) as e:
             run_dbt(["deps"])
             assert e is not None
@@ -447,7 +447,7 @@ class TestEmptyDependency:
             ]
         }
         write_config_file(empty_hub_package, "packages.yml")
-        with pytest.raises(DbtProjectError, match="A hub package is missing the value"):
+        with pytest.raises(DvtProjectError, match="A hub package is missing the value"):
             run_dbt(["deps"])
 
         empty_git_package = {
@@ -459,7 +459,7 @@ class TestEmptyDependency:
             ]
         }
         write_config_file(empty_git_package, "packages.yml")
-        with pytest.raises(DbtProjectError, match="A git package is missing the value"):
+        with pytest.raises(DvtProjectError, match="A git package is missing the value"):
             run_dbt(["deps"])
 
         empty_local_package = {
@@ -470,5 +470,5 @@ class TestEmptyDependency:
             ]
         }
         write_config_file(empty_local_package, "packages.yml")
-        with pytest.raises(DbtProjectError, match="A local package is missing the value"):
+        with pytest.raises(DvtProjectError, match="A local package is missing the value"):
             run_dbt(["deps"])

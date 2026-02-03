@@ -2,7 +2,7 @@ from typing import Any, Dict, Union
 
 import pytest
 
-from dvt.cli.main import dbtRunner, dbtRunnerResult
+from dvt.cli.main import dvtRunner, dvtRunnerResult
 from dvt.events.types import (
     DeprecatedModel,
     MainEncounteredError,
@@ -35,25 +35,25 @@ def catcher() -> EventCatcher:
 
 
 @pytest.fixture(scope="function")
-def runner(catcher: EventCatcher) -> dbtRunner:
-    return dbtRunner(callbacks=[catcher.catch])
+def runner(catcher: EventCatcher) -> dvtRunner:
+    return dvtRunner(callbacks=[catcher.catch])
 
 
-def assert_deprecation_warning(result: dbtRunnerResult, catcher: EventCatcher) -> None:
+def assert_deprecation_warning(result: dvtRunnerResult, catcher: EventCatcher) -> None:
     assert result.success
     assert result.exception is None
     assert len(catcher.caught_events) == 1
     assert catcher.caught_events[0].info.level == EventLevel.WARN.value
 
 
-def assert_deprecation_error(result: dbtRunnerResult) -> None:
+def assert_deprecation_error(result: dvtRunnerResult) -> None:
     assert not result.success
     assert result.exception is not None
     assert "Model my_model has passed its deprecation date of" in str(result.exception)
 
 
 class TestWarnErrorOptionsFromCLI:
-    def test_can_silence(self, project, catcher: EventCatcher, runner: dbtRunner) -> None:
+    def test_can_silence(self, project, catcher: EventCatcher, runner: dvtRunner) -> None:
         result = runner.invoke(["run"])
         assert_deprecation_warning(result, catcher)
 
@@ -63,7 +63,7 @@ class TestWarnErrorOptionsFromCLI:
         assert len(catcher.caught_events) == 0
 
     def test_can_raise_warning_to_error(
-        self, project, catcher: EventCatcher, runner: dbtRunner
+        self, project, catcher: EventCatcher, runner: dvtRunner
     ) -> None:
         result = runner.invoke(["run"])
         assert_deprecation_warning(result, catcher)
@@ -93,7 +93,7 @@ class TestWarnErrorOptionsFromCLI:
         assert_deprecation_error(result)
 
     def test_can_exclude_specific_event(
-        self, project, catcher: EventCatcher, runner: dbtRunner
+        self, project, catcher: EventCatcher, runner: dvtRunner
     ) -> None:
         result = runner.invoke(
             ["run", "--warn-error-options", "{'error': 'all', 'warn': ['DeprecationsSummary']}"]
@@ -120,7 +120,7 @@ class TestWarnErrorOptionsFromCLI:
         )
         assert_deprecation_warning(result, catcher)
 
-    def test_cant_set_both_include_and_error(self, project, runner: dbtRunner) -> None:
+    def test_cant_set_both_include_and_error(self, project, runner: dvtRunner) -> None:
         result = runner.invoke(
             ["run", "--warn-error-options", "{'include': 'all', 'error': 'all'}"]
         )
@@ -128,7 +128,7 @@ class TestWarnErrorOptionsFromCLI:
         assert result.exception is not None
         assert "Only `include` or `error` can be specified" in str(result.exception)
 
-    def test_cant_set_both_exclude_and_warn(self, project, runner: dbtRunner) -> None:
+    def test_cant_set_both_exclude_and_warn(self, project, runner: dvtRunner) -> None:
         result = runner.invoke(
             [
                 "run",
@@ -148,7 +148,7 @@ class TestWarnErrorOptionsFromProject:
         update_config_file(flags, project_root, "dvt_project.yml")
 
     def test_can_silence(
-        self, project, clear_project_flags, project_root, catcher: EventCatcher, runner: dbtRunner
+        self, project, clear_project_flags, project_root, catcher: EventCatcher, runner: dvtRunner
     ) -> None:
         result = runner.invoke(["run"])
         assert_deprecation_warning(result, catcher)
@@ -162,7 +162,7 @@ class TestWarnErrorOptionsFromProject:
         assert len(catcher.caught_events) == 0
 
     def test_can_raise_warning_to_error(
-        self, project, clear_project_flags, project_root, catcher: EventCatcher, runner: dbtRunner
+        self, project, clear_project_flags, project_root, catcher: EventCatcher, runner: dvtRunner
     ) -> None:
         result = runner.invoke(["run"])
         assert_deprecation_warning(result, catcher)
@@ -186,7 +186,7 @@ class TestWarnErrorOptionsFromProject:
         assert_deprecation_error(result)
 
     def test_can_exclude_specific_event(
-        self, project, clear_project_flags, project_root, catcher: EventCatcher, runner: dbtRunner
+        self, project, clear_project_flags, project_root, catcher: EventCatcher, runner: dvtRunner
     ) -> None:
         warn_error_options: Dict[str, Any] = {
             "flags": {"warn_error_options": {"error": "all", "warn": ["DeprecationsSummary"]}}
@@ -210,7 +210,7 @@ class TestWarnErrorOptionsFromProject:
         assert_deprecation_warning(result, catcher)
 
     def test_cant_set_both_include_and_error(
-        self, project, clear_project_flags, project_root, runner: dbtRunner
+        self, project, clear_project_flags, project_root, runner: dvtRunner
     ) -> None:
         warn_error_options = {"flags": {"warn_error_options": {"include": "all", "error": "all"}}}
         update_config_file(warn_error_options, project_root, "dvt_project.yml")
@@ -220,7 +220,7 @@ class TestWarnErrorOptionsFromProject:
         assert "Only `include` or `error` can be specified" in str(result.exception)
 
     def test_cant_set_both_exclude_and_warn(
-        self, project, clear_project_flags, project_root, runner: dbtRunner
+        self, project, clear_project_flags, project_root, runner: dvtRunner
     ) -> None:
         warn_error_options = {
             "flags": {
@@ -290,7 +290,7 @@ class TestRequireAllWarningsHandledByWarnErrorBehaviorFlag:
         # Setup the event catchers
         microbatch_warning_catcher = EventCatcher(event_to_catch=MicrobatchModelNoEventTimeInputs)
         microbatch_error_catcher = EventCatcher(event_to_catch=MainEncounteredError)
-        dbt_runner = dbtRunner(
+        dvt_runner = dvtRunner(
             callbacks=[microbatch_warning_catcher.catch, microbatch_error_catcher.catch]
         )
 
@@ -302,7 +302,7 @@ class TestRequireAllWarningsHandledByWarnErrorBehaviorFlag:
             }
         }
         update_config_file(project_flags, project.project_root, "dvt_project.yml")
-        dbt_runner.invoke(["run", "--warn-error"])
+        dvt_runner.invoke(["run", "--warn-error"])
 
         assert len(microbatch_warning_catcher.caught_events) == 1
         assert len(microbatch_error_catcher.caught_events) == 0
@@ -319,7 +319,7 @@ class TestRequireAllWarningsHandledByWarnErrorBehaviorFlag:
             }
         }
         update_config_file(project_flags, project.project_root, "dvt_project.yml")
-        dbt_runner.invoke(["run", "--warn-error", "--log-format", "json"])
+        dvt_runner.invoke(["run", "--warn-error", "--log-format", "json"])
 
         assert len(microbatch_warning_catcher.caught_events) == 0
         assert len(microbatch_error_catcher.caught_events) == 1

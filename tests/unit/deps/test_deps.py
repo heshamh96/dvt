@@ -7,7 +7,7 @@ import dvt.deps
 import dvt.exceptions
 from dvt.clients.registry import is_compatible_version
 from dvt.config.project import PartialProject
-from dvt.config.renderer import DbtProjectYamlRenderer
+from dvt.config.renderer import DvtProjectYamlRenderer
 from dvt.contracts.project import (
     GitPackage,
     LocalPackage,
@@ -74,7 +74,7 @@ class TestTarballPackage(unittest.TestCase):
             with mock.patch.object(
                 PartialProject, "render_package_metadata", return_value=self.MockMetadata
             ):
-                metadata = a_pinned.fetch_metadata("", DbtProjectYamlRenderer())
+                metadata = a_pinned.fetch_metadata("", DvtProjectYamlRenderer())
 
         assert metadata == self.MockMetadata
         mock_download.assert_called_once_with(
@@ -116,7 +116,7 @@ class TestTarballPackage(unittest.TestCase):
                 PartialProject, "render_package_metadata", return_value=self.MockMetadata
             ):
                 with self.assertRaises(dvt.exceptions.DependencyError):
-                    a_pinned.fetch_metadata("", DbtProjectYamlRenderer())
+                    a_pinned.fetch_metadata("", DvtProjectYamlRenderer())
 
     @mock.patch("dvt.deps.tarball.get_downloads_path")
     def test_tarball_package_contract(self, mock_get_downloads_path):

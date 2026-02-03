@@ -1,7 +1,7 @@
 import pytest
 
 from dvt.artifacts.resources.v1.metric import CumulativeTypeParams, MetricTimeWindow
-from dvt.cli.main import dbtRunner
+from dvt.cli.main import dvtRunner
 from dvt.contracts.graph.manifest import Manifest
 from dvt.exceptions import ParsingError
 from dvt.tests.util import get_manifest, run_dbt
@@ -51,7 +51,7 @@ class TestSimpleMetrics:
         self,
         project,
     ):
-        runner = dbtRunner()
+        runner = dvtRunner()
         result = runner.invoke(["parse"])
         assert result.success
         assert isinstance(result.result, Manifest)
@@ -390,7 +390,7 @@ class TestConversionMetric:
         project,
     ):
         # initial parse
-        runner = dbtRunner()
+        runner = dvtRunner()
         result = runner.invoke(["parse"])
         assert result.success
         assert isinstance(result.result, Manifest)
@@ -455,7 +455,7 @@ class TestCumulativeMetric:
 
     def test_cumulative_metric(self, project):
         # initial parse
-        runner = dbtRunner()
+        runner = dvtRunner()
         result = runner.invoke(["parse"])
         assert result.success
         assert isinstance(result.result, Manifest)
@@ -515,7 +515,7 @@ class TestFilterParsing:
         self,
         project,
     ):
-        runner = dbtRunner()
+        runner = dvtRunner()
         result = runner.invoke(["parse"])
         assert result.success
         assert isinstance(result.result, Manifest)
@@ -580,7 +580,7 @@ class TestDuplicateInputMeasures:
         }
 
     def test_duplicate_input_measures(self, project):
-        runner = dbtRunner()
+        runner = dvtRunner()
         result = runner.invoke(["parse"])
         assert result.success
         assert isinstance(result.result, Manifest)

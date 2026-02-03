@@ -3,7 +3,7 @@ from typing import Dict
 import pytest
 
 from dvt import deprecations
-from dvt.cli.main import dbtRunner
+from dvt.cli.main import dvtRunner
 from dvt.events.types import (
     ResourceNamesWithSpacesDeprecation,
     SpacesInResourceNameDeprecation,
@@ -16,7 +16,7 @@ from dbt_common.events.event_catcher import EventCatcher
 class TestSpacesInModelNamesHappyPath:
     def test_no_warnings_when_no_spaces_in_name(self, project) -> None:
         event_catcher = EventCatcher(SpacesInResourceNameDeprecation)
-        runner = dbtRunner(callbacks=[event_catcher.catch])
+        runner = dvtRunner(callbacks=[event_catcher.catch])
         runner.invoke(["parse"])
         assert len(event_catcher.caught_events) == 0
 
@@ -33,7 +33,7 @@ class TestSpacesInModelNamesSadPath:
         update_config_file(config_patch, project.project_root, "dvt_project.yml")
         event_catcher = EventCatcher(SpacesInResourceNameDeprecation)
         total_catcher = EventCatcher(ResourceNamesWithSpacesDeprecation)
-        runner = dbtRunner(callbacks=[event_catcher.catch, total_catcher.catch])
+        runner = dvtRunner(callbacks=[event_catcher.catch, total_catcher.catch])
         runner.invoke(["parse"])
 
         assert len(total_catcher.caught_events) == 1
@@ -57,7 +57,7 @@ class TestSpaceInModelNamesWithDebug:
         deprecations.reset_deprecations()
         spaces_check_catcher = EventCatcher(SpacesInResourceNameDeprecation)
         total_catcher = EventCatcher(ResourceNamesWithSpacesDeprecation)
-        runner = dbtRunner(callbacks=[spaces_check_catcher.catch, total_catcher.catch])
+        runner = dvtRunner(callbacks=[spaces_check_catcher.catch, total_catcher.catch])
         runner.invoke(["parse"])
         assert len(spaces_check_catcher.caught_events) == 1
         assert len(total_catcher.caught_events) == 1
@@ -69,7 +69,7 @@ class TestSpaceInModelNamesWithDebug:
         deprecations.reset_deprecations()
         spaces_check_catcher = EventCatcher(SpacesInResourceNameDeprecation)
         total_catcher = EventCatcher(ResourceNamesWithSpacesDeprecation)
-        runner = dbtRunner(callbacks=[spaces_check_catcher.catch, total_catcher.catch])
+        runner = dvtRunner(callbacks=[spaces_check_catcher.catch, total_catcher.catch])
         runner.invoke(["parse", "--debug"])
         assert len(spaces_check_catcher.caught_events) == 2
         assert len(total_catcher.caught_events) == 1
@@ -90,7 +90,7 @@ class TestAllowSpacesInModelNamesFalse:
         config_patch = {"flags": {"require_resource_names_without_spaces": False}}
         update_config_file(config_patch, project.project_root, "dvt_project.yml")
         spaces_check_catcher = EventCatcher(SpacesInResourceNameDeprecation)
-        runner = dbtRunner(callbacks=[spaces_check_catcher.catch])
+        runner = dvtRunner(callbacks=[spaces_check_catcher.catch])
         runner.invoke(["parse"])
         assert len(spaces_check_catcher.caught_events) == 1
         assert spaces_check_catcher.caught_events[0].info.level == EventLevel.WARN
@@ -99,7 +99,7 @@ class TestAllowSpacesInModelNamesFalse:
         update_config_file(config_patch, project.project_root, "dvt_project.yml")
 
         spaces_check_catcher = EventCatcher(SpacesInResourceNameDeprecation)
-        runner = dbtRunner(callbacks=[spaces_check_catcher.catch])
+        runner = dvtRunner(callbacks=[spaces_check_catcher.catch])
         result = runner.invoke(["parse"])
         assert not result.success
         assert "Resource names cannot contain spaces" in result.exception.__str__()

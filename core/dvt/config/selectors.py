@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional, Union
 
 from dvt.clients.yaml_helper import Dumper, Loader, load_yaml_text, yaml  # noqa: F401
 from dvt.contracts.selection import SelectorFile
-from dvt.exceptions import DbtSelectorsError
+from dvt.exceptions import DvtSelectorsError
 from dvt.graph import SelectionSpec, parse_from_selectors_definition
 from dvt.graph.selector_spec import SelectionCriteria
 from dbt_common.clients.system import (
@@ -39,7 +39,7 @@ class SelectorConfig(Dict[str, Dict[str, Union[SelectionSpec, bool]]]):
             selectors = parse_from_selectors_definition(selector_file)
         except ValidationError as exc:
             yaml_sel_cfg = yaml.dump(exc.instance)
-            raise DbtSelectorsError(
+            raise DvtSelectorsError(
                 f"Could not parse selector file data: \n{yaml_sel_cfg}\n"
                 f"Valid root-level selector definitions: "
                 f"union, intersection, string, dictionary. No lists. "
@@ -48,7 +48,7 @@ class SelectorConfig(Dict[str, Dict[str, Union[SelectionSpec, bool]]]):
                 result_type="invalid_selector",
             ) from exc
         except DbtRuntimeError as exc:
-            raise DbtSelectorsError(
+            raise DvtSelectorsError(
                 f"Could not read selector file data: {exc}",
                 result_type="invalid_selector",
             ) from exc
@@ -64,7 +64,7 @@ class SelectorConfig(Dict[str, Dict[str, Union[SelectionSpec, bool]]]):
         try:
             rendered = renderer.render_data(data)
         except (ValidationError, DbtRuntimeError) as exc:
-            raise DbtSelectorsError(
+            raise DvtSelectorsError(
                 f"Could not render selector data: {exc}",
                 result_type="invalid_selector",
             ) from exc
@@ -81,7 +81,7 @@ class SelectorConfig(Dict[str, Dict[str, Union[SelectionSpec, bool]]]):
             if data is None:
                 raise ValidationError("No data found in selector file at path: {path}")
         except (ValidationError, DbtRuntimeError) as exc:
-            raise DbtSelectorsError(
+            raise DvtSelectorsError(
                 f"Could not read selector file: {exc}",
                 result_type="invalid_selector",
                 path=path,
@@ -89,7 +89,7 @@ class SelectorConfig(Dict[str, Dict[str, Union[SelectionSpec, bool]]]):
 
         try:
             return cls.render_from_dict(data, renderer)
-        except DbtSelectorsError as exc:
+        except DvtSelectorsError as exc:
             exc.path = path
             raise
 
@@ -111,7 +111,7 @@ def selector_config_from_data(selectors_data: Dict[str, Any]) -> SelectorConfig:
     try:
         selectors = SelectorConfig.selectors_from_dict(selectors_data)
     except ValidationError as e:
-        raise DbtSelectorsError(
+        raise DvtSelectorsError(
             MALFORMED_SELECTOR_ERROR.format(error=str(e.message)),
             result_type="invalid_selector",
         ) from e
@@ -129,7 +129,7 @@ def validate_selector_default(selector_file: SelectorFile) -> None:
             default_selector_name = selector.name
             continue
         if selector.default is True and default_set is True:
-            raise DbtSelectorsError(
+            raise DvtSelectorsError(
                 "Error when parsing the selector file. "
                 "Found multiple selectors with `default: true`:"
                 f"{default_selector_name} and {selector.name}"
@@ -160,7 +160,7 @@ class SelectorDict:
         elif key == "method" and value == "selector":
             sel_def = definition.get("value")
             if sel_def not in selector_dict:
-                raise DbtSelectorsError(f"Existing selector definition for {sel_def} not found.")
+                raise DvtSelectorsError(f"Existing selector definition for {sel_def} not found.")
             return selector_dict[definition["value"]]["definition"]
         return definition
 

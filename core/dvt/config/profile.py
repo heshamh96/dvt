@@ -8,8 +8,8 @@ from dvt.contracts.project import ProfileConfig
 from dvt.events.types import MissingProfileTarget
 from dvt.exceptions import (
     CompilationError,
-    DbtProfileError,
-    DbtProjectError,
+    DvtProfileError,
+    DvtProjectError,
     DbtRuntimeError,
     ProfileConfigError,
 )
@@ -40,7 +40,7 @@ def read_profile(profiles_dir: str) -> Dict[str, Any]:
             yaml_content = load_yaml_text(contents)
             if not yaml_content:
                 msg = f"The profiles.yml file at {path} is empty"
-                raise DbtProfileError(INVALID_PROFILE_MESSAGE.format(error_string=msg))
+                raise DvtProfileError(INVALID_PROFILE_MESSAGE.format(error_string=msg))
             return yaml_content
         except DbtValidationError as e:
             msg = INVALID_PROFILE_MESSAGE.format(error_string=e)
@@ -139,7 +139,7 @@ class Profile(HasCredentials):
         # credentials carry their 'type' in their actual type, not their
         # attributes. We do want this in order to pick our Credentials class.
         if "type" not in profile:
-            raise DbtProfileError(
+            raise DvtProfileError(
                 'required field "type" not found in profile {} and target {}'.format(
                     profile_name, target_name
                 )
@@ -153,7 +153,7 @@ class Profile(HasCredentials):
             credentials = cls.from_dict(data)
         except (DbtRuntimeError, ValidationError) as e:
             msg = str(e) if isinstance(e, DbtRuntimeError) else e.message
-            raise DbtProfileError(
+            raise DvtProfileError(
                 'Credentials in profile "{}", target "{}" invalid: {}'.format(
                     profile_name, target_name, msg
                 )
@@ -193,7 +193,7 @@ defined in your profiles.yml file. You can find profiles.yml here:
 """.format(
                 profiles_file=default_profiles_dir()
             )
-            raise DbtProjectError(NO_SUPPLIED_PROFILE_ERROR)
+            raise DvtProjectError(NO_SUPPLIED_PROFILE_ERROR)
         return profile_name
 
     @staticmethod
@@ -201,7 +201,7 @@ defined in your profiles.yml file. You can find profiles.yml here:
         profile: Dict[str, Any], profile_name: str, target_name: str
     ) -> Dict[str, Any]:
         if "outputs" not in profile:
-            raise DbtProfileError("outputs not specified in profile '{}'".format(profile_name))
+            raise DvtProfileError("outputs not specified in profile '{}'".format(profile_name))
         outputs = profile["outputs"]
 
         if target_name not in outputs:
@@ -212,7 +212,7 @@ defined in your profiles.yml file. You can find profiles.yml here:
                     profile_name, target_name, outputs
                 )
             )
-            raise DbtProfileError(msg, result_type="invalid_target")
+            raise DvtProfileError(msg, result_type="invalid_target")
         profile_data = outputs[target_name]
 
         if not isinstance(profile_data, dict):
@@ -220,7 +220,7 @@ defined in your profiles.yml file. You can find profiles.yml here:
                 f"output '{target_name}' of profile '{profile_name}' is "
                 f"misconfigured in profiles.yml"
             )
-            raise DbtProfileError(msg, result_type="invalid_target")
+            raise DvtProfileError(msg, result_type="invalid_target")
 
         return profile_data
 
@@ -239,7 +239,7 @@ defined in your profiles.yml file. You can find profiles.yml here:
         :param threads: The number of threads to use for connections.
         :param profile_name: The profile name used for this profile.
         :param target_name: The target name used for this profile.
-        :raises DbtProfileError: If the profile is invalid.
+        :raises DvtProfileError: If the profile is invalid.
         :returns: The new Profile object.
         """
 
@@ -284,7 +284,7 @@ defined in your profiles.yml file. You can find profiles.yml here:
         try:
             profile_data = renderer.render_data(raw_profile_data)
         except CompilationError as exc:
-            raise DbtProfileError(str(exc)) from exc
+            raise DvtProfileError(str(exc)) from exc
         return target_name, profile_data
 
     @classmethod
@@ -308,7 +308,7 @@ defined in your profiles.yml file. You can find profiles.yml here:
             the command line.
         :param threads_override: The thread count to use, if
             provided on the command line.
-        :raises DbtProfileError: If the profile is invalid or missing, or the
+        :raises DvtProfileError: If the profile is invalid or missing, or the
             target could not be found
         :returns: The new Profile object.
         """
@@ -351,21 +351,21 @@ defined in your profiles.yml file. You can find profiles.yml here:
             line.
         :param threads_override: The thread count to use, if provided on the
             command line.
-        :raises DbtProjectError: If there is no profile name specified in the
+        :raises DvtProjectError: If there is no profile name specified in the
             project or the command line arguments
-        :raises DbtProfileError: If the profile is invalid or missing, or the
+        :raises DvtProfileError: If the profile is invalid or missing, or the
             target could not be found
         :returns: The new Profile object.
         """
         if profile_name not in raw_profiles:
-            raise DbtProjectError("Could not find profile named '{}'".format(profile_name))
+            raise DvtProjectError("Could not find profile named '{}'".format(profile_name))
 
         # First, we've already got our final decision on profile name, and we
         # don't render keys, so we can pluck that out
         raw_profile = raw_profiles[profile_name]
         if not raw_profile:
             msg = f"Profile {profile_name} in profiles.yml is empty"
-            raise DbtProfileError(INVALID_PROFILE_MESSAGE.format(error_string=msg))
+            raise DvtProfileError(INVALID_PROFILE_MESSAGE.format(error_string=msg))
 
         return cls.from_raw_profile_info(
             raw_profile=raw_profile,
@@ -391,10 +391,10 @@ defined in your profiles.yml file. You can find profiles.yml here:
         :param args argparse.Namespace: The arguments as parsed from the cli.
         :param project_profile_name Optional[str]: The profile name, if
             specified in a project.
-        :raises DbtProjectError: If there is no profile name specified in the
+        :raises DvtProjectError: If there is no profile name specified in the
             project or the command line arguments, or if the specified profile
             is not found
-        :raises DbtProfileError: If the profile is invalid or missing, or the
+        :raises DvtProfileError: If the profile is invalid or missing, or the
             target could not be found.
         :returns Profile: The new Profile object.
         """

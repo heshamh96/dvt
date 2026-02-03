@@ -29,7 +29,7 @@ from dvt.events.types import (
     MainTrackingUserState,
     ResourceReport,
 )
-from dvt.exceptions import DbtProjectError, FailFastError
+from dvt.exceptions import DvtProjectError, FailFastError
 from dvt.flags import get_flag_dict, get_flags, set_flags
 from dvt.mp_context import get_mp_context
 from dvt.parser.manifest import parse_manifest
@@ -286,7 +286,7 @@ def project(func):
         # TODO: Decouple target from profile, and remove the need for profile here:
         # https://github.com/dbt-labs/dbt-core/issues/6257
         if not ctx.obj.get("profile"):
-            raise DbtProjectError("profile required for project")
+            raise DvtProjectError("profile required for project")
 
         flags = ctx.obj["flags"]
         # TODO deprecations warnings fired from loading the project will lack
@@ -336,7 +336,7 @@ def runtime_config(func):
         reqs = [ctx.obj.get(req_str) for req_str in req_strs]
 
         if None in reqs:
-            raise DbtProjectError("profile and project required for runtime_config")
+            raise DvtProjectError("profile and project required for runtime_config")
 
         config = RuntimeConfig.from_parts(
             ctx.obj["project"],
@@ -380,7 +380,7 @@ def catalogs(func):
         req_strs = ["flags", "profile", "project"]
         reqs = [ctx.obj.get(req_str) for req_str in req_strs]
         if None in reqs:
-            raise DbtProjectError("profile and flags required to load catalogs")
+            raise DvtProjectError("profile and flags required to load catalogs")
 
         flags = ctx.obj["flags"]
         ctx_project = ctx.obj["project"]
@@ -422,7 +422,7 @@ def setup_manifest(ctx: Context, write: bool = True, write_perf_info: bool = Fal
     reqs = [ctx.obj.get(dep) for dep in req_strs]
 
     if None in reqs:
-        raise DbtProjectError("profile, project, and runtime_config required for manifest")
+        raise DvtProjectError("profile, project, and runtime_config required for manifest")
 
     runtime_config = ctx.obj["runtime_config"]
 

@@ -229,11 +229,11 @@ class TestSimpleDependencyWithSchema(BaseDependencyTest):
         mock_get.return_value = semver.VersionSpecifier.from_version_string("0.0.1")
         run_dbt(["deps"] + self.dbt_vargs(project.test_schema))
         # check seed
-        with pytest.raises(dvt.exceptions.DbtProjectError) as exc:
+        with pytest.raises(dvt.exceptions.DvtProjectError) as exc:
             run_dbt(["seed"] + self.dbt_vargs(project.test_schema))
         assert "--no-version-check" in str(exc.value)
         # check run too
-        with pytest.raises(dvt.exceptions.DbtProjectError) as exc:
+        with pytest.raises(dvt.exceptions.DvtProjectError) as exc:
             run_dbt(["run"] + self.dbt_vargs(project.test_schema))
         assert "--no-version-check" in str(exc.value)
 

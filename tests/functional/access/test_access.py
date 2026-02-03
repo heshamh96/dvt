@@ -1,6 +1,6 @@
 import pytest
 
-from dvt.exceptions import DbtReferenceError, InvalidAccessTypeError
+from dvt.exceptions import DvtReferenceError, InvalidAccessTypeError
 from dvt.node_types import AccessType
 from dvt.tests.fixtures.project import write_project_files
 from dvt.tests.util import get_manifest, rm_file, run_dbt, write_file
@@ -306,7 +306,7 @@ class TestAccess:
 
         # Change group on ref_my_model and it should raise
         write_file(v4_schema_yml, project.project_root, "models", "schema.yml")
-        with pytest.raises(DbtReferenceError):
+        with pytest.raises(DvtReferenceError):
             run_dbt(["parse"])
 
         # put back group on ref_my_model, add exposure with ref to private model
@@ -317,7 +317,7 @@ class TestAccess:
         # Write out exposure refing private my_model
         write_file(simple_exposure_yml, project.project_root, "models", "simple_exposure.yml")
         # Fails with reference error
-        with pytest.raises(DbtReferenceError):
+        with pytest.raises(DvtReferenceError):
             run_dbt(["parse"])
 
         # Remove exposure and add people model and metric file
@@ -410,7 +410,7 @@ class TestRestrictedPackageAccess:
 
     def test_restricted_protected_ref(self, project):
         run_dbt(["deps"])
-        with pytest.raises(DbtReferenceError):
+        with pytest.raises(DvtReferenceError):
             run_dbt(["parse"])
 
     def test_restricted_private_ref(self, project):
@@ -425,7 +425,7 @@ class TestRestrictedPackageAccess:
             "schema.yml",
         )
 
-        with pytest.raises(DbtReferenceError):
+        with pytest.raises(DvtReferenceError):
             run_dbt(["parse"])
 
 

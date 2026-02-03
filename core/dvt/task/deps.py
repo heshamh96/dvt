@@ -34,9 +34,9 @@ from dbt_common.events.functions import fire_event
 from dbt_common.events.types import Formatting
 
 
-class dbtPackageDumper(yaml.Dumper):
+class dvtPackageDumper(yaml.Dumper):
     def increase_indent(self, flow=False, indentless=False):
-        return super(dbtPackageDumper, self).increase_indent(flow, False)
+        return super(dvtPackageDumper, self).increase_indent(flow, False)
 
 
 def _create_sha1_hash(packages: List[PackageSpec]) -> str:
@@ -236,7 +236,7 @@ class DepsTask(BaseTask):
         if packages_yml:
             with open(packages_yml_filepath, "w") as pkg_obj:
                 pkg_obj.write(
-                    yaml.dump(packages_yml, Dumper=dbtPackageDumper, default_flow_style=False)
+                    yaml.dump(packages_yml, Dumper=dvtPackageDumper, default_flow_style=False)
                 )
 
                 fire_event(
@@ -273,7 +273,7 @@ class DepsTask(BaseTask):
         )
 
         with open(lock_filepath, "w") as lock_obj:
-            yaml.dump(packages_installed, lock_obj, Dumper=dbtPackageDumper)
+            yaml.dump(packages_installed, lock_obj, Dumper=dvtPackageDumper)
 
         fire_event(DepsLockUpdating(lock_filepath=lock_filepath))
 

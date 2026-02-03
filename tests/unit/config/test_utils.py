@@ -4,7 +4,7 @@ from dvt.config.utils import (
     exclusive_primary_alt_value_setting,
     normalize_warn_error_options,
 )
-from dvt.exceptions import DbtExclusivePropertyUseError
+from dvt.exceptions import DvtExclusivePropertyUseError
 
 
 class TestExclusivePrimaryAltValueSetting:
@@ -33,7 +33,7 @@ class TestExclusivePrimaryAltValueSetting:
 
     def test_primary_and_alt_set(self, primary_key: str, alt_key: str, value: str):
         test_dict = {primary_key: value, alt_key: value}
-        with pytest.raises(DbtExclusivePropertyUseError):
+        with pytest.raises(DvtExclusivePropertyUseError):
             exclusive_primary_alt_value_setting(test_dict, primary_key, alt_key)
 
     def test_neither_primary_nor_alt_set(self, primary_key: str, alt_key: str):
@@ -64,7 +64,7 @@ class TestNormalizeWarnErrorOptions:
             "warn": ["SomeWarning"],
             "exclude": ["SomeWarning"],
         }
-        with pytest.raises(DbtExclusivePropertyUseError):
+        with pytest.raises(DvtExclusivePropertyUseError):
             normalize_warn_error_options(test_dict)
 
     def test_empty_dict(self):

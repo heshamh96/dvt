@@ -48,7 +48,7 @@ from dvt.graph import (
     UniqueId,
     parse_difference,
 )
-from dvt.graph.thread_pool import DbtThreadPool
+from dvt.graph.thread_pool import DvtThreadPool
 from dvt.parser.manifest import write_manifest
 from dvt.task import group_lookup
 from dvt.task.base import BaseRunner, ConfiguredTask
@@ -423,7 +423,7 @@ class GraphRunnableTask(ConfiguredTask):
     def execute_nodes(self):
         num_threads = self.config.threads
 
-        pool = DbtThreadPool(
+        pool = DvtThreadPool(
             num_threads, self._pool_thread_initializer, [get_invocation_context()]
         )
         try:

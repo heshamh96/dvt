@@ -2,7 +2,7 @@ from typing import Set
 
 import pytest
 
-from dvt.cli.main import dbtRunner
+from dvt.cli.main import dvtRunner
 from dvt.contracts.graph.manifest import Manifest
 from dvt.contracts.graph.semantic_manifest import SemanticManifest
 from dvt.exceptions import ParsingError
@@ -34,7 +34,7 @@ class TestValidTimeSpines:
         }
 
     def test_time_spines(self, project):
-        runner = dbtRunner()
+        runner = dvtRunner()
         result = runner.invoke(["parse"])
         assert result.success
         assert isinstance(result.result, Manifest)
@@ -113,7 +113,7 @@ class TestValidLegacyTimeSpine:
         }
 
     def test_time_spines(self, project):
-        runner = dbtRunner()
+        runner = dvtRunner()
         result = runner.invoke(["parse"])
         assert result.success
         assert isinstance(result.result, Manifest)
@@ -149,7 +149,7 @@ class TestMissingTimeSpine:
         }
 
     def test_time_spines(self, project):
-        runner = dbtRunner()
+        runner = dvtRunner()
         result = runner.invoke(["parse"])
         assert isinstance(result.exception, ParsingError)
         assert (
@@ -172,7 +172,7 @@ class TestTimeSpineStandardColumnMissing:
         }
 
     def test_time_spines(self, project):
-        runner = dbtRunner()
+        runner = dvtRunner()
         result = runner.invoke(["parse"])
         assert isinstance(result.exception, ParsingError)
         assert (
@@ -195,7 +195,7 @@ class TestTimeSpineCustomColumnMissing:
         }
 
     def test_time_spines(self, project):
-        runner = dbtRunner()
+        runner = dvtRunner()
         result = runner.invoke(["parse"])
         assert isinstance(result.exception, ParsingError)
         assert (
@@ -218,7 +218,7 @@ class TestTimeSpineGranularityMissing:
         }
 
     def test_time_spines(self, project):
-        runner = dbtRunner()
+        runner = dvtRunner()
         result = runner.invoke(["parse"])
         assert isinstance(result.exception, ParsingError)
         assert (

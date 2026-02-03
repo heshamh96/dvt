@@ -1,6 +1,6 @@
 import pytest
 
-from dvt.cli.main import dbtRunner
+from dvt.cli.main import dvtRunner
 from dvt.contracts.graph.manifest import Manifest
 from dvt.exceptions import CompilationError
 from dvt.tests.util import get_manifest, rm_file, run_dbt, write_file
@@ -99,7 +99,7 @@ class TestDeleteFileWithMetricsAndSemanticModels:
 
     def test_metrics(self, project):
         # Initial parsing
-        runner = dbtRunner()
+        runner = dvtRunner()
         result = runner.invoke(["parse"])
         assert result.success
         manifest = result.result

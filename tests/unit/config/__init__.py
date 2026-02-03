@@ -37,7 +37,7 @@ def empty_profile_renderer():
 
 
 def empty_project_renderer():
-    return dvt.config.renderer.DbtProjectYamlRenderer()
+    return dvt.config.renderer.DvtProjectYamlRenderer()
 
 
 model_config = {

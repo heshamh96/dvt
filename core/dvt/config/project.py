@@ -25,8 +25,8 @@ from dvt.contracts.project import PackageConfig
 from dvt.contracts.project import Project as ProjectContract
 from dvt.contracts.project import ProjectFlags, ProjectPackageMetadata, SemverString
 from dvt.exceptions import (
-    DbtExclusivePropertyUseError,
-    DbtProjectError,
+    DvtExclusivePropertyUseError,
+    DvtProjectError,
     DbtRuntimeError,
     ProjectContractBrokenError,
     ProjectContractError,
@@ -42,7 +42,7 @@ from dbt_common.exceptions import SemverError
 from dbt_common.helper_types import NoValue
 from dbt_common.semver import VersionSpecifier, versions_compatible
 
-from .renderer import DbtProjectYamlRenderer, PackageRenderer
+from .renderer import DvtProjectYamlRenderer, PackageRenderer
 from .selectors import (
     SelectorConfig,
     selector_config_from_data,
@@ -113,10 +113,10 @@ def package_and_project_data_from_root(project_root):
 
     if "packages" in packages_yml_dict and "packages" in dependencies_yml_dict:
         msg = "The 'packages' key cannot be specified in both packages.yml and dependencies.yml"
-        raise DbtProjectError(msg)
+        raise DvtProjectError(msg)
     if "projects" in packages_yml_dict:
         msg = "The 'projects' key cannot be specified in packages.yml"
-        raise DbtProjectError(msg)
+        raise DvtProjectError(msg)
 
     packages_specified_path = PACKAGES_FILE_NAME
     packages_dict = {}
@@ -148,7 +148,7 @@ def package_config_from_data(
         PackageConfig.validate(packages_data)
         packages = PackageConfig.from_dict(packages_data)
     except ValidationError as e:
-        raise DbtProjectError(MALFORMED_PACKAGE_ERROR.format(error=str(e.message))) from e
+        raise DvtProjectError(MALFORMED_PACKAGE_ERROR.format(error=str(e.message))) from e
     return packages
 
 
@@ -197,7 +197,7 @@ def load_raw_project(project_root: str, validate: bool = False) -> Dict[str, Any
 
     # get the project.yml contents
     if not path_exists(project_yaml_filepath):
-        raise DbtProjectError(
+        raise DvtProjectError(
             MISSING_DBT_PROJECT_ERROR.format(
                 path=project_yaml_filepath, DBT_PROJECT_FILE_NAME=DBT_PROJECT_FILE_NAME
             )
@@ -213,7 +213,7 @@ def load_raw_project(project_root: str, validate: bool = False) -> Dict[str, Any
         )
 
     if not isinstance(project_dict, dict):
-        raise DbtProjectError(f"{DBT_PROJECT_FILE_NAME} does not parse to a dictionary")
+        raise DvtProjectError(f"{DBT_PROJECT_FILE_NAME} does not parse to a dictionary")
 
     if "tests" in project_dict and "data_tests" not in project_dict:
         project_dict["data_tests"] = project_dict.pop("tests")
@@ -243,7 +243,7 @@ def validate_version(dbt_version: List[VersionSpecifier], project_name: str):
         msg = IMPOSSIBLE_VERSION_ERROR.format(
             package=project_name, version_spec=[x.to_version_string() for x in dbt_version]
         )
-        raise DbtProjectError(msg)
+        raise DvtProjectError(msg)
 
     if not versions_compatible(installed, *dbt_version):
         msg = INVALID_VERSION_ERROR.format(
@@ -251,7 +251,7 @@ def validate_version(dbt_version: List[VersionSpecifier], project_name: str):
             installed=installed.to_version_string(),
             version_spec=[x.to_version_string() for x in dbt_version],
         )
-        raise DbtProjectError(msg)
+        raise DvtProjectError(msg)
 
 
 def _get_required_version(
@@ -266,12 +266,12 @@ def _get_required_version(
     try:
         dbt_version = _parse_versions(dbt_raw_version)
     except SemverError as e:
-        raise DbtProjectError(str(e)) from e
+        raise DvtProjectError(str(e)) from e
 
     if verify_version:
         # no name is also an error that we want to raise
         if "name" not in project_dict:
-            raise DbtProjectError(
+            raise DvtProjectError(
                 'Required "name" field not present in project',
             )
         validate_version(dbt_version, project_dict["name"])
@@ -316,7 +316,7 @@ class PartialProject(RenderComponents):
 
     def get_rendered(
         self,
-        renderer: DbtProjectYamlRenderer,
+        renderer: DvtProjectYamlRenderer,
     ) -> RenderComponents:
         rendered_project = renderer.render_project(self.project_dict, self.project_root)
         rendered_packages = renderer.render_packages(
@@ -331,11 +331,11 @@ class PartialProject(RenderComponents):
         )
 
     # Called by Project.from_project_root which first calls PartialProject.from_project_root
-    def render(self, renderer: DbtProjectYamlRenderer) -> "Project":
+    def render(self, renderer: DvtProjectYamlRenderer) -> "Project":
         try:
             rendered = self.get_rendered(renderer)
             return self.create_project(rendered)
-        except DbtProjectError as exc:
+        except DvtProjectError as exc:
             if exc.path is None:
                 exc.path = os.path.join(self.project_root, DBT_PROJECT_FILE_NAME)
             raise
@@ -344,7 +344,7 @@ class PartialProject(RenderComponents):
         packages_data = renderer.render_data(self.packages_dict)
         packages_config = package_config_from_data(packages_data, self.packages_dict)
         if not self.project_name:
-            raise DbtProjectError(f"Package defined in {DBT_PROJECT_FILE_NAME} must have a name!")
+            raise DvtProjectError(f"Package defined in {DBT_PROJECT_FILE_NAME} must have a name!")
         return ProjectPackageMetadata(self.project_name, packages_config.packages)
 
     def check_config_path(
@@ -358,7 +358,7 @@ class PartialProject(RenderComponents):
                     f"Please update your `{DBT_PROJECT_FILE_NAME}` configuration to reflect this "
                     "change."
                 )
-                raise DbtProjectError(
+                raise DvtProjectError(
                     msg.format(deprecated_path=deprecated_path, expected_path=expected_path)
                 )
             # this field is no longer supported, but many projects may specify it with the default value
@@ -397,7 +397,7 @@ class PartialProject(RenderComponents):
         # this is added at project_dict parse time and should always be here
         # once we see it.
         if cfg.project_root is None:
-            raise DbtProjectError("cfg must have a project root!")
+            raise DvtProjectError("cfg must have a project root!")
         else:
             project_root = cfg.project_root
         # this is only optional in the sense that if it's not present, it needs
@@ -775,7 +775,7 @@ class Project:
     def from_project_root(
         cls,
         project_root: str,
-        renderer: DbtProjectYamlRenderer,
+        renderer: DvtProjectYamlRenderer,
         *,
         verify_version: bool = False,
         validate: bool = False,
@@ -845,7 +845,7 @@ def read_project_flags(project_dir: str, profiles_dir: str) -> ProjectFlags:
             profile_project_flags = coerce_dict_str(profile.get("config", {}))
 
         if project_flags and profile_project_flags:
-            raise DbtProjectError(
+            raise DvtProjectError(
                 f"Do not specify both 'config' in profiles.yml and 'flags' in {DBT_PROJECT_FILE_NAME}. "
                 "Using 'config' in profiles.yml is deprecated."
             )
@@ -864,8 +864,8 @@ def read_project_flags(project_dir: str, profiles_dir: str) -> ProjectFlags:
 
             ProjectFlags.validate(project_flags)
             return ProjectFlags.from_dict(project_flags)
-    except (DbtProjectError, DbtExclusivePropertyUseError) as exc:
-        # We don't want to eat the DbtProjectError for UserConfig to ProjectFlags or
+    except (DvtProjectError, DvtExclusivePropertyUseError) as exc:
+        # We don't want to eat the DvtProjectError for UserConfig to ProjectFlags or
         # DbtConfigError for warn_error_options munging
         raise exc
     except (DbtRuntimeError, ValidationError):

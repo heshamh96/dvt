@@ -16,7 +16,7 @@ from dvt.artifacts.schemas.results import RunStatus
 from dvt.cli.flags import Flags
 from dvt.clients.yaml_helper import load_yaml_text
 from dvt.config import PartialProject, Profile, Project
-from dvt.config.renderer import DbtProjectYamlRenderer, ProfileRenderer
+from dvt.config.renderer import DvtProjectYamlRenderer, ProfileRenderer
 from dvt.events.types import DebugCmdOut, DebugCmdResult, OpenCommand
 from dvt.links import ProfileConfigDocs
 from dvt.mp_context import get_mp_context
@@ -247,9 +247,9 @@ class DebugTask(BaseTask):
                     os.path.dirname(self.project_path),
                     verify_version=bool(self.args.VERSION_CHECK),
                 )
-                renderer = DbtProjectYamlRenderer(None, self.cli_vars)
+                renderer = DvtProjectYamlRenderer(None, self.cli_vars)
                 project_profile = partial.render_profile_name(renderer)
-            except dvt.exceptions.DbtProjectError:
+            except dvt.exceptions.DvtProjectError:
                 pass
 
         args_profile: Optional[str] = getattr(self.args, "profile", None)
@@ -330,7 +330,7 @@ class DebugTask(BaseTask):
                 ),
             )
 
-        renderer = DbtProjectYamlRenderer(self.profile, self.cli_vars)
+        renderer = DvtProjectYamlRenderer(self.profile, self.cli_vars)
 
         try:
             self.project = Project.from_project_root(
@@ -499,4 +499,4 @@ class DebugTask(BaseTask):
         )
         result = cls.attempt_connection(profile)
         if result is not None:
-            raise dvt.exceptions.DbtProfileError(result, result_type="connection_failure")
+            raise dvt.exceptions.DvtProfileError(result, result_type="connection_failure")

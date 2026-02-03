@@ -8,7 +8,7 @@ from dvt.constants import DEPENDENCIES_FILE_NAME, SECRET_PLACEHOLDER
 from dvt.context.base import BaseContext
 from dvt.context.secret import SecretContext
 from dvt.context.target import TargetContext
-from dvt.exceptions import DbtProjectError
+from dvt.exceptions import DvtProjectError
 from dbt_common.clients.jinja import catch_jinja
 from dbt_common.constants import SECRET_ENV_PREFIX
 from dbt_common.context import get_invocation_context
@@ -51,7 +51,7 @@ class BaseRenderer:
         try:
             return deep_map_render(self.render_entry, data)
         except RecursionError:
-            raise DbtProjectError(
+            raise DvtProjectError(
                 f"Cycle detected: {self.name} input has a reference to itself", project=data
             )
 
@@ -97,7 +97,7 @@ class ProjectPostprocessor(Dict[Keypath, Callable[[Any], Any]]):
         return value
 
 
-class DbtProjectYamlRenderer(BaseRenderer):
+class DvtProjectYamlRenderer(BaseRenderer):
     _KEYPATH_HANDLERS = ProjectPostprocessor()
 
     def __init__(

@@ -13,7 +13,7 @@ import yaml
 
 from dvt.adapters.base.relation import BaseRelation
 from dvt.adapters.factory import Adapter
-from dvt.cli.main import dbtRunner
+from dvt.cli.main import dvtRunner
 from dvt.contracts.graph.manifest import Manifest
 from dvt.materializations.incremental.microbatch import MicrobatchBuilder
 from dbt_common.context import _INVOCATION_CONTEXT_VAR, InvocationContext
@@ -94,7 +94,7 @@ def run_dbt(
         args.extend(["--project-dir", project_dir])
     if profiles_dir and "--profiles-dir" not in args:
         args.extend(["--profiles-dir", profiles_dir])
-    dvt = dbtRunner(callbacks=callbacks)
+    dvt = dvtRunner(callbacks=callbacks)
 
     res = dvt.invoke(args)
 

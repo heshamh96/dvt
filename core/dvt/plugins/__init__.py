@@ -1,7 +1,7 @@
 from typing import Optional
 
 # these are just exports, they need "noqa" so flake8 will not complain.
-from .manager import PluginManager, dbt_hook, dbtPlugin  # noqa
+from .manager import PluginManager, dbt_hook, dvtPlugin  # noqa
 
 PLUGIN_MANAGER: Optional[PluginManager] = None
 

@@ -70,7 +70,7 @@ from dvt.contracts.graph.nodes import (
 from dvt.exceptions import (
     CompilationError,
     ConflictingConfigKeysError,
-    DbtReferenceError,
+    DvtReferenceError,
     EnvVarMissingError,
     InlineModelConfigError,
     LoadAgateTableNotSeedError,
@@ -719,7 +719,7 @@ class RuntimeRefResolver(BaseRefResolver):
         elif self.manifest.is_invalid_private_ref(
             self.model, target_model, self.config.dependencies
         ):
-            raise DbtReferenceError(
+            raise DvtReferenceError(
                 unique_id=self.model.unique_id,
                 ref_unique_id=target_model.unique_id,
                 access=AccessType.Private,
@@ -729,7 +729,7 @@ class RuntimeRefResolver(BaseRefResolver):
         elif self.manifest.is_invalid_protected_ref(
             self.model, target_model, self.config.dependencies
         ):
-            raise DbtReferenceError(
+            raise DvtReferenceError(
                 unique_id=self.model.unique_id,
                 ref_unique_id=target_model.unique_id,
                 access=AccessType.Protected,

@@ -58,13 +58,13 @@ def profile_from_dict(profile, profile_name, cli_vars="{}"):
 
 
 def project_from_dict(project, profile, packages=None, selectors=None, cli_vars="{}"):
-    from dvt.config.renderer import DbtProjectYamlRenderer
+    from dvt.config.renderer import DvtProjectYamlRenderer
     from dvt.config.utils import parse_cli_vars
 
     if not isinstance(cli_vars, dict):
         cli_vars = parse_cli_vars(cli_vars)
 
-    renderer = DbtProjectYamlRenderer(profile, cli_vars)
+    renderer = DvtProjectYamlRenderer(profile, cli_vars)
 
     project_root = project.pop("project-root", os.getcwd())
 

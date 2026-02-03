@@ -23,9 +23,9 @@ def dbt_hook(func):
     return inner
 
 
-class dbtPlugin:
+class dvtPlugin:
     """
-    EXPERIMENTAL: dbtPlugin is the base class for creating plugins.
+    EXPERIMENTAL: dvtPlugin is the base class for creating plugins.
     Its interface is **not** stable and will likely change between dvt-core versions.
     """
 
@@ -84,11 +84,11 @@ class PluginManager:
     PLUGIN_MODULE_PREFIX = "dbt_"
     PLUGIN_ATTR_NAME = "plugins"
 
-    def __init__(self, plugins: List[dbtPlugin]) -> None:
+    def __init__(self, plugins: List[dvtPlugin]) -> None:
         self._plugins = plugins
         self._valid_hook_names = set()
-        # default hook implementations from dbtPlugin
-        for hook_name in dir(dbtPlugin):
+        # default hook implementations from dvtPlugin
+        for hook_name in dir(dvtPlugin):
             if not hook_name.startswith("_"):
                 self._valid_hook_names.add(hook_name)
 
@@ -125,8 +125,8 @@ class PluginManager:
                 available_plugins = getattr(module, cls.PLUGIN_ATTR_NAME, [])
                 for plugin_cls in available_plugins:
                     assert issubclass(
-                        plugin_cls, dbtPlugin
-                    ), f"'plugin' in {name} must be subclass of dbtPlugin"
+                        plugin_cls, dvtPlugin
+                    ), f"'plugin' in {name} must be subclass of dvtPlugin"
                     plugin = plugin_cls(project_name=project_name)
                     plugins.append(plugin)
         return cls(plugins=plugins)

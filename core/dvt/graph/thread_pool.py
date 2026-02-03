@@ -3,7 +3,7 @@ from __future__ import annotations
 from multiprocessing.pool import ThreadPool
 
 
-class DbtThreadPool(ThreadPool):
+class DvtThreadPool(ThreadPool):
     """A ThreadPool that tracks whether or not it's been closed"""
 
     def __init__(self, *args, **kwargs):

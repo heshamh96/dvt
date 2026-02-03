@@ -3,23 +3,23 @@ from unittest import mock
 import pytest
 
 from dvt.exceptions import DbtRuntimeError
-from dvt.plugins import PluginManager, dbt_hook, dbtPlugin
+from dvt.plugins import PluginManager, dbt_hook, dvtPlugin
 from dvt.plugins.contracts import PluginArtifact, PluginArtifacts
-from dvt.plugins.exceptions import dbtPluginError
+from dvt.plugins.exceptions import dvtPluginError
 from dvt.plugins.manifest import ModelNodeArgs, PluginNodes
 
 
-class ExceptionInitializePlugin(dbtPlugin):
+class ExceptionInitializePlugin(dvtPlugin):
     def initialize(self) -> None:
         raise Exception("plugin error message")
 
 
-class dbtRuntimeErrorInitializePlugin(dbtPlugin):
+class dbtRuntimeErrorInitializePlugin(dvtPlugin):
     def initialize(self) -> None:
-        raise dbtPluginError("plugin error message")
+        raise dvtPluginError("plugin error message")
 
 
-class GetNodesPlugin(dbtPlugin):
+class GetNodesPlugin(dvtPlugin):
     @dbt_hook
     def get_nodes(self) -> PluginNodes:
         nodes = PluginNodes()
@@ -34,7 +34,7 @@ class GetNodesPlugin(dbtPlugin):
         return nodes
 
 
-class GetArtifactsPlugin(dbtPlugin):
+class GetArtifactsPlugin(dvtPlugin):
     @dbt_hook
     def get_manifest_artifacts(self, manifest) -> PluginArtifacts:
         return {self.project_name: PluginArtifact()}
