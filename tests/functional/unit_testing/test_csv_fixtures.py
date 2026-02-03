@@ -24,8 +24,8 @@ from fixtures import (
     test_my_model_mixed_csv_yml,
 )
 
-from dbt.exceptions import DuplicateResourceNameError, ParsingError, YamlParseDictError
-from dbt.tests.util import rm_file, run_dbt, write_file
+from dvt.exceptions import DuplicateResourceNameError, ParsingError, YamlParseDictError
+from dvt.tests.util import rm_file, run_dbt, write_file
 
 
 class TestUnitTestsWithInlineCSV:

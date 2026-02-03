@@ -2,18 +2,18 @@ from unittest.mock import patch
 
 import pytest
 
-from core.dbt.contracts.graph.manifest import Manifest
-from dbt.artifacts.resources.types import NodeType
-from dbt.artifacts.resources.v1.metric import (
+from core.dvt.contracts.graph.manifest import Manifest
+from dvt.artifacts.resources.types import NodeType
+from dvt.artifacts.resources.v1.metric import (
     CumulativeTypeParams,
     MetricTimeWindow,
     MetricTypeParams,
 )
-from dbt.artifacts.resources.v1.model import ModelConfig, TimeSpine
-from dbt.constants import LEGACY_TIME_SPINE_MODEL_NAME
-from dbt.contracts.files import FileHash
-from dbt.contracts.graph.nodes import ColumnInfo, DependsOn, Metric, ModelNode
-from dbt.contracts.graph.semantic_manifest import SemanticManifest
+from dvt.artifacts.resources.v1.model import ModelConfig, TimeSpine
+from dvt.constants import LEGACY_TIME_SPINE_MODEL_NAME
+from dvt.contracts.files import FileHash
+from dvt.contracts.graph.nodes import ColumnInfo, DependsOn, Metric, ModelNode
+from dvt.contracts.graph.semantic_manifest import SemanticManifest
 from dbt_semantic_interfaces.type_enums import TimeGranularity
 from dbt_semantic_interfaces.type_enums.metric_type import MetricType
 
@@ -41,7 +41,7 @@ def metrics(
 class TestSemanticManifest:
 
     def test_validate(self, manifest):
-        with patch("dbt.contracts.graph.semantic_manifest.get_flags") as patched_get_flags:
+        with patch("dvt.contracts.graph.semantic_manifest.get_flags") as patched_get_flags:
             patched_get_flags.return_value.require_yaml_configuration_for_mf_time_spines = True
             sm_manifest = SemanticManifest(manifest)
             assert sm_manifest.validate()
@@ -49,8 +49,8 @@ class TestSemanticManifest:
     def test_require_yaml_configuration_for_mf_time_spines(
         self, manifest: Manifest, metricflow_time_spine_model: ModelNode
     ):
-        with patch("dbt.contracts.graph.semantic_manifest.get_flags") as patched_get_flags, patch(
-            "dbt.contracts.graph.semantic_manifest.deprecations"
+        with patch("dvt.contracts.graph.semantic_manifest.get_flags") as patched_get_flags, patch(
+            "dvt.contracts.graph.semantic_manifest.deprecations"
         ) as patched_deprecations:
             patched_get_flags.return_value.require_yaml_configuration_for_mf_time_spines = False
             manifest.nodes[metricflow_time_spine_model.unique_id] = metricflow_time_spine_model
@@ -65,7 +65,7 @@ class TestSemanticManifest:
         # Create a metricflow_time_spine model with HOUR granularity
         metricflow_time_spine_hour = ModelNode(
             name=LEGACY_TIME_SPINE_MODEL_NAME,
-            database="dbt",
+            database="dvt",
             schema="analytics",
             alias=LEGACY_TIME_SPINE_MODEL_NAME,
             resource_type=NodeType.Model,
@@ -100,8 +100,8 @@ class TestSemanticManifest:
             time_spine=TimeSpine(standard_granularity_column="ts_hour"),
         )
 
-        with patch("dbt.contracts.graph.semantic_manifest.get_flags") as patched_get_flags, patch(
-            "dbt.contracts.graph.semantic_manifest.deprecations"
+        with patch("dvt.contracts.graph.semantic_manifest.get_flags") as patched_get_flags, patch(
+            "dvt.contracts.graph.semantic_manifest.deprecations"
         ) as patched_deprecations:
             patched_get_flags.return_value.require_yaml_configuration_for_mf_time_spines = False
             manifest.nodes[metricflow_time_spine_hour.unique_id] = metricflow_time_spine_hour
@@ -190,8 +190,8 @@ class TestSemanticManifest:
         should_error: bool,
         flag_value: bool,
     ):
-        with patch("dbt.contracts.graph.semantic_manifest.get_flags") as patched_get_flags, patch(
-            "dbt.contracts.graph.semantic_manifest.deprecations"
+        with patch("dvt.contracts.graph.semantic_manifest.get_flags") as patched_get_flags, patch(
+            "dvt.contracts.graph.semantic_manifest.deprecations"
         ) as patched_deprecations:
             patched_get_flags.return_value.require_nested_cumulative_type_params = flag_value
             manifest.metrics["metric.test.my_metric"] = Metric(

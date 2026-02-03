@@ -1,7 +1,7 @@
 import pytest
 
-from dbt.exceptions import ParsingError
-from dbt.tests.util import get_manifest, run_dbt, write_file
+from dvt.exceptions import ParsingError
+from dvt.tests.util import get_manifest, run_dbt, write_file
 from tests.functional.partial_parsing.fixtures import (
     groups_schema_yml_one_group,
     groups_schema_yml_one_group_model_in_group2,

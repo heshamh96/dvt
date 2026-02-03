@@ -2,11 +2,11 @@ import shutil
 
 import pytest
 
-from dbt.artifacts.resources.types import NodeType
-from dbt.cli.main import dbtRunner
-from dbt.cli.types import Command
-from dbt.events.types import NoNodesSelected
-from dbt.tests.util import run_dbt
+from dvt.artifacts.resources.types import NodeType
+from dvt.cli.main import dbtRunner
+from dvt.cli.types import Command
+from dvt.events.types import NoNodesSelected
+from dvt.tests.util import run_dbt
 from dbt_common.events.event_catcher import EventCatcher
 
 """

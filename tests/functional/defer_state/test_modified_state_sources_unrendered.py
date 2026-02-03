@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from dbt.tests.util import get_artifact, run_dbt, write_file
+from dvt.tests.util import get_artifact, run_dbt, write_file
 from tests.functional.defer_state.fixtures import (
     schema_source_with_env_var_as_database_property_yml,
     schema_source_with_env_var_as_schema_property_yml,

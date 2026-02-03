@@ -1,6 +1,6 @@
 import unittest
 
-from dbt.clients.registry import _get_package_with_retries
+from dvt.clients.registry import _get_package_with_retries
 from dbt_common.exceptions import ConnectionError
 
 

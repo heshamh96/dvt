@@ -5,7 +5,7 @@ import freezegun
 import pytest
 import pytz
 
-from dbt.event_time.sample_window import SampleWindow
+from dvt.event_time.sample_window import SampleWindow
 from dbt_common.exceptions import DbtRuntimeError
 
 

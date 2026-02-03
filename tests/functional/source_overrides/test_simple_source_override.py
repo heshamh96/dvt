@@ -3,8 +3,8 @@ from unittest import mock
 
 import pytest
 
-from dbt.tests.fixtures.project import write_project_files
-from dbt.tests.util import (
+from dvt.tests.fixtures.project import write_project_files
+from dvt.tests.util import (
     check_relations_equal,
     run_dbt,
     run_dbt_and_capture,
@@ -97,7 +97,7 @@ class TestSourceOverride:
 
         return insert_id + 1
 
-    @mock.patch("dbt.jsonschemas.jsonschemas._JSONSCHEMA_SUPPORTED_ADAPTERS", {"postgres"})
+    @mock.patch("dvt.jsonschemas.jsonschemas._JSONSCHEMA_SUPPORTED_ADAPTERS", {"postgres"})
     def test_source_overrides(self, project):
         insert_id = 101
 

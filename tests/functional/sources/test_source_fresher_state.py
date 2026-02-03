@@ -5,9 +5,9 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-import dbt.version
-from dbt.contracts.results import FreshnessExecutionResultArtifact
-from dbt.tests.util import AnyFloat, AnyStringWith
+import dvt.version
+from dvt.contracts.results import FreshnessExecutionResultArtifact
+from dvt.tests.util import AnyFloat, AnyStringWith
 from dbt_common.exceptions import DbtInternalError
 from tests.functional.sources.common_source_setup import BaseSourcesTest
 from tests.functional.sources.fixtures import (
@@ -90,9 +90,9 @@ class SuccessfulSourceFreshnessTest(BaseSourcesTest):
         self.assertBetween(data["metadata"]["generated_at"], pytest.freshness_start_time)
         assert (
             data["metadata"]["dbt_schema_version"]
-            == "https://schemas.getdbt.com/dbt/sources/v3.json"
+            == "https://schemas.getdbt.com/dvt/sources/v3.json"
         )
-        assert data["metadata"]["dbt_version"] == dbt.version.__version__
+        assert data["metadata"]["dbt_version"] == dvt.version.__version__
         key = "key"
         if os.name == "nt":
             key = key.upper()

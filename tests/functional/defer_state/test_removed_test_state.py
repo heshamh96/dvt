@@ -1,7 +1,7 @@
 import pytest
 
-from dbt.exceptions import CompilationError
-from dbt.tests.util import run_dbt
+from dvt.exceptions import CompilationError
+from dvt.tests.util import run_dbt
 from tests.functional.defer_state.fixtures import (
     removed_test_model_sql,
     removed_test_schema_yml,

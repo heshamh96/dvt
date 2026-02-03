@@ -2,14 +2,14 @@ import unittest
 from decimal import Decimal
 from unittest import mock
 
-from dbt.task.docs import generate
+from dvt.task.docs import generate
 
 
 class GenerateTest(unittest.TestCase):
     def setUp(self):
         self.maxDiff = None
         self.manifest = mock.MagicMock()
-        self.patcher = mock.patch("dbt.task.docs.generate.get_unique_id_mapping")
+        self.patcher = mock.patch("dvt.task.docs.generate.get_unique_id_mapping")
         self.mock_get_unique_id_mapping = self.patcher.start()
 
     def tearDown(self):

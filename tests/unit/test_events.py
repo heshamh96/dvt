@@ -4,12 +4,12 @@ from typing import TypeVar
 
 import pytest
 
-from dbt.adapters.events import types as adapter_types
-from dbt.adapters.events.logging import AdapterLogger
-from dbt.artifacts.schemas.results import RunStatus, TimingInfo
-from dbt.artifacts.schemas.run import RunResult
-from dbt.events import types as core_types
-from dbt.events.base_types import (
+from dvt.adapters.events import types as adapter_types
+from dvt.adapters.events.logging import AdapterLogger
+from dvt.artifacts.schemas.results import RunStatus, TimingInfo
+from dvt.artifacts.schemas.run import RunResult
+from dvt.events import types as core_types
+from dvt.events.base_types import (
     CoreBaseEvent,
     DebugLevel,
     DynamicLevel,
@@ -18,7 +18,7 @@ from dbt.events.base_types import (
     TestLevel,
     WarnLevel,
 )
-from dbt.task.printer import print_run_end_messages
+from dvt.task.printer import print_run_end_messages
 from dbt_common.events import types
 from dbt_common.events.base_types import msg_from_base_event
 from dbt_common.events.event_manager import EventManager, TestEventManager
@@ -184,7 +184,7 @@ sample_values = [
     adapter_types.AdapterEventInfo(),
     adapter_types.AdapterEventWarning(),
     adapter_types.AdapterEventError(),
-    adapter_types.AdapterRegistered(adapter_name="dbt-awesome", adapter_version="1.2.3"),
+    adapter_types.AdapterRegistered(adapter_name="dvt-awesome", adapter_version="1.2.3"),
     adapter_types.NewConnection(conn_type="", conn_name=""),
     adapter_types.ConnectionReused(conn_name=""),
     adapter_types.ConnectionLeftOpenInCleanup(conn_name=""),

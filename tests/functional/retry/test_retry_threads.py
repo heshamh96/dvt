@@ -1,7 +1,7 @@
 import pytest
 
-from dbt.contracts.results import RunStatus, TestStatus
-from dbt.tests.util import run_dbt, write_file
+from dvt.contracts.results import RunStatus, TestStatus
+from dvt.tests.util import run_dbt, write_file
 from tests.functional.retry.fixtures import models__thread_model, schema_test_thread_yml
 
 

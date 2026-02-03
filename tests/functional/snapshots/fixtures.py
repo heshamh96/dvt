@@ -432,7 +432,7 @@ snapshots_check_col_noconfig__snapshot_sql = """
 sources_pg__source_yml = """
 sources:
   - name: information_schema
-    database: dbt
+    database: dvt
     schema: information_schema
     tables:
       - name: tables
@@ -441,7 +441,7 @@ sources:
 sources_pg__source_mod_yml = """
 sources:
   - name: information_schema
-    database: dbt
+    database: dvt
     schema: information_schema
     tables:
       - name: tables

@@ -1,7 +1,7 @@
 import pytest
 
-from dbt.exceptions import CompilationError
-from dbt.tests.util import run_dbt
+from dvt.exceptions import CompilationError
+from dvt.tests.util import run_dbt
 
 bad_same_macros_sql = """
 {% macro some_macro() %}
@@ -41,7 +41,7 @@ class TestDuplicateMacroEnabledSameFile:
         }
 
     def test_duplicate_macros(self, project):
-        message = 'dbt found two macros named "some_macro" in the project'
+        message = 'dvt found two macros named "some_macro" in the project'
         with pytest.raises(CompilationError) as exc:
             run_dbt(["parse"])
         exc_str = " ".join(str(exc.value).split())  # flatten all whitespace
@@ -62,7 +62,7 @@ class TestDuplicateMacroEnabledDifferentFiles:
         }
 
     def test_duplicate_macros(self, project):
-        message = 'dbt found two macros named "some_macro" in the project'
+        message = 'dvt found two macros named "some_macro" in the project'
         with pytest.raises(CompilationError) as exc:
             run_dbt(["compile"])
         exc_str = " ".join(str(exc.value).split())  # flatten all whitespace

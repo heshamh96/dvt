@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import pytest
 import pytz
 
-from dbt.tests.util import check_relations_equal, run_dbt
+from dvt.tests.util import check_relations_equal, run_dbt
 from tests.functional.snapshots.fixtures import (
     macros__test_no_overlaps_sql,
     models__ref_snapshot_sql,

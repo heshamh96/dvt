@@ -1,7 +1,7 @@
 import pytest
 
-from dbt.exceptions import ParsingError
-from dbt.tests.util import run_dbt
+from dvt.exceptions import ParsingError
+from dvt.tests.util import run_dbt
 
 valid_microbatch_model_sql = """
 {{ config(materialized='incremental', incremental_strategy='microbatch', batch_size='day', event_time='event_time') }}

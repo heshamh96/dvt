@@ -2,8 +2,8 @@ from argparse import Namespace
 
 from pytest_mock import MockerFixture
 
-from dbt.events.logging import setup_event_logger
-from dbt.flags import get_flags, set_from_args
+from dvt.events.logging import setup_event_logger
+from dvt.flags import get_flags, set_from_args
 from dbt_common.events.base_types import BaseEvent
 from dbt_common.events.event_catcher import EventCatcher
 from dbt_common.events.event_manager_client import get_event_manager
@@ -34,5 +34,5 @@ class TestSetupEventLogger:
         set_from_args(args, {})
         setup_event_logger(get_flags())
         patched_file_handler.assert_called_once_with(
-            filename="logs/dbt.log", encoding="utf8", maxBytes=1234567, backupCount=5
+            filename="logs/dvt.log", encoding="utf8", maxBytes=1234567, backupCount=5
         )

@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.util import run_dbt
+from dvt.tests.util import run_dbt
 
 _MODELS__COLUMN_QUOTING_DEFAULT = """
 {% set col_a = '"col_A"' %}

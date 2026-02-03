@@ -6,12 +6,12 @@ from datetime import datetime, timedelta, timezone
 import pytest
 import yaml
 
-import dbt.version
-from dbt import deprecations
-from dbt.artifacts.schemas.freshness import FreshnessResult
-from dbt.artifacts.schemas.results import FreshnessStatus
-from dbt.cli.main import dbtRunner
-from dbt.tests.util import AnyFloat, AnyStringWith
+import dvt.version
+from dvt import deprecations
+from dvt.artifacts.schemas.freshness import FreshnessResult
+from dvt.artifacts.schemas.results import FreshnessStatus
+from dvt.cli.main import dbtRunner
+from dvt.tests.util import AnyFloat, AnyStringWith
 from tests.functional.sources.common_source_setup import BaseSourcesTest
 from tests.functional.sources.fixtures import (
     collect_freshness_macro_override_previous_return_signature,
@@ -91,9 +91,9 @@ class SuccessfulSourceFreshnessTest(BaseSourcesTest):
         self.assertBetween(data["metadata"]["generated_at"], pytest.freshness_start_time)
         assert (
             data["metadata"]["dbt_schema_version"]
-            == "https://schemas.getdbt.com/dbt/sources/v3.json"
+            == "https://schemas.getdbt.com/dvt/sources/v3.json"
         )
-        assert data["metadata"]["dbt_version"] == dbt.version.__version__
+        assert data["metadata"]["dbt_version"] == dvt.version.__version__
         key = "key"
         if os.name == "nt":
             key = key.upper()

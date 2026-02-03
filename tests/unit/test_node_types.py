@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.node_types import NodeType
+from dvt.node_types import NodeType
 
 node_type_pluralizations = {
     NodeType.Model: "models",

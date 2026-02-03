@@ -1,9 +1,9 @@
 import pytest
 
-from dbt.exceptions import DbtReferenceError, InvalidAccessTypeError
-from dbt.node_types import AccessType
-from dbt.tests.fixtures.project import write_project_files
-from dbt.tests.util import get_manifest, rm_file, run_dbt, write_file
+from dvt.exceptions import DbtReferenceError, InvalidAccessTypeError
+from dvt.node_types import AccessType
+from dvt.tests.fixtures.project import write_project_files
+from dvt.tests.util import get_manifest, rm_file, run_dbt, write_file
 from tests.fixtures.dbt_integration_project import dbt_integration_project  # noqa: F401
 
 my_model_sql = "select 1 as fun"
@@ -207,7 +207,7 @@ analysis-paths: ["analyses"] # path with analysis files which are compiled, but 
 target-path: "target"      # path for compiled code
 clean-targets: ["target"]  # directories removed by the clean task
 test-paths: ["tests"]       # where to store test results
-seed-paths: ["seeds"]       # load CSVs from this directory with `dbt seed`
+seed-paths: ["seeds"]       # load CSVs from this directory with `dvt seed`
 macro-paths: ["macros"]    # where to find macros
 
 profile: user

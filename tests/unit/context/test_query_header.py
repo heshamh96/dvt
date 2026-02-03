@@ -3,8 +3,8 @@ from unittest import mock
 
 import pytest
 
-from dbt.adapters.base.query_headers import MacroQueryStringSetter
-from dbt.context.query_header import generate_query_header_context
+from dvt.adapters.base.query_headers import MacroQueryStringSetter
+from dvt.context.query_header import generate_query_header_context
 from tests.unit.utils import config_from_parts_or_dicts
 
 
@@ -48,14 +48,14 @@ class TestQueryHeaderContext:
         assert re.match(f"^\/\*.*\*\/\n{query}$", sql)  # noqa: [W605]
 
     def test_append_comment(self, profile_cfg, project_cfg, query):
-        project_cfg.update({"query-comment": {"comment": "executed by dbt", "append": True}})
+        project_cfg.update({"query-comment": {"comment": "executed by dvt", "append": True}})
         config = config_from_parts_or_dicts(project_cfg, profile_cfg)
 
         query_header_context = generate_query_header_context(config, mock.MagicMock(macros={}))
         query_header = MacroQueryStringSetter(config, query_header_context)
         sql = query_header.add(query)
 
-        assert sql == f"{query[:-1]}\n/* executed by dbt */;"
+        assert sql == f"{query[:-1]}\n/* executed by dvt */;"
 
     def test_disable_query_comment(self, profile_cfg, project_cfg, query):
         project_cfg.update({"query-comment": ""})

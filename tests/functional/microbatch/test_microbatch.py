@@ -5,7 +5,7 @@ from unittest import mock
 import pytest
 from pytest_mock import MockerFixture
 
-from dbt.events.types import (
+from dvt.events.types import (
     GenericExceptionOnRun,
     InvalidConcurrentBatchesConfig,
     JinjaLogDebug,
@@ -15,8 +15,8 @@ from dbt.events.types import (
     MicrobatchMacroOutsideOfBatchesDeprecation,
     MicrobatchModelNoEventTimeInputs,
 )
-from dbt.tests.fixtures.project import TestProjInfo
-from dbt.tests.util import (
+from dvt.tests.fixtures.project import TestProjInfo
+from dvt.tests.util import (
     get_artifact,
     patch_microbatch_end_time,
     read_file,
@@ -351,7 +351,7 @@ class TestMicrobatchCLIBuild(TestMicrobatchCLI):
 
 class TestMicrobatchCLIRunOutputJSON(BaseMicrobatchTest):
     def test_list_output_json(self, project: TestProjInfo):
-        """Test whether the command `dbt list --output json` works"""
+        """Test whether the command `dvt list --output json` works"""
         model_catcher = EventCatcher(event_to_catch=LogModelResult)
         batch_catcher = EventCatcher(event_to_catch=LogBatchResult)
 
@@ -1063,7 +1063,7 @@ class TestMicrobatchCanRunParallelOrSequential(BaseMicrobatchTest):
     def test_microbatch(
         self, mocker: MockerFixture, project, batch_exc_catcher: EventCatcher
     ) -> None:
-        mocked_srip = mocker.patch("dbt.task.run.MicrobatchBatchRunner.should_run_in_parallel")
+        mocked_srip = mocker.patch("dvt.task.run.MicrobatchBatchRunner.should_run_in_parallel")
 
         # Should be run in parallel
         mocked_srip.return_value = True
@@ -1103,7 +1103,7 @@ class TestFirstAndLastBatchAlwaysSequential(BaseMicrobatchTest):
     def test_microbatch(
         self, mocker: MockerFixture, project, batch_exc_catcher: EventCatcher
     ) -> None:
-        mocked_srip = mocker.patch("dbt.task.run.MicrobatchBatchRunner.should_run_in_parallel")
+        mocked_srip = mocker.patch("dvt.task.run.MicrobatchBatchRunner.should_run_in_parallel")
 
         # Should be run in parallel
         mocked_srip.return_value = True

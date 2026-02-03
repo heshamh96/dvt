@@ -5,7 +5,7 @@ from unittest import mock
 
 import pytest
 
-from dbt.contracts.files import (
+from dvt.contracts.files import (
     BaseSourceFile,
     FileHash,
     FilePath,
@@ -13,11 +13,11 @@ from dbt.contracts.files import (
     SchemaSourceFile,
     SourceFile,
 )
-from dbt.contracts.graph.manifest import Manifest
-from dbt.contracts.graph.nodes import SnapshotNode, SourceDefinition
-from dbt.node_types import NodeType
-from dbt.parser.partial import PartialParsing
-from dbt.tests.util import safe_set_invocation_context
+from dvt.contracts.graph.manifest import Manifest
+from dvt.contracts.graph.nodes import SnapshotNode, SourceDefinition
+from dvt.node_types import NodeType
+from dvt.parser.partial import PartialParsing
+from dvt.tests.util import safe_set_invocation_context
 from tests.unit.utils import normalize
 from tests.unit.utils.manifest import (
     make_generic_test,

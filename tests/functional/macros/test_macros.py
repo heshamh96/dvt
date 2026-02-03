@@ -4,8 +4,8 @@ from pathlib import Path
 import pytest
 
 import dbt_common.exceptions
-from dbt.tests.fixtures.project import write_project_files
-from dbt.tests.util import check_relations_equal, run_dbt
+from dvt.tests.fixtures.project import write_project_files
+from dvt.tests.util import check_relations_equal, run_dbt
 from tests.functional.macros.fixtures import (
     dbt_project__incorrect_dispatch,
     macros__deprecated_adapter_macro,
@@ -48,8 +48,8 @@ class TestMacros:
         return {
             "packages": [
                 {
-                    "git": "https://github.com/dbt-labs/dbt-integration-project",
-                    "revision": "dbt/1.0.0",
+                    "git": "https://github.com/dvt-labs/dvt-integration-project",
+                    "revision": "dvt/1.0.0",
                 },
             ]
         }
@@ -172,7 +172,7 @@ class TestMacroNotOverridePackage:
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {
-            "dispatch": [{"macro_namespace": "dbt", "search_order": ["dbt"]}],
+            "dispatch": [{"macro_namespace": "dvt", "search_order": ["dvt"]}],
         }
 
     def test_overrides(self, project):
@@ -183,7 +183,7 @@ class TestMacroNotOverridePackage:
 
 class TestDispatchMacroOverrideBuiltin(TestMacroOverrideBuiltin):
     # test the same functionality as above, but this time,
-    # dbt.get_columns_in_relation will dispatch to a default__ macro
+    # dvt.get_columns_in_relation will dispatch to a default__ macro
     # from an installed package, per dispatch config search_order
     @pytest.fixture(scope="class", autouse=True)
     def setUp(self, project):
@@ -197,8 +197,8 @@ class TestDispatchMacroOverrideBuiltin(TestMacroOverrideBuiltin):
         return {
             "dispatch": [
                 {
-                    "macro_namespace": "dbt",
-                    "search_order": ["test", "package_macro_overrides", "dbt"],
+                    "macro_namespace": "dvt",
+                    "search_order": ["test", "package_macro_overrides", "dvt"],
                 }
             ],
         }

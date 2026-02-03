@@ -1,7 +1,7 @@
 import pytest
 
-from dbt.artifacts.resources import ExposureConfig
-from dbt.tests.util import get_manifest, run_dbt, update_config_file
+from dvt.artifacts.resources import ExposureConfig
+from dvt.tests.util import get_manifest, run_dbt, update_config_file
 from dbt_common.dataclass_schema import ValidationError
 from tests.functional.exposures.fixtures import (
     disabled_models_exposure_yml,

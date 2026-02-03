@@ -2,8 +2,8 @@ import os
 
 import pytest
 
-from dbt.exceptions import SchemaConfigError
-from dbt.tests.util import (
+from dvt.exceptions import SchemaConfigError
+from dvt.tests.util import (
     check_relations_equal,
     run_dbt,
     update_config_file,

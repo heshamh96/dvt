@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from dbt.tests.util import run_dbt, run_dbt_and_capture
+from dvt.tests.util import run_dbt, run_dbt_and_capture
 from dbt_common.exceptions import DbtBaseException as DbtException
 from dbt_common.exceptions import DbtRuntimeError
 from tests.functional.show.fixtures import (

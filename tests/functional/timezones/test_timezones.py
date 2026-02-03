@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from dbt.tests.util import run_dbt
+from dvt.tests.util import run_dbt
 
 # Canada/Saskatchewan does not observe DST so the time diff won't change depending on when it is in the year
 model_sql = """
@@ -35,7 +35,7 @@ class TestTimezones:
                         "port": int(os.getenv("POSTGRES_TEST_PORT", 5432)),
                         "user": os.getenv("POSTGRES_TEST_USER", "root"),
                         "pass": os.getenv("POSTGRES_TEST_PASS", "password"),
-                        "dbname": os.getenv("POSTGRES_TEST_DATABASE", "dbt"),
+                        "dbname": os.getenv("POSTGRES_TEST_DATABASE", "dvt"),
                         "schema": unique_schema,
                     },
                 },

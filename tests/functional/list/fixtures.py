@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.fixtures.project import write_project_files
+from dvt.tests.fixtures.project import write_project_files
 
 snapshots__snapshot_sql = """
 {% snapshot my_snapshot %}
@@ -48,14 +48,14 @@ models__ephemeral_sql = """
 
 select
   1 as id,
-  {{ dbt.date_trunc('day', dbt.current_timestamp()) }} as created_at
+  {{ dvt.date_trunc('day', dvt.current_timestamp()) }} as created_at
 
 """
 
 models__metric_flow = """
 
 select
-  {{ dbt.date_trunc('day', dbt.current_timestamp()) }} as date_day
+  {{ dvt.date_trunc('day', dvt.current_timestamp()) }} as date_day
 
 """
 

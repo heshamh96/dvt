@@ -1,7 +1,7 @@
 import pytest
 
-from dbt.events.types import InvalidMacroAnnotation
-from dbt.tests.util import run_dbt
+from dvt.events.types import InvalidMacroAnnotation
+from dvt.tests.util import run_dbt
 from dbt_common.events.event_catcher import EventCatcher
 
 macros_sql = """

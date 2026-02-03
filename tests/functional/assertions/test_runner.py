@@ -1,9 +1,9 @@
 import os
 from typing import Callable, List, Optional
 
-from dbt.cli.main import dbtRunner, dbtRunnerResult
-from dbt.contracts.graph.manifest import Manifest
-from dbt.tests.util import get_run_results
+from dvt.cli.main import dbtRunner, dbtRunnerResult
+from dvt.contracts.graph.manifest import Manifest
+from dvt.tests.util import get_run_results
 from dbt_common.events.base_types import EventMsg
 
 

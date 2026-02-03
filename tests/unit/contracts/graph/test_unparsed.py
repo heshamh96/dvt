@@ -3,7 +3,7 @@ from datetime import timedelta
 
 import pytest
 
-from dbt.artifacts.resources import (
+from dvt.artifacts.resources import (
     ExposureType,
     FreshnessThreshold,
     MaturityType,
@@ -11,9 +11,9 @@ from dbt.artifacts.resources import (
     Quoting,
     Time,
 )
-from dbt.artifacts.resources.types import TimePeriod
-from dbt.artifacts.schemas.results import FreshnessStatus
-from dbt.contracts.graph.unparsed import (
+from dvt.artifacts.resources.types import TimePeriod
+from dvt.artifacts.schemas.results import FreshnessStatus
+from dvt.contracts.graph.unparsed import (
     Docs,
     HasColumnTests,
     UnparsedColumn,
@@ -31,9 +31,9 @@ from dbt.contracts.graph.unparsed import (
     UnparsedSourceTableDefinition,
     UnparsedVersion,
 )
-from dbt.exceptions import ParsingError
-from dbt.node_types import NodeType
-from dbt.parser.schemas import ParserRef
+from dvt.exceptions import ParsingError
+from dvt.node_types import NodeType
+from dvt.parser.schemas import ParserRef
 from tests.unit.utils import ContractTestCase
 
 

@@ -3,7 +3,7 @@ import shutil
 
 import pytest
 
-from dbt.tests.util import run_dbt, write_file
+from dvt.tests.util import run_dbt, write_file
 from tests.functional.defer_state.fixtures import (
     ephemeral_model_sql,
     exposures_yml,

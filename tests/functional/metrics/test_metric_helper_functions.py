@@ -1,8 +1,8 @@
 import pytest
 
-from dbt.contracts.graph.manifest import Manifest
-from dbt.contracts.graph.metrics import ResolvedMetricReference
-from dbt.tests.util import run_dbt
+from dvt.contracts.graph.manifest import Manifest
+from dvt.contracts.graph.metrics import ResolvedMetricReference
+from dvt.tests.util import run_dbt
 from tests.functional.metrics.fixtures import (
     basic_metrics_yml,
     metricflow_time_spine_sql,

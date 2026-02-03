@@ -2,10 +2,10 @@ from collections import defaultdict
 
 import pytest
 
-import dbt.deprecations as deprecations
-from dbt.exceptions import DuplicateResourceNameError
-from dbt.tests.fixtures.project import write_project_files
-from dbt.tests.util import run_dbt
+import dvt.deprecations as deprecations
+from dvt.exceptions import DuplicateResourceNameError
+from dvt.tests.fixtures.project import write_project_files
+from dvt.tests.util import run_dbt
 
 # Test resources with duplicate names but different database aliases
 model_sql = """

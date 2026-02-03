@@ -2,9 +2,9 @@ from argparse import Namespace
 
 import pytest
 
-import dbt.flags as flags
-from dbt.adapters.events.types import AdapterDeprecationWarning
-from dbt.events.types import NoNodesForSelectionCriteria
+import dvt.flags as flags
+from dvt.adapters.events.types import AdapterDeprecationWarning
+from dvt.events.types import NoNodesForSelectionCriteria
 from dbt_common.events.functions import msg_to_dict, warn_or_error
 from dbt_common.events.types import InfoLevel, RetryExternalCall
 from dbt_common.exceptions import EventCompilationError

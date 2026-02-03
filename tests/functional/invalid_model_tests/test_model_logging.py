@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.util import run_dbt_and_capture
+from dvt.tests.util import run_dbt_and_capture
 
 warnings_sql = """
 {{ config(group='my_group') }}

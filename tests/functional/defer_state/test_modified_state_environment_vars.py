@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from dbt.tests.util import run_dbt
+from dvt.tests.util import run_dbt
 from tests.functional.defer_state.fixtures import (
     model_with_env_var_in_config_sql,
     model_with_no_in_config_sql,

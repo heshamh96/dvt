@@ -8,7 +8,7 @@ else:
 
 import pytest
 
-from dbt.flags import set_from_args
+from dvt.flags import set_from_args
 
 
 @pytest.fixture

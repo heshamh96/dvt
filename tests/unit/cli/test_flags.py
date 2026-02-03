@@ -4,12 +4,12 @@ from typing import List, Optional
 import click
 import pytest
 
-from dbt.cli.exceptions import DbtUsageException
-from dbt.cli.flags import Flags
-from dbt.cli.main import cli
-from dbt.cli.types import Command
-from dbt.contracts.project import ProjectFlags
-from dbt.tests.util import rm_file, write_file
+from dvt.cli.exceptions import DbtUsageException
+from dvt.cli.flags import Flags
+from dvt.cli.main import cli
+from dvt.cli.types import Command
+from dvt.contracts.project import ProjectFlags
+from dvt.tests.util import rm_file, write_file
 from dbt_common.exceptions import DbtInternalError
 from dbt_common.helper_types import WarnErrorOptionsV2
 

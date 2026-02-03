@@ -3,7 +3,7 @@ import os
 
 import pytest
 
-from dbt.tests.util import run_dbt
+from dvt.tests.util import run_dbt
 
 docs_md = """{% docs test_doc %}
 This is a test for column {test_name}

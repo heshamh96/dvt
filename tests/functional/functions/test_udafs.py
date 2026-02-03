@@ -2,10 +2,10 @@ from typing import Dict
 
 import pytest
 
-from dbt.artifacts.resources import FunctionReturns
-from dbt.artifacts.resources.types import FunctionType
-from dbt.contracts.graph.nodes import FunctionNode
-from dbt.tests.util import run_dbt
+from dvt.artifacts.resources import FunctionReturns
+from dvt.artifacts.resources.types import FunctionType
+from dvt.contracts.graph.nodes import FunctionNode
+from dvt.tests.util import run_dbt
 
 double_total_sql = """
 SELECT SUM(values) * 2

@@ -2,10 +2,10 @@ import re
 
 import pytest
 
-from dbt.contracts.graph.manifest import Manifest
-from dbt.contracts.graph.nodes import TestNode
-from dbt.exceptions import CompilationError
-from dbt.tests.util import get_manifest, run_dbt, update_config_file
+from dvt.contracts.graph.manifest import Manifest
+from dvt.contracts.graph.nodes import TestNode
+from dvt.exceptions import CompilationError
+from dvt.tests.util import get_manifest, run_dbt, update_config_file
 
 custom_config_yml = """
 models:
@@ -192,7 +192,7 @@ class TestSameKeyErrorDataTestConfig:
 
     def test_same_key_error(self, project):
         """
-        Test that verifies dbt raises a CompilationError when the test configuration
+        Test that verifies dvt raises a CompilationError when the test configuration
         contains the same key at the top level and inside the config dictionary.
         """
         # Run dbt and expect a CompilationError due to the invalid configuration

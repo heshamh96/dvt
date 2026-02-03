@@ -2,8 +2,8 @@
 
 import pytest
 
-from dbt.config.renderer import DbtProjectYamlRenderer
-from dbt.context.base import BaseContext
+from dvt.config.renderer import DbtProjectYamlRenderer
+from dvt.context.base import BaseContext
 
 
 class TestRendererWithRequiredVars:
@@ -27,7 +27,7 @@ class TestRendererWithRequiredVars:
 
     def test_base_context_with_require_vars_true_raises_error(self):
         """Test that BaseContext with require_vars=True raises error for missing vars"""
-        from dbt.exceptions import RequiredVarNotFoundError
+        from dvt.exceptions import RequiredVarNotFoundError
 
         context = BaseContext(cli_vars={}, require_vars=True)
         var_func = context.var

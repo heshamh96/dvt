@@ -1,4 +1,4 @@
-from dbt.parser.schemas import is_valid_type
+from dvt.parser.schemas import is_valid_type
 
 
 def test_valid_names() -> None:

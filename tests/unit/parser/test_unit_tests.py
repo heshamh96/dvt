@@ -1,10 +1,10 @@
 from unittest import mock
 
-from dbt.artifacts.resources import DependsOn, UnitTestConfig, UnitTestFormat
-from dbt.contracts.graph.nodes import NodeType, UnitTestDefinition
-from dbt.contracts.graph.unparsed import UnitTestOutputFixture
-from dbt.parser import SchemaParser
-from dbt.parser.unit_tests import UnitTestParser
+from dvt.artifacts.resources import DependsOn, UnitTestConfig, UnitTestFormat
+from dvt.contracts.graph.nodes import NodeType, UnitTestDefinition
+from dvt.contracts.graph.unparsed import UnitTestOutputFixture
+from dvt.parser import SchemaParser
+from dvt.parser.unit_tests import UnitTestParser
 from dbt_common.events.event_catcher import EventCatcher
 from dbt_common.events.event_manager_client import add_callback_to_manager
 from dbt_common.events.types import SystemStdErr

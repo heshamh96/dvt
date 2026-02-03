@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from dbt.tests.util import run_dbt, update_config_file, write_file
+from dvt.tests.util import run_dbt, update_config_file, write_file
 
 good_docs_blocks_model_sql = "select 1 as id, 'joe' as first_name"
 

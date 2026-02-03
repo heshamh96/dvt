@@ -3,8 +3,8 @@ from datetime import datetime
 import pytest
 import pytz
 
-from dbt.artifacts.resources.types import BatchSize
-from dbt.event_time.event_time import offset_timestamp
+from dvt.artifacts.resources.types import BatchSize
+from dvt.event_time.event_time import offset_timestamp
 
 
 class TestEventTime:

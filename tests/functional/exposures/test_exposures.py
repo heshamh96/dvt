@@ -1,8 +1,8 @@
 import pytest
 
-from dbt.artifacts.schemas.results import RunStatus
-from dbt.contracts.graph.nodes import Exposure
-from dbt.tests.util import get_manifest, run_dbt
+from dvt.artifacts.schemas.results import RunStatus
+from dvt.contracts.graph.nodes import Exposure
+from dvt.tests.util import get_manifest, run_dbt
 from tests.functional.exposures.fixtures import (
     metricflow_time_spine_sql,
     metrics_schema_yml,

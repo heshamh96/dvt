@@ -5,10 +5,10 @@ from unittest import mock
 
 import pytest
 
-from dbt.compilation import Graph, Linker
-from dbt.graph.cli import parse_difference
-from dbt.graph.queue import GraphQueue
-from dbt.graph.selector import NodeSelector
+from dvt.compilation import Graph, Linker
+from dvt.graph.cli import parse_difference
+from dvt.graph.queue import GraphQueue
+from dvt.graph.selector import NodeSelector
 
 
 def _mock_manifest(nodes):
@@ -76,7 +76,7 @@ class TestLinker:
         selector = NodeSelector(graph, manifest)
         # TODO:  The "eager" string below needs to be replaced with programatic access
         #  to the default value for the indirect selection parameter in
-        # dbt.cli.params.indirect_selection
+        # dvt.cli.params.indirect_selection
         #
         # Doing that is actually a little tricky, so I'm punting it to a new ticket GH #6397
         spec = parse_difference(include, exclude)

@@ -4,9 +4,9 @@ from pathlib import Path
 import pytest
 import yaml
 
-from dbt.cli.main import dbtRunner
-from dbt.exceptions import DbtProjectError, ProjectContractError
-from dbt.tests.util import run_dbt, update_config_file, write_config_file
+from dvt.cli.main import dbtRunner
+from dvt.exceptions import DbtProjectError, ProjectContractError
+from dvt.tests.util import run_dbt, update_config_file, write_config_file
 
 simple_model_sql = """
 select true as my_column
@@ -89,7 +89,7 @@ class TestProjectDbtCloudConfig:
             "name": "test",
             "profile": "test",
             "flags": {"send_anonymous_usage_stats": False},
-            "dbt-cloud": {
+            "dvt-cloud": {
                 "account_id": "123",
                 "application": "test",
                 "environment": "test",
@@ -111,10 +111,10 @@ class TestProjectDbtCloudConfigString:
 
     def test_dbt_cloud_invalid(self, project):
         run_dbt()
-        config = {"name": "test", "profile": "test", "dbt-cloud": "Some string"}
+        config = {"name": "test", "profile": "test", "dvt-cloud": "Some string"}
         update_config_file(config, "dbt_project.yml")
         expected_err = (
-            "at path ['dbt-cloud']: 'Some string' is not valid under any of the given schemas"
+            "at path ['dvt-cloud']: 'Some string' is not valid under any of the given schemas"
         )
         with pytest.raises(ProjectContractError) as excinfo:
             run_dbt()
@@ -134,11 +134,11 @@ class TestVersionSpecifierChecksComeBeforeYamlValidation:
         assert "Additional properties are not allowed" in str(result.exception)
 
         # add bad version specifier, and assert we get the error for that
-        update_config_file({"require-dbt-version": [">0.0.0", "<=0.0.1"]}, "dbt_project.yml")
+        update_config_file({"require-dvt-version": [">0.0.0", "<=0.0.1"]}, "dbt_project.yml")
         result = runner.invoke(["parse"])
         assert result.exception is not None
         assert isinstance(result.exception, DbtProjectError)
-        assert "This version of dbt is not supported"
+        assert "This version of dvt is not supported"
 
 
 class TestArchiveNotAllowed:

@@ -1,4 +1,4 @@
-from dbt.contracts.files import SchemaSourceFile
+from dvt.contracts.files import SchemaSourceFile
 
 
 def test_fix_metrics_from_measure():

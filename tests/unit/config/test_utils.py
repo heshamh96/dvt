@@ -1,10 +1,10 @@
 import pytest
 
-from dbt.config.utils import (
+from dvt.config.utils import (
     exclusive_primary_alt_value_setting,
     normalize_warn_error_options,
 )
-from dbt.exceptions import DbtExclusivePropertyUseError
+from dvt.exceptions import DbtExclusivePropertyUseError
 
 
 class TestExclusivePrimaryAltValueSetting:

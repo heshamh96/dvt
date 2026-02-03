@@ -2,9 +2,9 @@ import os
 
 import pytest
 
-from dbt.artifacts.resources.v1.components import ColumnInfo
-from dbt.exceptions import ParsingError, ValidationError
-from dbt.tests.util import (
+from dvt.artifacts.resources.v1.components import ColumnInfo
+from dvt.exceptions import ParsingError, ValidationError
+from dvt.tests.util import (
     get_artifact,
     get_manifest,
     run_dbt,
@@ -84,12 +84,12 @@ my_model_python_error = """
 import holidays, s3fs
 
 
-def model(dbt, _):
-    dbt.config(
+def model(dvt, _):
+    dvt.config(
         materialized="table",
-        packages=["holidays", "s3fs"],  # how to import python libraries in dbt's context
+        packages=["holidays", "s3fs"],  # how to import python libraries in dvt's context
     )
-    df = dbt.ref("my_model")
+    df = dvt.ref("my_model")
     df_describe = df.describe()  # basic statistics profiling
     return df_describe
 """

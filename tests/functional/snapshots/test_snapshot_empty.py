@@ -1,9 +1,9 @@
 import pytest
 
-from dbt.tests.util import run_dbt
+from dvt.tests.util import run_dbt
 
 my_model_sql = """
-select 1 as id, {{ dbt.current_timestamp() }} as updated_at
+select 1 as id, {{ dvt.current_timestamp() }} as updated_at
 """
 
 snapshots_yml = """

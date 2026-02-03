@@ -7,19 +7,19 @@ from unittest.mock import MagicMock
 import networkx as nx
 import pytest
 
-import dbt.compilation
-import dbt.config
-import dbt.exceptions
-import dbt.graph.cli as graph_cli
-import dbt.graph.selector as graph_selector
-import dbt.parser
-import dbt.parser.manifest
-import dbt.utils
+import dvt.compilation
+import dvt.config
+import dvt.exceptions
+import dvt.graph.cli as graph_cli
+import dvt.graph.selector as graph_selector
+import dvt.parser
+import dvt.parser.manifest
+import dvt.utils
 import dbt_common.exceptions
-from dbt.config.runtime import RuntimeConfig
-from dbt.flags import set_from_args
-from dbt.graph import NodeSelector, parse_difference
-from dbt.node_types import NodeType
+from dvt.config.runtime import RuntimeConfig
+from dvt.flags import set_from_args
+from dvt.graph import NodeSelector, parse_difference
+from dvt.node_types import NodeType
 from tests.unit.utils.manifest import make_manifest, make_model
 
 set_from_args(Namespace(WARN_ERROR=False), None)
@@ -223,7 +223,7 @@ class TestCompiler:
         model = make_model(pkg="pkg", name="model_one", code="SELECT * FROM events")
         manifest = make_manifest(nodes=[model])
 
-        compiler = dbt.compilation.Compiler(config=runtime_config)
+        compiler = dvt.compilation.Compiler(config=runtime_config)
         linker = compiler.compile(manifest)
 
         assert linker.nodes() == {model.unique_id}
@@ -240,7 +240,7 @@ class TestCompiler:
         models = [model_one, model_two]
         manifest = make_manifest(nodes=models)
 
-        compiler = dbt.compilation.Compiler(config=runtime_config)
+        compiler = dvt.compilation.Compiler(config=runtime_config)
         linker = compiler.compile(manifest)
 
         expected_nodes: List[str] = [model.unique_id for model in models]
@@ -277,7 +277,7 @@ class TestNodeSelector:
         manifest = make_manifest(nodes=models)
 
         # Get the graph
-        compiler = dbt.compilation.Compiler(runtime_config)
+        compiler = dvt.compilation.Compiler(runtime_config)
         graph = compiler.compile(manifest)
 
         # Create the selector and get the queue
@@ -312,7 +312,7 @@ class TestNodeSelector:
         manifest = make_manifest(nodes=models)
 
         # Get the graph
-        compiler = dbt.compilation.Compiler(runtime_config)
+        compiler = dvt.compilation.Compiler(runtime_config)
         graph = compiler.compile(manifest)
 
         # Ensure that model_two is selected as downstream of model_one

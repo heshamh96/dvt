@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from dbt.tests.util import check_relations_equal, check_table_does_not_exist, run_dbt
+from dvt.tests.util import check_relations_equal, check_table_does_not_exist, run_dbt
 from tests.functional.snapshots.fixtures import (
     macros__test_no_overlaps_sql,
     models__ref_snapshot_sql,

@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.util import get_manifest, run_dbt
+from dvt.tests.util import get_manifest, run_dbt
 
 my_model_sql = """
   select 1 as fun

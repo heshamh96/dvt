@@ -6,18 +6,18 @@ from unittest import mock
 import pytest
 import pytz
 
-from dbt.adapters.base import BaseRelation
-from dbt.artifacts.resources import NodeConfig, Quoting, SeedConfig, SnapshotConfig
-from dbt.artifacts.resources.types import BatchSize
-from dbt.context.providers import (
+from dvt.adapters.base import BaseRelation
+from dvt.artifacts.resources import NodeConfig, Quoting, SeedConfig, SnapshotConfig
+from dvt.artifacts.resources.types import BatchSize
+from dvt.context.providers import (
     BaseResolver,
     EventTimeFilter,
     RuntimeRefResolver,
     RuntimeSourceResolver,
 )
-from dbt.contracts.graph.nodes import BatchContext, ModelNode, SnapshotNode
-from dbt.event_time.sample_window import SampleWindow
-from dbt.flags import set_from_args
+from dvt.contracts.graph.nodes import BatchContext, ModelNode, SnapshotNode
+from dvt.event_time.sample_window import SampleWindow
+from dvt.flags import set_from_args
 
 
 class TestBaseResolver:
@@ -452,7 +452,7 @@ class TestRuntimeRefResolver:
         )
 
         # create limited relation
-        with mock.patch("dbt.contracts.graph.nodes.ParsedNode", new=mock.Mock):
+        with mock.patch("dvt.contracts.graph.nodes.ParsedNode", new=mock.Mock):
             relation = resolver.create_relation(mock_node)
         assert relation.limit == expected_limit
 

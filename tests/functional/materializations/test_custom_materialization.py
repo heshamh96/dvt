@@ -2,8 +2,8 @@ from collections import defaultdict
 
 import pytest
 
-from dbt import deprecations
-from dbt.tests.util import run_dbt
+from dvt import deprecations
+from dvt.tests.util import run_dbt
 
 models__model_sql = """
 {{ config(materialized='view') }}

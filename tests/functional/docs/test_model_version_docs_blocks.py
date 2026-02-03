@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.util import run_dbt
+from dvt.tests.util import run_dbt
 
 model_1 = """
 select 1 as id, 'joe' as first_name

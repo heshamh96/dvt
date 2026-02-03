@@ -2,9 +2,9 @@ import os
 
 import pytest
 
-from dbt.artifacts.resources import RefArgs
-from dbt.contracts.graph.manifest import Manifest
-from dbt.tests.util import run_dbt
+from dvt.artifacts.resources import RefArgs
+from dvt.contracts.graph.manifest import Manifest
+from dvt.tests.util import run_dbt
 
 
 def get_manifest():

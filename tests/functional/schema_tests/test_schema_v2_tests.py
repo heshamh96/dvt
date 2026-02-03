@@ -3,10 +3,10 @@ import re
 
 import pytest
 
-from dbt.contracts.results import TestStatus
-from dbt.exceptions import CompilationError, DuplicateResourceNameError, ParsingError
-from dbt.tests.fixtures.project import write_project_files
-from dbt.tests.util import run_dbt, write_file
+from dvt.contracts.results import TestStatus
+from dvt.exceptions import CompilationError, DuplicateResourceNameError, ParsingError
+from dvt.tests.fixtures.project import write_project_files
+from dvt.tests.util import run_dbt, write_file
 from tests.fixtures.dbt_integration_project import dbt_integration_project  # noqa: F401
 from tests.functional.schema_tests.fixtures import (
     all_quotes_schema__schema_yml,
@@ -910,7 +910,7 @@ class TestGenericTestsCollide:
         """These tests collide, since only the configs differ"""
         with pytest.raises(DuplicateResourceNameError) as exc:
             run_dbt()
-        assert "dbt found two data_tests with the name" in str(exc.value)
+        assert "dvt found two data_tests with the name" in str(exc.value)
 
 
 class TestGenericTestsConfigCustomMacros:
@@ -1011,9 +1011,9 @@ class TestCommentedSchema:
         except TypeError:
             assert (
                 False
-            ), "`dbt parse` failed with a yaml file that is all comments with the same exception as 3568"
+            ), "`dvt parse` failed with a yaml file that is all comments with the same exception as 3568"
         except Exception:
-            assert False, "`dbt parse` failed with a yaml file that is all comments"
+            assert False, "`dvt parse` failed with a yaml file that is all comments"
 
 
 class TestWrongSpecificationBlock:
@@ -1125,7 +1125,7 @@ class TestCustomSchemaTestMacroResolutionOrder:
         project,
     ):
         # https://github.com/dbt-labs/dbt-core/issues/5720
-        # Previously, macros called as 'dbt.some_macro' would not correctly
+        # Previously, macros called as 'dvt.some_macro' would not correctly
         # resolve to 'some_macro' from the 'dbt' namespace during static analysis,
         # if 'some_macro' also existed in an installed package,
         # leading to the macro being missing in the TestNamespace

@@ -1,18 +1,18 @@
 import pytest
 
-from dbt.deprecations import (
+from dvt.deprecations import (
     CustomKeyInConfigDeprecation,
     CustomKeyInObjectDeprecation,
     GenericJSONSchemaValidationDeprecation,
     active_deprecations,
     reset_deprecations,
 )
-from dbt.jsonschemas.jsonschemas import (
+from dvt.jsonschemas.jsonschemas import (
     jsonschema_validate,
     resources_schema,
     validate_model_config,
 )
-from dbt.tests.util import safe_set_invocation_context
+from dvt.tests.util import safe_set_invocation_context
 from dbt_common.context import get_invocation_context
 from dbt_common.events.event_catcher import EventCatcher
 from dbt_common.events.event_manager_client import add_callback_to_manager

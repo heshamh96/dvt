@@ -4,10 +4,10 @@ from unittest import mock
 import networkx as nx
 import pytest
 
-import dbt.graph.cli as graph_cli
-import dbt.graph.selector as graph_selector
+import dvt.graph.cli as graph_cli
+import dvt.graph.selector as graph_selector
 import dbt_common.exceptions
-from dbt.node_types import NodeType
+from dvt.node_types import NodeType
 
 
 def _get_graph():

@@ -1,8 +1,8 @@
 import pytest
 
-from dbt.artifacts.resources import FunctionArgument, FunctionReturns
-from dbt.contracts.graph.manifest import Manifest
-from dbt.tests.util import run_dbt, update_config_file, write_file
+from dvt.artifacts.resources import FunctionArgument, FunctionReturns
+from dvt.contracts.graph.manifest import Manifest
+from dvt.tests.util import run_dbt, update_config_file, write_file
 from dbt_common.events.event_catcher import EventCatcher
 from dbt_common.events.types import Note
 from tests.functional.partial_parsing.fixtures import (

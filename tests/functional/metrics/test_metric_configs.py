@@ -1,8 +1,8 @@
 import pytest
 
-from dbt.artifacts.resources import MetricConfig
-from dbt.exceptions import CompilationError, ParsingError
-from dbt.tests.util import get_manifest, run_dbt, update_config_file
+from dvt.artifacts.resources import MetricConfig
+from dvt.exceptions import CompilationError, ParsingError
+from dvt.tests.util import get_manifest, run_dbt, update_config_file
 from dbt_common.dataclass_schema import ValidationError
 from tests.functional.metrics.fixtures import (
     disabled_metric_level_schema_yml,

@@ -4,12 +4,12 @@ from datetime import datetime, timezone
 import jsonschema
 import pytest
 
-import dbt
-from dbt.artifacts.schemas.results import RunStatus
-from dbt.artifacts.schemas.run import RunResultsArtifact
-from dbt.contracts.graph.manifest import WritableManifest
-from dbt.events.types import ArtifactWritten
-from dbt.tests.util import (
+import dvt
+from dvt.artifacts.schemas.results import RunStatus
+from dvt.artifacts.schemas.run import RunResultsArtifact
+from dvt.contracts.graph.manifest import WritableManifest
+from dvt.events.types import ArtifactWritten
+from dvt.tests.util import (
     check_datetime_between,
     get_artifact,
     run_dbt,
@@ -438,7 +438,7 @@ def verify_metadata(metadata, dbt_schema_version, start_time):
     assert "generated_at" in metadata
     check_datetime_between(metadata["generated_at"], start=start_time)
     assert "dbt_version" in metadata
-    assert metadata["dbt_version"] == dbt.version.__version__
+    assert metadata["dbt_version"] == dvt.version.__version__
     assert "dbt_schema_version" in metadata
     assert metadata["dbt_schema_version"] == dbt_schema_version
     key = "env_key"

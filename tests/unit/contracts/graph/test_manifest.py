@@ -10,11 +10,11 @@ from unittest import mock
 import freezegun
 import pytest
 
-import dbt.version
+import dvt.version
 import dbt_common.invocation
-from dbt import tracking
-from dbt.adapters.base.plugin import AdapterPlugin
-from dbt.artifacts.resources import (
+from dvt import tracking
+from dvt.adapters.base.plugin import AdapterPlugin
+from dvt.artifacts.resources import (
     ExposureType,
     MaturityType,
     MetricInputMeasure,
@@ -24,9 +24,9 @@ from dbt.artifacts.resources import (
     WhereFilter,
     WhereFilterIntersection,
 )
-from dbt.contracts.files import FileHash
-from dbt.contracts.graph.manifest import DisabledLookup, Manifest, ManifestMetadata
-from dbt.contracts.graph.nodes import (
+from dvt.contracts.files import FileHash
+from dvt.contracts.graph.manifest import DisabledLookup, Manifest, ManifestMetadata
+from dvt.contracts.graph.nodes import (
     DependsOn,
     Exposure,
     Group,
@@ -36,9 +36,9 @@ from dbt.contracts.graph.nodes import (
     SeedNode,
     SourceDefinition,
 )
-from dbt.exceptions import AmbiguousResourceNameRefError, ParsingError
-from dbt.flags import set_from_args
-from dbt.node_types import NodeType
+from dvt.exceptions import AmbiguousResourceNameRefError, ParsingError
+from dvt.flags import set_from_args
+from dvt.node_types import NodeType
 from dbt_common.events.functions import reset_metadata_vars
 from dbt_semantic_interfaces.type_enums import MetricType
 from tests.unit.utils import (
@@ -194,7 +194,7 @@ class ManifestTest(unittest.TestCase):
         self.nested_nodes = {
             "model.snowplow.events": ModelNode(
                 name="events",
-                database="dbt",
+                database="dvt",
                 schema="analytics",
                 alias="events",
                 resource_type=NodeType.Model,
@@ -216,7 +216,7 @@ class ManifestTest(unittest.TestCase):
             ),
             "model.root.events": ModelNode(
                 name="events",
-                database="dbt",
+                database="dvt",
                 schema="analytics",
                 alias="events",
                 resource_type=NodeType.Model,
@@ -238,7 +238,7 @@ class ManifestTest(unittest.TestCase):
             ),
             "model.root.dep": ModelNode(
                 name="dep",
-                database="dbt",
+                database="dvt",
                 schema="analytics",
                 alias="dep",
                 resource_type=NodeType.Model,
@@ -260,7 +260,7 @@ class ManifestTest(unittest.TestCase):
             ),
             "model.root.nested": ModelNode(
                 name="nested",
-                database="dbt",
+                database="dvt",
                 schema="analytics",
                 alias="nested",
                 resource_type=NodeType.Model,
@@ -282,7 +282,7 @@ class ManifestTest(unittest.TestCase):
             ),
             "model.root.sibling": ModelNode(
                 name="sibling",
-                database="dbt",
+                database="dvt",
                 schema="analytics",
                 alias="sibling",
                 resource_type=NodeType.Model,
@@ -304,7 +304,7 @@ class ManifestTest(unittest.TestCase):
             ),
             "model.root.multi": ModelNode(
                 name="multi",
-                database="dbt",
+                database="dvt",
                 schema="analytics",
                 alias="multi",
                 resource_type=NodeType.Model,
@@ -404,8 +404,8 @@ class ManifestTest(unittest.TestCase):
                 "group_map": {},
                 "metadata": {
                     "generated_at": "2018-02-14T09:15:13Z",
-                    "dbt_schema_version": "https://schemas.getdbt.com/dbt/manifest/v12.json",
-                    "dbt_version": dbt.version.__version__,
+                    "dbt_schema_version": "https://schemas.getdbt.com/dvt/manifest/v12.json",
+                    "dbt_version": dvt.version.__version__,
                     "env": {ENV_KEY_NAME: "value"},
                     "invocation_id": invocation_id,
                     "invocation_started_at": str(invocation_started_at).replace(" ", "T") + "Z",
@@ -587,8 +587,8 @@ class ManifestTest(unittest.TestCase):
                 "docs": {},
                 "metadata": {
                     "generated_at": "2018-02-14T09:15:13Z",
-                    "dbt_schema_version": "https://schemas.getdbt.com/dbt/manifest/v12.json",
-                    "dbt_version": dbt.version.__version__,
+                    "dbt_schema_version": "https://schemas.getdbt.com/dvt/manifest/v12.json",
+                    "dbt_version": dvt.version.__version__,
                     "project_id": "098f6bcd4621d373cade4e832627b4f6",
                     "user_id": "cfc9500f-dc7f-4c83-9ea7-2c581c1b38cf",
                     "send_anonymous_usage_stats": False,
@@ -622,7 +622,7 @@ class ManifestTest(unittest.TestCase):
         nodes = deepcopy(self.nested_nodes)
         nodes["seed.root.seed"] = SeedNode(
             name="seed",
-            database="dbt",
+            database="dvt",
             schema="analytics",
             alias="seed",
             resource_type=NodeType.Seed,
@@ -668,7 +668,7 @@ class ManifestTest(unittest.TestCase):
     def test_deepcopy_copies_flat_graph(self):
         test_node = ModelNode(
             name="events",
-            database="dbt",
+            database="dvt",
             schema="analytics",
             alias="events",
             resource_type=NodeType.Model,
@@ -716,7 +716,7 @@ class MixedManifestTest(unittest.TestCase):
         self.nested_nodes = {
             "model.snowplow.events": ModelNode(
                 name="events",
-                database="dbt",
+                database="dvt",
                 schema="analytics",
                 alias="events",
                 resource_type=NodeType.Model,
@@ -736,13 +736,13 @@ class MixedManifestTest(unittest.TestCase):
                 compiled=True,
                 compiled_code="also does not matter",
                 extra_ctes_injected=True,
-                relation_name='"dbt"."analytics"."events"',
+                relation_name='"dvt"."analytics"."events"',
                 extra_ctes=[],
                 checksum=FileHash.empty(),
             ),
             "model.root.events": ModelNode(
                 name="events",
-                database="dbt",
+                database="dvt",
                 schema="analytics",
                 alias="events",
                 resource_type=NodeType.Model,
@@ -762,13 +762,13 @@ class MixedManifestTest(unittest.TestCase):
                 compiled_code="also does not matter",
                 language="sql",
                 extra_ctes_injected=True,
-                relation_name='"dbt"."analytics"."events"',
+                relation_name='"dvt"."analytics"."events"',
                 extra_ctes=[],
                 checksum=FileHash.empty(),
             ),
             "model.root.dep": ModelNode(
                 name="dep",
-                database="dbt",
+                database="dvt",
                 schema="analytics",
                 alias="dep",
                 resource_type=NodeType.Model,
@@ -789,7 +789,7 @@ class MixedManifestTest(unittest.TestCase):
             ),
             "model.root.versioned.v1": ModelNode(
                 name="versioned",
-                database="dbt",
+                database="dvt",
                 schema="analytics",
                 alias="dep",
                 resource_type=NodeType.Model,
@@ -811,7 +811,7 @@ class MixedManifestTest(unittest.TestCase):
             ),
             "model.root.dep_version": ModelNode(
                 name="dep_version",
-                database="dbt",
+                database="dvt",
                 schema="analytics",
                 alias="dep",
                 resource_type=NodeType.Model,
@@ -832,7 +832,7 @@ class MixedManifestTest(unittest.TestCase):
             ),
             "model.root.nested": ModelNode(
                 name="nested",
-                database="dbt",
+                database="dvt",
                 schema="analytics",
                 alias="nested",
                 resource_type=NodeType.Model,
@@ -853,7 +853,7 @@ class MixedManifestTest(unittest.TestCase):
             ),
             "model.root.sibling": ModelNode(
                 name="sibling",
-                database="dbt",
+                database="dvt",
                 schema="analytics",
                 alias="sibling",
                 resource_type=NodeType.Model,
@@ -874,7 +874,7 @@ class MixedManifestTest(unittest.TestCase):
             ),
             "model.root.multi": ModelNode(
                 name="multi",
-                database="dbt",
+                database="dvt",
                 schema="analytics",
                 alias="multi",
                 resource_type=NodeType.Model,
@@ -939,8 +939,8 @@ class MixedManifestTest(unittest.TestCase):
                 "group_map": {},
                 "metadata": {
                     "generated_at": "2018-02-14T09:15:13Z",
-                    "dbt_schema_version": "https://schemas.getdbt.com/dbt/manifest/v12.json",
-                    "dbt_version": dbt.version.__version__,
+                    "dbt_schema_version": "https://schemas.getdbt.com/dvt/manifest/v12.json",
+                    "dbt_version": dvt.version.__version__,
                     "invocation_id": "01234567-0123-0123-0123-0123456789ab",
                     "invocation_started_at": str(invocation_started_at).replace(" ", "T") + "Z",
                     "env": {ENV_KEY_NAME: "value"},
@@ -1133,42 +1133,42 @@ macro_parameter_sets = [
     # empty
     FindMacroSpec(
         macros=[],
-        expected={None: None, "root": None, "dep": None, "dbt": None},
+        expected={None: None, "root": None, "dep": None, "dvt": None},
     ),
     # just root
     FindMacroSpec(
         macros=[MockMacro("root")],
-        expected={None: "root", "root": "root", "dep": None, "dbt": None},
+        expected={None: "root", "root": "root", "dep": None, "dvt": None},
     ),
     # just dep
     FindMacroSpec(
         macros=[MockMacro("dep")],
-        expected={None: "dep", "root": None, "dep": "dep", "dbt": None},
+        expected={None: "dep", "root": None, "dep": "dep", "dvt": None},
     ),
     # just dbt
     FindMacroSpec(
-        macros=[MockMacro("dbt")],
-        expected={None: "dbt", "root": None, "dep": None, "dbt": "dbt"},
+        macros=[MockMacro("dvt")],
+        expected={None: "dvt", "root": None, "dep": None, "dvt": "dvt"},
     ),
     # root overrides dep
     FindMacroSpec(
         macros=[MockMacro("root"), MockMacro("dep")],
-        expected={None: "root", "root": "root", "dep": "dep", "dbt": None},
+        expected={None: "root", "root": "root", "dep": "dep", "dvt": None},
     ),
     # root overrides core
     FindMacroSpec(
-        macros=[MockMacro("root"), MockMacro("dbt")],
-        expected={None: "root", "root": "root", "dep": None, "dbt": "dbt"},
+        macros=[MockMacro("root"), MockMacro("dvt")],
+        expected={None: "root", "root": "root", "dep": None, "dvt": "dvt"},
     ),
     # dep overrides core
     FindMacroSpec(
-        macros=[MockMacro("dep"), MockMacro("dbt")],
-        expected={None: "dep", "root": None, "dep": "dep", "dbt": "dbt"},
+        macros=[MockMacro("dep"), MockMacro("dvt")],
+        expected={None: "dep", "root": None, "dep": "dep", "dvt": "dvt"},
     ),
     # root overrides dep overrides core
     FindMacroSpec(
-        macros=[MockMacro("root"), MockMacro("dep"), MockMacro("dbt")],
-        expected={None: "root", "root": "root", "dep": "dep", "dbt": "dbt"},
+        macros=[MockMacro("root"), MockMacro("dep"), MockMacro("dvt")],
+        expected={None: "root", "root": "root", "dep": "dep", "dvt": "dvt"},
     ),
 ]
 
@@ -1199,44 +1199,44 @@ generate_name_parameter_sets = [
     # empty
     FindMacroSpec(
         macros=[],
-        expected={None: None, "root": None, "dep": None, "dbt": None},
+        expected={None: None, "root": None, "dep": None, "dvt": None},
     ),
     # just root
     FindMacroSpec(
         macros=[MockGenerateMacro("root")],
         # "root" is not imported
-        expected={None: "root", "root": None, "dep": None, "dbt": None},
+        expected={None: "root", "root": None, "dep": None, "dvt": None},
     ),
     # just dep
     FindMacroSpec(
         macros=[MockGenerateMacro("dep")],
-        expected={None: None, "root": None, "dep": "dep", "dbt": None},
+        expected={None: None, "root": None, "dep": "dep", "dvt": None},
     ),
     # just dbt
     FindMacroSpec(
-        macros=[MockGenerateMacro("dbt")],
+        macros=[MockGenerateMacro("dvt")],
         # "dbt" is not imported
-        expected={None: "dbt", "root": None, "dep": None, "dbt": None},
+        expected={None: "dvt", "root": None, "dep": None, "dvt": None},
     ),
     # root overrides dep
     FindMacroSpec(
         macros=[MockGenerateMacro("root"), MockGenerateMacro("dep")],
-        expected={None: "root", "root": None, "dep": "dep", "dbt": None},
+        expected={None: "root", "root": None, "dep": "dep", "dvt": None},
     ),
     # root overrides core
     FindMacroSpec(
-        macros=[MockGenerateMacro("root"), MockGenerateMacro("dbt")],
-        expected={None: "root", "root": None, "dep": None, "dbt": None},
+        macros=[MockGenerateMacro("root"), MockGenerateMacro("dvt")],
+        expected={None: "root", "root": None, "dep": None, "dvt": None},
     ),
     # dep overrides core
     FindMacroSpec(
-        macros=[MockGenerateMacro("dep"), MockGenerateMacro("dbt")],
-        expected={None: "dbt", "root": None, "dep": "dep", "dbt": None},
+        macros=[MockGenerateMacro("dep"), MockGenerateMacro("dvt")],
+        expected={None: "dvt", "root": None, "dep": "dep", "dvt": None},
     ),
     # root overrides dep overrides core
     FindMacroSpec(
-        macros=[MockGenerateMacro("root"), MockGenerateMacro("dep"), MockGenerateMacro("dbt")],
-        expected={None: "root", "root": None, "dep": "dep", "dbt": None},
+        macros=[MockGenerateMacro("root"), MockGenerateMacro("dep"), MockGenerateMacro("dvt")],
+        expected={None: "root", "root": None, "dep": "dep", "dvt": None},
     ),
 ]
 
@@ -1292,7 +1292,7 @@ def _materialization_parameter_sets_legacy():
             adapter_type="foo",
             expected=(project, "default"),
         )
-        for project in ["root", "dep", "dbt"]
+        for project in ["root", "dep", "dvt"]
     )
 
     # other type only, each project
@@ -1302,7 +1302,7 @@ def _materialization_parameter_sets_legacy():
             adapter_type="foo",
             expected=None,
         )
-        for project in ["root", "dep", "dbt"]
+        for project in ["root", "dep", "dvt"]
     )
 
     # matching type only, each project
@@ -1312,7 +1312,7 @@ def _materialization_parameter_sets_legacy():
             adapter_type="foo",
             expected=(project, "foo"),
         )
-        for project in ["root", "dep", "dbt"]
+        for project in ["root", "dep", "dvt"]
     )
 
     sets.extend(
@@ -1321,7 +1321,7 @@ def _materialization_parameter_sets_legacy():
             FindMaterializationSpec(
                 macros=[
                     MockMaterialization(project, adapter_type=atype)
-                    for (project, atype) in product(["root", "dep", "dbt"], ["foo", None])
+                    for (project, atype) in product(["root", "dep", "dvt"], ["foo", None])
                 ],
                 adapter_type="foo",
                 expected=("root", "foo"),
@@ -1332,7 +1332,7 @@ def _materialization_parameter_sets_legacy():
                 macros=[
                     MockMaterialization("root", adapter_type="bar"),
                     MockMaterialization("dep", adapter_type="foo"),
-                    MockMaterialization("dbt", adapter_type=None),
+                    MockMaterialization("dvt", adapter_type=None),
                 ],
                 adapter_type="foo",
                 expected=("dep", "foo"),
@@ -1343,7 +1343,7 @@ def _materialization_parameter_sets_legacy():
                 macros=[
                     MockMaterialization("root", adapter_type="foo"),
                     MockMaterialization("dep", adapter_type="bar"),
-                    MockMaterialization("dbt", adapter_type=None),
+                    MockMaterialization("dvt", adapter_type=None),
                 ],
                 adapter_type="foo",
                 expected=("root", "foo"),
@@ -1354,7 +1354,7 @@ def _materialization_parameter_sets_legacy():
                 macros=[
                     MockMaterialization("root", adapter_type="foo"),
                     MockMaterialization("dep", adapter_type="foo"),
-                    MockMaterialization("dbt", adapter_type=None),
+                    MockMaterialization("dvt", adapter_type=None),
                 ],
                 adapter_type="foo",
                 expected=("root", "foo"),
@@ -1365,8 +1365,8 @@ def _materialization_parameter_sets_legacy():
                 macros=[
                     MockMaterialization("root", adapter_type=None),
                     MockMaterialization("dep", adapter_type="foo"),
-                    MockMaterialization("dbt", adapter_type=None),
-                    MockMaterialization("dbt", adapter_type="foo"),
+                    MockMaterialization("dvt", adapter_type=None),
+                    MockMaterialization("dvt", adapter_type="foo"),
                 ],
                 adapter_type="foo",
                 expected=("dep", "foo"),
@@ -1381,7 +1381,7 @@ def _materialization_parameter_sets_legacy():
             adapter_type="bar",
             expected=(project, "foo"),
         )
-        for project in ["root", "dep", "dbt"]
+        for project in ["root", "dep", "dvt"]
     )
     sets.extend(
         FindMaterializationSpec(
@@ -1392,7 +1392,7 @@ def _materialization_parameter_sets_legacy():
             adapter_type="bar",
             expected=(project, "bar"),
         )
-        for project in ["root", "dep", "dbt"]
+        for project in ["root", "dep", "dvt"]
     )
 
     return sets
@@ -1466,7 +1466,7 @@ def _materialization_parameter_sets():
             adapter_type="foo",
             expected=(project, "default"),
         )
-        for project in ["root", "dep", "dbt"]
+        for project in ["root", "dep", "dvt"]
     )
 
     # other type only, each project
@@ -1476,7 +1476,7 @@ def _materialization_parameter_sets():
             adapter_type="foo",
             expected=None,
         )
-        for project in ["root", "dep", "dbt"]
+        for project in ["root", "dep", "dvt"]
     )
 
     # matching type only, each project
@@ -1486,7 +1486,7 @@ def _materialization_parameter_sets():
             adapter_type="foo",
             expected=(project, "foo"),
         )
-        for project in ["root", "dep", "dbt"]
+        for project in ["root", "dep", "dvt"]
     )
 
     sets.extend(
@@ -1495,7 +1495,7 @@ def _materialization_parameter_sets():
             FindMaterializationSpec(
                 macros=[
                     MockMaterialization(project, adapter_type=atype)
-                    for (project, atype) in product(["root", "dep", "dbt"], ["foo", None])
+                    for (project, atype) in product(["root", "dep", "dvt"], ["foo", None])
                 ],
                 adapter_type="foo",
                 expected=("root", "foo"),
@@ -1506,10 +1506,10 @@ def _materialization_parameter_sets():
                 macros=[
                     MockMaterialization("root", adapter_type="bar"),
                     MockMaterialization("dep", adapter_type="foo"),
-                    MockMaterialization("dbt", adapter_type=None),
+                    MockMaterialization("dvt", adapter_type=None),
                 ],
                 adapter_type="foo",
-                expected=("dbt", "default"),
+                expected=("dvt", "default"),
             ),
             # default in core, unrelated override is in dep, and root has an override
             # should find the root override.
@@ -1517,7 +1517,7 @@ def _materialization_parameter_sets():
                 macros=[
                     MockMaterialization("root", adapter_type="foo"),
                     MockMaterialization("dep", adapter_type="bar"),
-                    MockMaterialization("dbt", adapter_type=None),
+                    MockMaterialization("dvt", adapter_type=None),
                 ],
                 adapter_type="foo",
                 expected=("root", "foo"),
@@ -1528,7 +1528,7 @@ def _materialization_parameter_sets():
                 macros=[
                     MockMaterialization("root", adapter_type="foo"),
                     MockMaterialization("dep", adapter_type="foo"),
-                    MockMaterialization("dbt", adapter_type=None),
+                    MockMaterialization("dvt", adapter_type=None),
                 ],
                 adapter_type="foo",
                 expected=("root", "foo"),
@@ -1540,11 +1540,11 @@ def _materialization_parameter_sets():
                 macros=[
                     MockMaterialization("root", adapter_type=None),
                     MockMaterialization("dep", adapter_type="foo"),
-                    MockMaterialization("dbt", adapter_type=None),
-                    MockMaterialization("dbt", adapter_type="foo"),
+                    MockMaterialization("dvt", adapter_type=None),
+                    MockMaterialization("dvt", adapter_type="foo"),
                 ],
                 adapter_type="foo",
-                expected=("dbt", "foo"),
+                expected=("dvt", "foo"),
             ),
         ]
     )
@@ -1556,7 +1556,7 @@ def _materialization_parameter_sets():
             adapter_type="bar",
             expected=(project, "foo"),
         )
-        for project in ["root", "dep", "dbt"]
+        for project in ["root", "dep", "dvt"]
     )
     sets.extend(
         FindMaterializationSpec(
@@ -1567,7 +1567,7 @@ def _materialization_parameter_sets():
             adapter_type="bar",
             expected=(project, "bar"),
         )
-        for project in ["root", "dep", "dbt"]
+        for project in ["root", "dep", "dvt"]
     )
 
     return sets

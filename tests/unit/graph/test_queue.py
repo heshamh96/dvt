@@ -1,8 +1,8 @@
 import networkx as nx
 import pytest
 
-from dbt.contracts.graph.manifest import Manifest
-from dbt.graph.queue import GraphQueue
+from dvt.contracts.graph.manifest import Manifest
+from dvt.graph.queue import GraphQueue
 from tests.unit.utils import MockNode, make_manifest
 
 

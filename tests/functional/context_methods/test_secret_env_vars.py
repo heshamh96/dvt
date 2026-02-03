@@ -2,8 +2,8 @@ import os
 
 import pytest
 
-from dbt.exceptions import DbtInternalError, ParsingError
-from dbt.tests.util import read_file, run_dbt, run_dbt_and_capture
+from dvt.exceptions import DbtInternalError, ParsingError
+from dvt.tests.util import read_file, run_dbt, run_dbt_and_capture
 from dbt_common.constants import SECRET_ENV_PREFIX
 from tests.functional.context_methods.first_dependency import FirstDependencyProject
 
@@ -97,11 +97,11 @@ class TestAllowSecretProfilePackage(FirstDependencyProject):
                 },
                 {
                     # this secret env var will *not* be written to lock file
-                    "git": "https://{{ env_var('DBT_ENV_SECRET_GIT_TOKEN') }}@github.com/dbt-labs/dbt-external-tables.git"
+                    "git": "https://{{ env_var('DBT_ENV_SECRET_GIT_TOKEN') }}@github.com/dvt-labs/dvt-external-tables.git"
                 },
                 {
                     # this secret env var will *not* be written to lock file
-                    "tarball": "https://{{ env_var('DBT_ENV_SECRET_GIT_TOKEN') }}@github.com/dbt-labs/dbt-utils/archive/refs/tags/1.1.1.tar.gz",
+                    "tarball": "https://{{ env_var('DBT_ENV_SECRET_GIT_TOKEN') }}@github.com/dvt-labs/dvt-utils/archive/refs/tags/1.1.1.tar.gz",
                     "name": "dbt_utils",
                 },
             ]
@@ -117,7 +117,7 @@ class TestAllowSecretProfilePackage(FirstDependencyProject):
             # root/password
             "user": "{{ env_var('DBT_ENV_SECRET_USER') }}",
             "pass": "{{ env_var('DBT_ENV_SECRET_PASS') }}",
-            "dbname": "dbt",
+            "dbname": "dvt",
         }
 
     def test_allow_secrets(self, project, first_dependency):
@@ -148,7 +148,7 @@ class TestCloneFailSecretScrubbed:
         return {
             "packages": [
                 {
-                    "git": "https://fakeuser:{{ env_var('DBT_ENV_SECRET_GIT_TOKEN') }}@github.com/dbt-labs/fake-repo.git"
+                    "git": "https://fakeuser:{{ env_var('DBT_ENV_SECRET_GIT_TOKEN') }}@github.com/dvt-labs/fake-repo.git"
                 },
             ]
         }
@@ -167,7 +167,7 @@ class TestCloneFailSecretNotRendered(TestCloneFailSecretScrubbed):
         return {
             "packages": [
                 {
-                    "git": "https://fakeuser:{{ env_var('DBT_ENV_SECRET_GIT_TOKEN') | join(' ') }}@github.com/dbt-labs/fake-repo.git"
+                    "git": "https://fakeuser:{{ env_var('DBT_ENV_SECRET_GIT_TOKEN') | join(' ') }}@github.com/dvt-labs/fake-repo.git"
                 },
             ]
         }

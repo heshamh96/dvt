@@ -11,8 +11,8 @@ from unittest import TestCase, mock
 import agate
 import pytest
 
-from dbt.config.project import PartialProject
-from dbt.contracts.graph.manifest import Manifest
+from dvt.config.project import PartialProject
+from dvt.contracts.graph.manifest import Manifest
 from dbt_common.dataclass_schema import ValidationError
 
 
@@ -42,9 +42,9 @@ def mock_connection(name, state="open"):
 
 
 def profile_from_dict(profile, profile_name, cli_vars="{}"):
-    from dbt.config import Profile
-    from dbt.config.renderer import ProfileRenderer
-    from dbt.config.utils import parse_cli_vars
+    from dvt.config import Profile
+    from dvt.config.renderer import ProfileRenderer
+    from dvt.config.utils import parse_cli_vars
 
     if not isinstance(cli_vars, dict):
         cli_vars = parse_cli_vars(cli_vars)
@@ -58,8 +58,8 @@ def profile_from_dict(profile, profile_name, cli_vars="{}"):
 
 
 def project_from_dict(project, profile, packages=None, selectors=None, cli_vars="{}"):
-    from dbt.config.renderer import DbtProjectYamlRenderer
-    from dbt.config.utils import parse_cli_vars
+    from dvt.config.renderer import DbtProjectYamlRenderer
+    from dvt.config.utils import parse_cli_vars
 
     if not isinstance(cli_vars, dict):
         cli_vars = parse_cli_vars(cli_vars)
@@ -80,7 +80,7 @@ def project_from_dict(project, profile, packages=None, selectors=None, cli_vars=
 def config_from_parts_or_dicts(project, profile, packages=None, selectors=None, cli_vars={}):
     from copy import deepcopy
 
-    from dbt.config import Profile, Project, RuntimeConfig
+    from dvt.config import Profile, Project, RuntimeConfig
 
     if isinstance(project, Project):
         profile_name = project.profile_name
@@ -110,15 +110,15 @@ def config_from_parts_or_dicts(project, profile, packages=None, selectors=None, 
 
 
 def inject_plugin(plugin):
-    from dbt.adapters.factory import FACTORY
+    from dvt.adapters.factory import FACTORY
 
     key = plugin.adapter.type()
     FACTORY.plugins[key] = plugin
 
 
 def inject_plugin_for(config):
-    # from dbt.adapters.postgres import Plugin, PostgresAdapter
-    from dbt.adapters.factory import FACTORY
+    # from dvt.adapters.postgres import Plugin, PostgresAdapter
+    from dvt.adapters.factory import FACTORY
 
     FACTORY.load_plugin(config.credentials.type)
     adapter = FACTORY.get_adapter(config)
@@ -127,17 +127,17 @@ def inject_plugin_for(config):
 
 def inject_adapter(value, plugin):
     """Inject the given adapter into the adapter factory, so your hand-crafted
-    artisanal adapter will be available from get_adapter() as if dbt loaded it.
+    artisanal adapter will be available from get_adapter() as if dvt loaded it.
     """
     inject_plugin(plugin)
-    from dbt.adapters.factory import FACTORY
+    from dvt.adapters.factory import FACTORY
 
     key = value.type()
     FACTORY.adapters[key] = value
 
 
 def clear_plugin(plugin):
-    from dbt.adapters.factory import FACTORY
+    from dvt.adapters.factory import FACTORY
 
     key = plugin.adapter.type()
     FACTORY.plugins.pop(key, None)
@@ -228,8 +228,8 @@ def assert_fails_validation(dct, cls):
 
 
 def generate_name_macros(package):
-    from dbt.contracts.graph.nodes import Macro
-    from dbt.node_types import NodeType
+    from dvt.contracts.graph.nodes import Macro
+    from dvt.node_types import NodeType
 
     name_sql = {}
     for component in ("database", "schema", "alias"):
@@ -258,7 +258,7 @@ class TestAdapterConversions(TestCase):
     def _get_tester_for(self, column_type):
         from dbt_common.clients import agate_helper
 
-        if column_type is agate.TimeDelta:  # dbt never makes this!
+        if column_type is agate.TimeDelta:  # dvt never makes this!
             return agate.TimeDelta()
 
         for instance in agate_helper.DEFAULT_TYPE_TESTER._possible_types:
@@ -278,8 +278,8 @@ class TestAdapterConversions(TestCase):
 
 
 def MockMacro(package, name="my_macro", **kwargs):
-    from dbt.contracts.graph.nodes import Macro
-    from dbt.node_types import NodeType
+    from dvt.contracts.graph.nodes import Macro
+    from dvt.node_types import NodeType
 
     mock_kwargs = dict(
         resource_type=NodeType.Macro,
@@ -308,8 +308,8 @@ def MockGenerateMacro(package, component="some_component", **kwargs):
 
 
 def MockSource(package, source_name, name, **kwargs):
-    from dbt.contracts.graph.nodes import SourceDefinition
-    from dbt.node_types import NodeType
+    from dvt.contracts.graph.nodes import SourceDefinition
+    from dvt.node_types import NodeType
 
     src = mock.MagicMock(
         __class__=SourceDefinition,
@@ -325,8 +325,8 @@ def MockSource(package, source_name, name, **kwargs):
 
 
 def MockNode(package, name, resource_type=None, **kwargs):
-    from dbt.contracts.graph.nodes import ModelNode, SeedNode
-    from dbt.node_types import NodeType
+    from dvt.contracts.graph.nodes import ModelNode, SeedNode
+    from dvt.node_types import NodeType
 
     if resource_type is None:
         resource_type = NodeType.Model
@@ -354,8 +354,8 @@ def MockNode(package, name, resource_type=None, **kwargs):
 
 
 def MockDocumentation(package, name, **kwargs):
-    from dbt.contracts.graph.nodes import Documentation
-    from dbt.node_types import NodeType
+    from dvt.contracts.graph.nodes import Documentation
+    from dvt.node_types import NodeType
 
     doc = mock.MagicMock(
         __class__=Documentation,
@@ -370,7 +370,7 @@ def MockDocumentation(package, name, **kwargs):
 
 
 def load_internal_manifest_macros(config, macro_hook=lambda m: None):
-    from dbt.parser.manifest import ManifestLoader
+    from dvt.parser.manifest import ManifestLoader
 
     return ManifestLoader.load_macros(config, macro_hook)
 

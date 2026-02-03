@@ -3,9 +3,9 @@ from unittest.mock import patch
 
 import pytest
 
-from dbt.exceptions import DbtRuntimeError
-from dbt.graph.selector_methods import MethodName
-from dbt.graph.selector_spec import (
+from dvt.exceptions import DbtRuntimeError
+from dvt.graph.selector_methods import MethodName
+from dvt.graph.selector_spec import (
     IndirectSelection,
     SelectionCriteria,
     SelectionDifference,
@@ -21,7 +21,7 @@ from dbt.graph.selector_spec import (
 def test_selection_criteria_default_indirect_value(indirect_selection_value, expected_value):
     # Check selection criteria with indirect selection value would follow the resolved value in flags
     # if indirect selection is not specified in the selection criteria.
-    with patch("dbt.graph.selector_spec.get_flags") as patched_get_flags:
+    with patch("dvt.graph.selector_spec.get_flags") as patched_get_flags:
         patched_get_flags.return_value.INDIRECT_SELECTION = indirect_selection_value
         patched_get_flags.INDIRECT_SELECTION = indirect_selection_value
         selection_dict_without_indirect_selection_specified = {

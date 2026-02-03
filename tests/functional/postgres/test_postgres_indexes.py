@@ -2,7 +2,7 @@ import re
 
 import pytest
 
-from dbt.tests.util import run_dbt, run_dbt_and_capture
+from dvt.tests.util import run_dbt, run_dbt_and_capture
 from tests.functional.postgres.fixtures import (
     models__incremental_sql,
     models__table_sql,

@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.util import read_file, run_dbt
+from dvt.tests.util import read_file, run_dbt
 from tests.functional.graph_selection.fixtures import (
     base_users_sql,
     properties_yml,

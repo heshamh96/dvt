@@ -3,8 +3,8 @@ import os
 import pytest
 import yaml
 
-from dbt.exceptions import ParsingError
-from dbt.tests.util import (
+from dvt.exceptions import ParsingError
+from dvt.tests.util import (
     check_relations_equal,
     check_table_does_not_exist,
     run_dbt,

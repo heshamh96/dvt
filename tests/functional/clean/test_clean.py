@@ -1,7 +1,7 @@
 import pytest
 
-from dbt.exceptions import DbtRuntimeError
-from dbt.tests.util import run_dbt
+from dvt.exceptions import DbtRuntimeError
+from dvt.tests.util import run_dbt
 
 
 class TestCleanSourcePath:
@@ -10,7 +10,7 @@ class TestCleanSourcePath:
         return "clean-targets: ['models']"
 
     def test_clean_source_path(self, project):
-        with pytest.raises(DbtRuntimeError, match="dbt will not clean the following source paths"):
+        with pytest.raises(DbtRuntimeError, match="dvt will not clean the following source paths"):
             run_dbt(["clean"])
 
 
@@ -22,7 +22,7 @@ class TestCleanPathOutsideProjectRelative:
     def test_clean_path_outside_project(self, project):
         with pytest.raises(
             DbtRuntimeError,
-            match="dbt will not clean the following directories outside the project",
+            match="dvt will not clean the following directories outside the project",
         ):
             run_dbt(["clean"])
 
@@ -35,7 +35,7 @@ class TestCleanPathOutsideProjectAbsolute:
     def test_clean_path_outside_project(self, project):
         with pytest.raises(
             DbtRuntimeError,
-            match="dbt will not clean the following directories outside the project",
+            match="dvt will not clean the following directories outside the project",
         ):
             run_dbt(["clean"])
 
@@ -51,6 +51,6 @@ class TestCleanPathOutsideProjectWithFlag:
 
         with pytest.raises(
             DbtRuntimeError,
-            match="dbt will not clean the following directories outside the project",
+            match="dvt will not clean the following directories outside the project",
         ):
             run_dbt(["clean", "--clean-project-files-only"])

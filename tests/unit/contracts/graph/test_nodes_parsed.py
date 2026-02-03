@@ -6,7 +6,7 @@ import pytest
 from hypothesis import given
 from hypothesis.strategies import builds, lists
 
-from dbt.artifacts.resources import (
+from dvt.artifacts.resources import (
     ColumnInfo,
     Dimension,
     Entity,
@@ -24,18 +24,18 @@ from dbt.artifacts.resources import (
     RefArgs,
     SourceConfig,
 )
-from dbt.artifacts.resources import SourceDefinition as SourceDefinitionResource
-from dbt.artifacts.resources import TestMetadata, Time
-from dbt.artifacts.resources.types import TimePeriod
-from dbt.contracts.files import FileHash
-from dbt.contracts.graph.model_config import (
+from dvt.artifacts.resources import SourceDefinition as SourceDefinitionResource
+from dvt.artifacts.resources import TestMetadata, Time
+from dvt.artifacts.resources.types import TimePeriod
+from dvt.contracts.files import FileHash
+from dvt.contracts.graph.model_config import (
     ModelConfig,
     NodeConfig,
     SeedConfig,
     SnapshotConfig,
     TestConfig,
 )
-from dbt.contracts.graph.nodes import (
+from dvt.contracts.graph.nodes import (
     DependsOn,
     Docs,
     Documentation,
@@ -50,7 +50,7 @@ from dbt.contracts.graph.nodes import (
     SnapshotNode,
     SourceDefinition,
 )
-from dbt.node_types import AccessType, NodeType
+from dvt.node_types import AccessType, NodeType
 from dbt_common.dataclass_schema import ValidationError
 from dbt_semantic_interfaces.type_enums import MetricType
 from tests.unit.utils import (

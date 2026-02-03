@@ -1,13 +1,13 @@
-from dbt.artifacts.resources import Contract, TestConfig, TestMetadata
-from dbt.contracts.files import FileHash
-from dbt.contracts.graph.nodes import (
+from dvt.artifacts.resources import Contract, TestConfig, TestMetadata
+from dvt.contracts.files import FileHash
+from dvt.contracts.graph.nodes import (
     DependsOn,
     GenericTestNode,
     InjectedCTE,
     ModelConfig,
     ModelNode,
 )
-from dbt.node_types import NodeType
+from dvt.node_types import NodeType
 
 
 def model_node():

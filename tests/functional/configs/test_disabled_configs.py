@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.util import run_dbt
+from dvt.tests.util import run_dbt
 from tests.functional.configs.fixtures import BaseConfigProject
 
 
@@ -18,7 +18,7 @@ class TestDisabledConfigs(BaseConfigProject):
                         "port": "{{ (5400 + 32) | as_number }}",
                         "user": "root",
                         "pass": "password",
-                        "dbname": "dbt",
+                        "dbname": "dvt",
                         "schema": unique_schema,
                     },
                     "disabled": {
@@ -29,7 +29,7 @@ class TestDisabledConfigs(BaseConfigProject):
                         "port": "{{ (5400 + 32) | as_number }}",
                         "user": "root",
                         "pass": "password",
-                        "dbname": "dbt",
+                        "dbname": "dvt",
                         "schema": unique_schema,
                     },
                 },

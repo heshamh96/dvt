@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.util import check_relations_equal, run_dbt
+from dvt.tests.util import check_relations_equal, run_dbt
 from tests.functional.incremental_schema_tests.fixtures import (
     _MODELS__A,
     _MODELS__INCREMENTAL_APPEND_NEW_COLUMNS,

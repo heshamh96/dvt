@@ -3,8 +3,8 @@ from typing import Dict
 
 import pytest
 
-from dbt.exceptions import DuplicateVersionedUnversionedError
-from dbt.tests.util import get_manifest, read_file, rm_file, run_dbt, write_file
+from dvt.exceptions import DuplicateVersionedUnversionedError
+from dvt.tests.util import get_manifest, read_file, rm_file, run_dbt, write_file
 
 model_one_sql = """
 select 1 as fun
@@ -107,7 +107,7 @@ class TestVersionedModels:
         assert model_one_downstream_node.depends_on.nodes == ["model.test.model_one.v1"]
 
         # assert unpinned ref to latest-not-max version yields an "FYI" info-level log
-        log_output = read_file("log_output", "dbt.log").replace("\n", " ").replace("\\n", " ")
+        log_output = read_file("log_output", "dvt.log").replace("\n", " ").replace("\\n", " ")
         assert "UnpinnedRefNewVersionAvailable" in log_output
 
         # update versioned model

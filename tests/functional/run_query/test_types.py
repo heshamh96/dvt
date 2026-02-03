@@ -1,7 +1,7 @@
 import pytest
 
-from dbt.contracts.results import NodeStatus
-from dbt.tests.util import run_dbt
+from dvt.contracts.results import NodeStatus
+from dvt.tests.util import run_dbt
 
 macros_sql = """
 {% macro test_array_results() %}

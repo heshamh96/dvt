@@ -1,11 +1,11 @@
 import os
 from unittest import mock
 
-from dbt.deprecations import EnvironmentVariableNamespaceDeprecation as EVND
-from dbt.deprecations import active_deprecations
-from dbt.env_vars import KNOWN_ENGINE_ENV_VARS, validate_engine_env_vars
-from dbt.events.types import EnvironmentVariableNamespaceDeprecation
-from dbt.tests.util import safe_set_invocation_context
+from dvt.deprecations import EnvironmentVariableNamespaceDeprecation as EVND
+from dvt.deprecations import active_deprecations
+from dvt.env_vars import KNOWN_ENGINE_ENV_VARS, validate_engine_env_vars
+from dvt.events.types import EnvironmentVariableNamespaceDeprecation
+from dvt.tests.util import safe_set_invocation_context
 from dbt_common.events.event_catcher import EventCatcher
 from dbt_common.events.event_manager_client import add_callback_to_manager
 

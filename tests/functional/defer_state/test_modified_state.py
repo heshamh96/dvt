@@ -5,8 +5,8 @@ import string
 
 import pytest
 
-from dbt.exceptions import CompilationError, ContractBreakingChangeError
-from dbt.tests.util import (
+from dvt.exceptions import CompilationError, ContractBreakingChangeError
+from dvt.tests.util import (
     get_manifest,
     rm_file,
     run_dbt,
@@ -569,7 +569,7 @@ class TestChangedContractUnversioned(BaseModifiedState):
             ["run", "--models", "state:modified.contract", "--state", "./state"], expect_pass=False
         )
         expected_error = "This model has an enforced contract that failed."
-        expected_warning = "While comparing to previous project state, dbt detected a breaking change to an unversioned model"
+        expected_warning = "While comparing to previous project state, dvt detected a breaking change to an unversioned model"
         expected_change = "Please ensure the name, data_type, and number of columns in your contract match the columns in your model's definition"
         assert expected_error in logs
         assert expected_warning in logs
@@ -580,7 +580,7 @@ class TestChangedContractUnversioned(BaseModifiedState):
         _, logs = run_dbt_and_capture(
             ["run", "--models", "state:modified.contract", "--state", "./state"]
         )
-        expected_warning = "While comparing to previous project state, dbt detected a breaking change to an unversioned model"
+        expected_warning = "While comparing to previous project state, dvt detected a breaking change to an unversioned model"
         expected_change = "Contract enforcement was removed"
 
         # Now unenforce the contract. Should throw a warning - force warning into an error.
@@ -596,7 +596,7 @@ class TestChangedContractUnversioned(BaseModifiedState):
                     "./state",
                 ]
             )
-            expected_warning = "While comparing to previous project state, dbt detected a breaking change to an unversioned model"
+            expected_warning = "While comparing to previous project state, dvt detected a breaking change to an unversioned model"
             expected_change = "Contract enforcement was removed"
 
 
@@ -679,7 +679,7 @@ class TestDeleteUnversionedContractedModel(BaseModifiedState):
             ["run", "--models", "state:modified.contract", "--state", "./state"]
         )
 
-        expected_warning = "While comparing to previous project state, dbt detected a breaking change to an unversioned model"
+        expected_warning = "While comparing to previous project state, dvt detected a breaking change to an unversioned model"
         expected_change = "Contracted model 'model.test.table_model' was deleted or renamed"
         assert expected_warning in logs
         assert expected_change in logs
@@ -688,7 +688,7 @@ class TestDeleteUnversionedContractedModel(BaseModifiedState):
         _, logs = run_dbt_and_capture(
             ["run", "--models", "state:modified.contract", "--state", "./state"]
         )
-        expected_warning = "While comparing to previous project state, dbt detected a breaking change to an unversioned model"
+        expected_warning = "While comparing to previous project state, dvt detected a breaking change to an unversioned model"
         expected_change = "Contracted model 'model.test.table_model' was deleted or renamed"
         assert expected_warning in logs
         assert expected_change in logs
@@ -741,7 +741,7 @@ class TestDisableUnversionedContractedModel(BaseModifiedState):
             ["run", "--models", "state:modified.contract", "--state", "./state"]
         )
 
-        expected_warning = "While comparing to previous project state, dbt detected a breaking change to an unversioned model"
+        expected_warning = "While comparing to previous project state, dvt detected a breaking change to an unversioned model"
         expected_change = "Contracted model 'model.test.table_model' was disabled"
         assert expected_warning in logs
         assert expected_change in logs
@@ -852,7 +852,7 @@ class TestChangedConstraintUnversioned(BaseModifiedState):
         _, logs = run_dbt_and_capture(
             ["run", "--models", "state:modified.contract", "--state", "./state"]
         )
-        expected_warning = "While comparing to previous project state, dbt detected a breaking change to an unversioned model"
+        expected_warning = "While comparing to previous project state, dvt detected a breaking change to an unversioned model"
         expected_change = "Enforced column level constraints were removed"
         assert expected_warning in logs
         assert expected_change in logs
@@ -870,7 +870,7 @@ class TestChangedConstraintUnversioned(BaseModifiedState):
         _, logs = run_dbt_and_capture(
             ["run", "--models", "state:modified.contract", "--state", "./state"]
         )
-        expected_warning = "While comparing to previous project state, dbt detected a breaking change to an unversioned model"
+        expected_warning = "While comparing to previous project state, dvt detected a breaking change to an unversioned model"
         expected_change = "Enforced model level constraints were removed"
         assert expected_warning in logs
         assert expected_change in logs
@@ -922,7 +922,7 @@ class TestChangedMaterializationConstraint(BaseModifiedState):
         _, logs = run_dbt_and_capture(
             ["run", "--models", "state:modified.contract", "--state", "./state"]
         )
-        expected_warning = "While comparing to previous project state, dbt detected a breaking change to an unversioned model"
+        expected_warning = "While comparing to previous project state, dvt detected a breaking change to an unversioned model"
         expected_change = "Materialization changed with enforced constraints"
         assert expected_warning in logs
         assert expected_change in logs
@@ -1175,8 +1175,8 @@ class TestVersionedContractVarcharSizeChange(BaseModifiedState):
     """
     Test that changing varchar size (e.g., varchar(5) to varchar(20))
     does not trigger a breaking change error for versioned models.
-    Per dbt docs, size/precision/scale changes should NOT be breaking changes.
-    Reproduces issue: https://github.com/dbt-labs/dbt-core/issues/11186
+    Per dvt docs, size/precision/scale changes should NOT be breaking changes.
+    Reproduces issue: https://github.com/dvt-labs/dvt-core/issues/11186
     """
 
     MODEL_UNIQUE_ID = "model.test.table_model.v1"

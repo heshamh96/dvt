@@ -3,8 +3,8 @@ import os
 import pytest
 from pytest_mock import MockerFixture
 
-from dbt.events.types import JinjaLogInfo
-from dbt.tests.util import run_dbt
+from dvt.events.types import JinjaLogInfo
+from dvt.tests.util import run_dbt
 from dbt_common.events.event_catcher import EventCatcher
 
 model_one_sql = """

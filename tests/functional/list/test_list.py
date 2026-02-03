@@ -1,7 +1,7 @@
 import json
 import os
 
-from dbt.tests.util import run_dbt
+from dvt.tests.util import run_dbt
 from tests.functional.fixtures.happy_path_fixture import (  # noqa: F401
     happy_path_project,
     happy_path_project_files,
@@ -192,7 +192,7 @@ class TestList:
                     "package_name": "test",
                     "depends_on": {
                         "nodes": [],
-                        "macros": ["macro.dbt.current_timestamp", "macro.dbt.date_trunc"],
+                        "macros": ["macro.dvt.current_timestamp", "macro.dvt.date_trunc"],
                     },
                     "tags": [],
                     "config": {
@@ -236,7 +236,7 @@ class TestList:
                     "package_name": "test",
                     "depends_on": {
                         "nodes": ["seed.test.seed"],
-                        "macros": ["macro.dbt.is_incremental"],
+                        "macros": ["macro.dvt.is_incremental"],
                     },
                     "tags": [],
                     "config": {
@@ -324,7 +324,7 @@ class TestList:
                     "package_name": "test",
                     "depends_on": {
                         "nodes": [],
-                        "macros": ["macro.dbt.current_timestamp", "macro.dbt.date_trunc"],
+                        "macros": ["macro.dvt.current_timestamp", "macro.dvt.date_trunc"],
                     },
                     "config": {
                         "enabled": True,
@@ -380,7 +380,7 @@ class TestList:
                     "package_name": "test",
                     "depends_on": {
                         "nodes": [],
-                        "macros": ["macro.dbt.current_timestamp", "macro.dbt.date_trunc"],
+                        "macros": ["macro.dvt.current_timestamp", "macro.dvt.date_trunc"],
                     },
                     "tags": [],
                     "config": {
@@ -475,7 +475,7 @@ class TestList:
                         "alias": "outer_alias",
                         "schema": "test",
                         "sql_header": "SELECT 1 as header;",
-                        "database": "dbt",
+                        "database": "dvt",
                         "docs": {"node_color": "purple", "show": True},
                         "event_time": None,
                         "tags": ["string_tag"],
@@ -687,7 +687,7 @@ class TestList:
                     "unique_key": None,
                     "on_schema_change": "ignore",
                     "on_configuration_change": "apply",
-                    "database": "dbt",
+                    "database": "dvt",
                     "schema": "test",
                     "alias": "test_alias",
                     "meta": {"meta_key": "meta_value"},
@@ -761,7 +761,7 @@ class TestList:
                     "depends_on": {
                         "macros": [
                             "macro.test.test_expression_is_true",
-                            "macro.dbt.get_where_subquery",
+                            "macro.dvt.get_where_subquery",
                         ],
                         "nodes": ["seed.test.seed"],
                     },
@@ -776,7 +776,7 @@ class TestList:
                     "alias": "not_null__id__alias",
                     "config": {
                         "alias": "not_null__id__alias",
-                        "database": "dbt",
+                        "database": "dvt",
                         "enabled": True,
                         "error_if": "!= 0",
                         "fail_calc": "count(*)",
@@ -793,7 +793,7 @@ class TestList:
                         "where": "1 = 1",
                     },
                     "depends_on": {
-                        "macros": ["macro.dbt.test_not_null"],
+                        "macros": ["macro.dvt.test_not_null"],
                         "nodes": ["model.test.model_with_lots_of_schema_configs"],
                     },
                     "name": "my_favorite_test",
@@ -807,7 +807,7 @@ class TestList:
                     "alias": "my_generic_test__created_at__alias",
                     "config": {
                         "alias": "my_generic_test__created_at__alias",
-                        "database": "dbt",
+                        "database": "dvt",
                         "enabled": True,
                         "error_if": "!= 0",
                         "fail_calc": "count(*)",
@@ -826,7 +826,7 @@ class TestList:
                     "depends_on": {
                         "macros": [
                             "macro.test.test_my_generic_test",
-                            "macro.dbt.get_where_subquery",
+                            "macro.dvt.get_where_subquery",
                         ],
                         "nodes": ["model.test.model_with_lots_of_schema_configs"],
                     },
@@ -842,7 +842,7 @@ class TestList:
                     "package_name": "test",
                     "depends_on": {
                         "nodes": ["model.test.outer"],
-                        "macros": ["macro.dbt.test_not_null"],
+                        "macros": ["macro.dvt.test_not_null"],
                     },
                     "tags": [],
                     "config": {
@@ -890,7 +890,7 @@ class TestList:
                         "where": None,
                     },
                     "depends_on": {
-                        "macros": ["macro.dbt.test_not_null"],
+                        "macros": ["macro.dvt.test_not_null"],
                         "nodes": ["seed.test.seed"],
                     },
                     "name": "not_null_seed__a_",
@@ -922,7 +922,7 @@ class TestList:
                         "where": None,
                     },
                     "depends_on": {
-                        "macros": ["macro.dbt.test_not_null"],
+                        "macros": ["macro.dvt.test_not_null"],
                         "nodes": ["seed.test.seed"],
                     },
                     "name": "not_null_seed__b_",
@@ -938,7 +938,7 @@ class TestList:
                     "alias": "test_alias",
                     "config": {
                         "alias": "test_alias",
-                        "database": "dbt",
+                        "database": "dvt",
                         "enabled": True,
                         "error_if": "!= 0",
                         "fail_calc": "count(*)",
@@ -983,7 +983,7 @@ class TestList:
                         "where": None,
                     },
                     "depends_on": {
-                        "macros": ["macro.dbt.test_unique"],
+                        "macros": ["macro.dvt.test_unique"],
                         "nodes": ["model.test.model_with_lots_of_schema_configs"],
                     },
                     "name": "unique_model_with_lots_of_schema_configs_id",
@@ -998,7 +998,7 @@ class TestList:
                     "package_name": "test",
                     "depends_on": {
                         "nodes": ["model.test.outer"],
-                        "macros": ["macro.dbt.test_unique"],
+                        "macros": ["macro.dvt.test_unique"],
                     },
                     "tags": [],
                     "config": {

@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.util import run_dbt
+from dvt.tests.util import run_dbt
 from dbt_common.dataclass_schema import ValidationError
 
 # Seed data for source tables

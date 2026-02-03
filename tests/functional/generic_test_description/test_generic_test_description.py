@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.util import get_artifact, run_dbt
+from dvt.tests.util import get_artifact, run_dbt
 from tests.functional.generic_test_description.fixtures import (
     models__doc_block_md,
     models__my_model_sql,

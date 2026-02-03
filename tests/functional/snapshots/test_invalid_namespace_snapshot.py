@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from dbt.tests.util import run_dbt
+from dvt.tests.util import run_dbt
 from tests.functional.snapshots.fixtures import (
     macros__test_no_overlaps_sql,
     macros_custom_snapshot__custom_sql,
@@ -17,13 +17,13 @@ NUM_SNAPSHOT_MODELS = 1
 
 snapshots_pg_custom_invalid__snapshot_sql = """
 {% snapshot snapshot_actual %}
-    {# this custom strategy does not exist  in the 'dbt' package #}
+    {# this custom strategy does not exist  in the 'dvt' package #}
     {{
         config(
             target_database=var('target_database', database),
             target_schema=var('target_schema', schema),
             unique_key='id || ' ~ "'-'" ~ ' || first_name',
-            strategy='dbt.custom',
+            strategy='dvt.custom',
             updated_at='updated_at',
         )
     }}

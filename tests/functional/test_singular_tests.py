@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.util import run_dbt
+from dvt.tests.util import run_dbt
 
 single_test_sql = """
 {{ config(warn_if = '>0', error_if ="> 10") }}

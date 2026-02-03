@@ -2,8 +2,8 @@ import os
 
 import pytest
 
-from dbt.constants import DEFAULT_ENV_PLACEHOLDER
-from dbt.tests.util import get_manifest, run_dbt, run_dbt_and_capture
+from dvt.constants import DEFAULT_ENV_PLACEHOLDER
+from dvt.tests.util import get_manifest, run_dbt, run_dbt_and_capture
 from dbt_common.constants import SECRET_ENV_PREFIX
 
 context_sql = """
@@ -80,7 +80,7 @@ class TestEnvVars:
                         "port": 5432,
                         "user": "root",
                         "pass": "password",
-                        "dbname": "dbt",
+                        "dbname": "dvt",
                         "schema": unique_schema,
                     },
                     "prod": {
@@ -91,7 +91,7 @@ class TestEnvVars:
                         # root/password
                         "user": "{{ env_var('DBT_TEST_USER') }}",
                         "pass": "{{ env_var('DBT_TEST_PASS') }}",
-                        "dbname": "dbt",
+                        "dbname": "dvt",
                         "schema": unique_schema,
                     },
                 },
@@ -151,7 +151,7 @@ class TestEnvVars:
         assert ctx["this.schema"] == project.test_schema
         assert ctx["this.table"] == "context"
 
-        assert ctx["target.dbname"] == "dbt"
+        assert ctx["target.dbname"] == "dvt"
         assert ctx["target.host"] == "localhost"
         assert ctx["target.name"] == "dev"
         assert ctx["target.port"] == 5432
@@ -175,7 +175,7 @@ class TestEnvVars:
         assert ctx["this.schema"] == project.test_schema
         assert ctx["this.table"] == "context"
 
-        assert ctx["target.dbname"] == "dbt"
+        assert ctx["target.dbname"] == "dvt"
         assert ctx["target.host"] == "localhost"
         assert ctx["target.name"] == "prod"
         assert ctx["target.port"] == 5432

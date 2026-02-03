@@ -2,14 +2,14 @@ from typing import Any, Dict, Union
 
 import pytest
 
-from dbt.cli.main import dbtRunner, dbtRunnerResult
-from dbt.events.types import (
+from dvt.cli.main import dbtRunner, dbtRunnerResult
+from dvt.events.types import (
     DeprecatedModel,
     MainEncounteredError,
     MicrobatchModelNoEventTimeInputs,
 )
-from dbt.flags import get_flags
-from dbt.tests.util import run_dbt, update_config_file
+from dvt.flags import get_flags
+from dvt.tests.util import run_dbt, update_config_file
 from dbt_common.events.base_types import EventLevel
 from dbt_common.events.event_catcher import EventCatcher
 

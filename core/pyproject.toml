@@ -1,18 +1,18 @@
 
 [project]
-name = "dbt-core"
+name = "dvt-core"
 dynamic = ["version"]
-description = "With dbt, data analysts and engineers can build analytics the way engineers build applications."
+description = "Data Virtualization Tool - Federated queries across data sources"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
 license-files = { globs = ["LICENSE"] }
 keywords = []
 authors = [
-    { name = "dbt Labs", email = "info@dbtlabs.com" },
+    { name = "DVT Team", email = "dev@dvt.io" },
 ]
 maintainers = [
-    { name = "dbt Labs", email = "info@dbtlabs.com" },
+    { name = "DVT Team", email = "dev@dvt.io" },
 ]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
@@ -57,6 +57,11 @@ dependencies = [
     "dbt-common>=1.37.2,<2.0",
     "dbt-adapters>=1.15.5,<2.0",
     "dbt-protos>=1.0.405,<2.0",
+    # DVT-specific dependencies
+    "pyspark>=3.5.0",
+    "sqlglot>=20.0.0",
+    "duckdb>=0.9.0",
+    "pyarrow>=14.0.0",
     "pydantic<3",
     # ----
     # Expect compatibility with all new versions of these packages, so lower bounds only.
@@ -68,16 +73,16 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/dbt-labs/dbt-core"
-Repository = "https://github.com/dbt-labs/dbt-core.git"
-Issues = "https://github.com/dbt-labs/dbt-core/issues"
-Changelog = "https://github.com/dbt-labs/dbt-core/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/heshamh96/dvt"
+Repository = "https://github.com/heshamh96/dvt.git"
+Issues = "https://github.com/heshamh96/dvt/issues"
+Changelog = "https://github.com/heshamh96/dvt/blob/dev/CHANGELOG.md"
 
 [project.scripts]
-dbt = "dbt.cli.main:cli"
+dvt = "dvt.cli.main:cli"
 
 [tool.hatch.version]
-path = "dbt/__version__.py"
+path = "dvt/__version__.py"
 
 
 [build-system]

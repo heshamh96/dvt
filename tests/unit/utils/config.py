@@ -1,11 +1,11 @@
 import pytest
 
-from dbt.adapters.postgres.connections import PostgresCredentials
-from dbt.config.profile import Profile
-from dbt.config.project import Project
-from dbt.config.renderer import ProfileRenderer
-from dbt.config.runtime import RuntimeConfig
-from dbt.flags import get_flags
+from dvt.adapters.postgres.connections import PostgresCredentials
+from dvt.config.profile import Profile
+from dvt.config.project import Project
+from dvt.config.renderer import ProfileRenderer
+from dvt.config.runtime import RuntimeConfig
+from dvt.flags import get_flags
 
 
 @pytest.fixture

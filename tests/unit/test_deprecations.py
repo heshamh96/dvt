@@ -1,7 +1,7 @@
 import pytest
 
-import dbt.deprecations as deprecations
-from dbt.events.types import ProjectFlagsMovedDeprecation
+import dvt.deprecations as deprecations
+from dvt.events.types import ProjectFlagsMovedDeprecation
 from dbt_common.events.event_catcher import EventCatcher
 from dbt_common.events.event_manager_client import add_callback_to_manager
 from dbt_common.events.types import Note

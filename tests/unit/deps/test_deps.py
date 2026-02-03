@@ -3,26 +3,26 @@ from argparse import Namespace
 from copy import deepcopy
 from unittest import mock
 
-import dbt.deps
-import dbt.exceptions
-from dbt.clients.registry import is_compatible_version
-from dbt.config.project import PartialProject
-from dbt.config.renderer import DbtProjectYamlRenderer
-from dbt.contracts.project import (
+import dvt.deps
+import dvt.exceptions
+from dvt.clients.registry import is_compatible_version
+from dvt.config.project import PartialProject
+from dvt.config.renderer import DbtProjectYamlRenderer
+from dvt.contracts.project import (
     GitPackage,
     LocalPackage,
     PackageConfig,
     RegistryPackage,
     TarballPackage,
 )
-from dbt.deps.git import GitUnpinnedPackage
-from dbt.deps.local import LocalPinnedPackage, LocalUnpinnedPackage
-from dbt.deps.registry import RegistryUnpinnedPackage
-from dbt.deps.resolver import resolve_packages
-from dbt.deps.tarball import TarballUnpinnedPackage
-from dbt.flags import set_from_args
-from dbt.task.deps import DepsTask
-from dbt.version import get_installed_version
+from dvt.deps.git import GitUnpinnedPackage
+from dvt.deps.local import LocalPinnedPackage, LocalUnpinnedPackage
+from dvt.deps.registry import RegistryUnpinnedPackage
+from dvt.deps.resolver import resolve_packages
+from dvt.deps.tarball import TarballUnpinnedPackage
+from dvt.flags import set_from_args
+from dvt.task.deps import DepsTask
+from dvt.version import get_installed_version
 from dbt_common.dataclass_schema import ValidationError
 from dbt_common.semver import VersionSpecifier
 
@@ -44,9 +44,9 @@ class TestTarballPackage(unittest.TestCase):
     class MockMetadata:
         name = "mock_metadata_name"
 
-    @mock.patch("dbt.config.project.PartialProject.from_project_root")
+    @mock.patch("dvt.config.project.PartialProject.from_project_root")
     @mock.patch("os.listdir")
-    @mock.patch("dbt.deps.tarball.get_downloads_path")
+    @mock.patch("dvt.deps.tarball.get_downloads_path")
     @mock.patch("dbt_common.clients.system.untar_package")
     @mock.patch("dbt_common.clients.system.download")
     def test_fetch_metadata(
@@ -84,9 +84,9 @@ class TestTarballPackage(unittest.TestCase):
             "downloads_path/my_package", "downloads_path/my_package_untarred", "my_package"
         )
 
-    @mock.patch("dbt.config.project.PartialProject.from_project_root")
+    @mock.patch("dvt.config.project.PartialProject.from_project_root")
     @mock.patch("os.listdir")
-    @mock.patch("dbt.deps.tarball.get_downloads_path")
+    @mock.patch("dvt.deps.tarball.get_downloads_path")
     @mock.patch("dbt_common.clients.system.untar_package")
     @mock.patch("dbt_common.clients.system.download")
     def test_fetch_metadata_fails_on_incorrect_tar_folder_structure(
@@ -115,10 +115,10 @@ class TestTarballPackage(unittest.TestCase):
             with mock.patch.object(
                 PartialProject, "render_package_metadata", return_value=self.MockMetadata
             ):
-                with self.assertRaises(dbt.exceptions.DependencyError):
+                with self.assertRaises(dvt.exceptions.DependencyError):
                     a_pinned.fetch_metadata("", DbtProjectYamlRenderer())
 
-    @mock.patch("dbt.deps.tarball.get_downloads_path")
+    @mock.patch("dvt.deps.tarball.get_downloads_path")
     def test_tarball_package_contract(self, mock_get_downloads_path):
         dict_well_formed_contract = {
             "tarball": "http://example.com/invalid_url@/package.tar.gz",
@@ -146,7 +146,7 @@ class TestTarballPackage(unittest.TestCase):
             },
         )
 
-    @mock.patch("dbt.deps.tarball.get_downloads_path")
+    @mock.patch("dvt.deps.tarball.get_downloads_path")
     def test_tarball_pinned_package_contract_with_unrendered(self, mock_get_downloads_path):
         contract = TarballPackage(
             tarball="http://example.com/invalid_url@/package.tar.gz",
@@ -215,9 +215,9 @@ class TestGitPackage(unittest.TestCase):
         self.assertEqual(git_pinned_package_dict, {"git": "git_unrendered", "revision": "0.0.1"})
 
     @mock.patch("shutil.copytree")
-    @mock.patch("dbt.deps.local.system.make_symlink")
-    @mock.patch("dbt.deps.local.LocalPinnedPackage.get_installation_path")
-    @mock.patch("dbt.deps.local.LocalPinnedPackage.resolve_path")
+    @mock.patch("dvt.deps.local.system.make_symlink")
+    @mock.patch("dvt.deps.local.LocalPinnedPackage.get_installation_path")
+    @mock.patch("dvt.deps.local.LocalPinnedPackage.resolve_path")
     def test_deps_install(
         self, mock_resolve_path, mock_get_installation_path, mock_symlink, mock_shutil
     ):
@@ -279,7 +279,7 @@ class TestGitPackage(unittest.TestCase):
         self.assertEqual(c.git, "http://example.com")
         self.assertEqual(c.revisions, ["0.0.1", "0.0.2"])
 
-        with self.assertRaises(dbt.exceptions.DependencyError):
+        with self.assertRaises(dvt.exceptions.DependencyError):
             c.resolved()
 
     def test_default_revision(self):
@@ -301,18 +301,18 @@ class TestGitPackage(unittest.TestCase):
 
 class TestHubPackage(unittest.TestCase):
     def setUp(self):
-        self.patcher = mock.patch("dbt.deps.registry.registry")
+        self.patcher = mock.patch("dvt.deps.registry.registry")
         self.registry = self.patcher.start()
         self.index_cached = self.registry.index_cached
         self.get_compatible_versions = self.registry.get_compatible_versions
         self.package_version = self.registry.package_version
 
         self.index_cached.return_value = [
-            "dbt-labs-test/a",
+            "dvt-labs-test/a",
         ]
         self.get_compatible_versions.return_value = ["0.1.2", "0.1.3", "0.1.4a1"]
         self.package_version.return_value = {
-            "id": "dbt-labs-test/a/0.1.2",
+            "id": "dvt-labs-test/a/0.1.2",
             "name": "a",
             "version": "0.1.2",
             "packages": [],
@@ -331,14 +331,14 @@ class TestHubPackage(unittest.TestCase):
 
     def test_init(self):
         a_contract = RegistryPackage(
-            package="dbt-labs-test/a",
+            package="dvt-labs-test/a",
             version="0.1.2",
         )
-        self.assertEqual(a_contract.package, "dbt-labs-test/a")
+        self.assertEqual(a_contract.package, "dvt-labs-test/a")
         self.assertEqual(a_contract.version, "0.1.2")
 
         a = RegistryUnpinnedPackage.from_contract(a_contract)
-        self.assertEqual(a.package, "dbt-labs-test/a")
+        self.assertEqual(a.package, "dvt-labs-test/a")
         self.assertEqual(
             a.versions,
             [
@@ -349,7 +349,7 @@ class TestHubPackage(unittest.TestCase):
         )
 
         a_pinned = a.resolved()
-        self.assertEqual(a_contract.package, "dbt-labs-test/a")
+        self.assertEqual(a_contract.package, "dvt-labs-test/a")
         self.assertEqual(a_contract.version, "0.1.2")
         self.assertEqual(a_pinned.source_type(), "hub")
 
@@ -360,13 +360,13 @@ class TestHubPackage(unittest.TestCase):
             )
 
     def test_resolve_ok(self):
-        a_contract = RegistryPackage(package="dbt-labs-test/a", version="0.1.2")
-        b_contract = RegistryPackage(package="dbt-labs-test/a", version="0.1.2")
+        a_contract = RegistryPackage(package="dvt-labs-test/a", version="0.1.2")
+        b_contract = RegistryPackage(package="dvt-labs-test/a", version="0.1.2")
         a = RegistryUnpinnedPackage.from_contract(a_contract)
         b = RegistryUnpinnedPackage.from_contract(b_contract)
         c = a.incorporate(b)
 
-        self.assertEqual(c.package, "dbt-labs-test/a")
+        self.assertEqual(c.package, "dvt-labs-test/a")
         self.assertEqual(
             c.versions,
             [
@@ -390,47 +390,47 @@ class TestHubPackage(unittest.TestCase):
         )
 
         c_pinned = c.resolved()
-        self.assertEqual(c_pinned.package, "dbt-labs-test/a")
+        self.assertEqual(c_pinned.package, "dvt-labs-test/a")
         self.assertEqual(c_pinned.version, "0.1.2")
         self.assertEqual(c_pinned.source_type(), "hub")
 
     def test_resolve_missing_package(self):
         a = RegistryUnpinnedPackage.from_contract(
-            RegistryPackage(package="dbt-labs-test/b", version="0.1.2")
+            RegistryPackage(package="dvt-labs-test/b", version="0.1.2")
         )
-        with self.assertRaises(dbt.exceptions.DependencyError) as exc:
+        with self.assertRaises(dvt.exceptions.DependencyError) as exc:
             a.resolved()
 
-        msg = "Package dbt-labs-test/b was not found in the package index"
+        msg = "Package dvt-labs-test/b was not found in the package index"
         self.assertIn(msg, str(exc.exception))
 
     def test_resolve_missing_version(self):
         a = RegistryUnpinnedPackage.from_contract(
-            RegistryPackage(package="dbt-labs-test/a", version="0.1.4")
+            RegistryPackage(package="dvt-labs-test/a", version="0.1.4")
         )
 
-        with self.assertRaises(dbt.exceptions.DependencyError) as exc:
+        with self.assertRaises(dvt.exceptions.DependencyError) as exc:
             a.resolved()
 
         # Check that key parts of the error message are present and avoid spacing failures
         error_msg = str(exc.exception)
         assert (
-            "Could not find a matching compatible version for package dbt-labs-test/a" in error_msg
+            "Could not find a matching compatible version for package dvt-labs-test/a" in error_msg
         )
         assert "Requested range: =0.1.4, =0.1.4" in error_msg
         assert "Compatible versions: ['0.1.2', '0.1.3']" in error_msg
 
     def test_resolve_conflict(self):
-        a_contract = RegistryPackage(package="dbt-labs-test/a", version="0.1.2")
-        b_contract = RegistryPackage(package="dbt-labs-test/a", version="0.1.3")
+        a_contract = RegistryPackage(package="dvt-labs-test/a", version="0.1.2")
+        b_contract = RegistryPackage(package="dvt-labs-test/a", version="0.1.3")
         a = RegistryUnpinnedPackage.from_contract(a_contract)
         b = RegistryUnpinnedPackage.from_contract(b_contract)
         c = a.incorporate(b)
 
-        with self.assertRaises(dbt.exceptions.DependencyError) as exc:
+        with self.assertRaises(dvt.exceptions.DependencyError) as exc:
             c.resolved()
         msg = (
-            "Version error for package dbt-labs-test/a: Could not "
+            "Version error for package dvt-labs-test/a: Could not "
             "find a satisfactory version from options: ['=0.1.2', '=0.1.3']"
         )
         self.assertIn(msg, str(exc.exception))
@@ -440,7 +440,7 @@ class TestHubPackage(unittest.TestCase):
         Test that DependencyError is a DbtRuntimeError (not plain Exception).
 
         Related to issue #12049 - DependencyError MUST inherit from DbtRuntimeError
-        so that the CLI's exception handler (core/dbt/cli/requires.py line 186)
+        so that the CLI's exception handler (core/dvt/cli/requires.py line 186)
         catches it WITHOUT printing Python stack traces.
 
         The CLI has two exception handlers:
@@ -458,19 +458,19 @@ class TestHubPackage(unittest.TestCase):
 
         # This is the critical assertion - DependencyError MUST be a DbtRuntimeError
         self.assertTrue(
-            issubclass(dbt.exceptions.DependencyError, DbtRuntimeError),
+            issubclass(dvt.exceptions.DependencyError, DbtRuntimeError),
             "DependencyError must inherit from DbtRuntimeError (not plain Exception) "
             "to avoid stack traces in CLI output. See issue #12049.",
         )
 
         # Verify this applies to actual raised exceptions from version conflicts
-        a_contract = RegistryPackage(package="dbt-labs-test/a", version="0.1.2")
-        b_contract = RegistryPackage(package="dbt-labs-test/a", version="0.1.3")
+        a_contract = RegistryPackage(package="dvt-labs-test/a", version="0.1.2")
+        b_contract = RegistryPackage(package="dvt-labs-test/a", version="0.1.3")
         a = RegistryUnpinnedPackage.from_contract(a_contract)
         b = RegistryUnpinnedPackage.from_contract(b_contract)
         c = a.incorporate(b)
 
-        with self.assertRaises(dbt.exceptions.DependencyError) as exc:
+        with self.assertRaises(dvt.exceptions.DependencyError) as exc:
             c.resolved()
 
         # The raised exception instance must be a DbtRuntimeError
@@ -482,17 +482,17 @@ class TestHubPackage(unittest.TestCase):
 
         # Verify the error message is still clean and user-friendly
         error_msg = str(exc.exception)
-        self.assertIn("Version error for package dbt-labs-test/a", error_msg)
+        self.assertIn("Version error for package dvt-labs-test/a", error_msg)
         self.assertIn("Could not find a satisfactory version", error_msg)
 
     def test_resolve_ranges(self):
-        a_contract = RegistryPackage(package="dbt-labs-test/a", version="0.1.2")
-        b_contract = RegistryPackage(package="dbt-labs-test/a", version="<0.1.4")
+        a_contract = RegistryPackage(package="dvt-labs-test/a", version="0.1.2")
+        b_contract = RegistryPackage(package="dvt-labs-test/a", version="<0.1.4")
         a = RegistryUnpinnedPackage.from_contract(a_contract)
         b = RegistryUnpinnedPackage.from_contract(b_contract)
         c = a.incorporate(b)
 
-        self.assertEqual(c.package, "dbt-labs-test/a")
+        self.assertEqual(c.package, "dvt-labs-test/a")
         self.assertEqual(
             c.versions,
             [
@@ -516,18 +516,18 @@ class TestHubPackage(unittest.TestCase):
         )
 
         c_pinned = c.resolved()
-        self.assertEqual(c_pinned.package, "dbt-labs-test/a")
+        self.assertEqual(c_pinned.package, "dvt-labs-test/a")
         self.assertEqual(c_pinned.version, "0.1.2")
         self.assertEqual(c_pinned.source_type(), "hub")
 
     def test_resolve_ranges_install_prerelease_default_false(self):
-        a_contract = RegistryPackage(package="dbt-labs-test/a", version=">0.1.2")
-        b_contract = RegistryPackage(package="dbt-labs-test/a", version="<0.1.5")
+        a_contract = RegistryPackage(package="dvt-labs-test/a", version=">0.1.2")
+        b_contract = RegistryPackage(package="dvt-labs-test/a", version="<0.1.5")
         a = RegistryUnpinnedPackage.from_contract(a_contract)
         b = RegistryUnpinnedPackage.from_contract(b_contract)
         c = a.incorporate(b)
 
-        self.assertEqual(c.package, "dbt-labs-test/a")
+        self.assertEqual(c.package, "dvt-labs-test/a")
         self.assertEqual(
             c.versions,
             [
@@ -551,20 +551,20 @@ class TestHubPackage(unittest.TestCase):
         )
 
         c_pinned = c.resolved()
-        self.assertEqual(c_pinned.package, "dbt-labs-test/a")
+        self.assertEqual(c_pinned.package, "dvt-labs-test/a")
         self.assertEqual(c_pinned.version, "0.1.3")
         self.assertEqual(c_pinned.source_type(), "hub")
 
     def test_resolve_ranges_install_prerelease_true(self):
         a_contract = RegistryPackage(
-            package="dbt-labs-test/a", version=">0.1.2", install_prerelease=True
+            package="dvt-labs-test/a", version=">0.1.2", install_prerelease=True
         )
-        b_contract = RegistryPackage(package="dbt-labs-test/a", version="<0.1.5")
+        b_contract = RegistryPackage(package="dvt-labs-test/a", version="<0.1.5")
         a = RegistryUnpinnedPackage.from_contract(a_contract)
         b = RegistryUnpinnedPackage.from_contract(b_contract)
         c = a.incorporate(b)
 
-        self.assertEqual(c.package, "dbt-labs-test/a")
+        self.assertEqual(c.package, "dvt-labs-test/a")
         self.assertEqual(
             c.versions,
             [
@@ -588,20 +588,20 @@ class TestHubPackage(unittest.TestCase):
         )
 
         c_pinned = c.resolved()
-        self.assertEqual(c_pinned.package, "dbt-labs-test/a")
+        self.assertEqual(c_pinned.package, "dvt-labs-test/a")
         self.assertEqual(c_pinned.version, "0.1.4a1")
         self.assertEqual(c_pinned.source_type(), "hub")
 
     def test_get_version_latest_prelease_true(self):
         a_contract = RegistryPackage(
-            package="dbt-labs-test/a", version=">0.1.0", install_prerelease=True
+            package="dvt-labs-test/a", version=">0.1.0", install_prerelease=True
         )
-        b_contract = RegistryPackage(package="dbt-labs-test/a", version="<0.1.4")
+        b_contract = RegistryPackage(package="dvt-labs-test/a", version="<0.1.4")
         a = RegistryUnpinnedPackage.from_contract(a_contract)
         b = RegistryUnpinnedPackage.from_contract(b_contract)
         c = a.incorporate(b)
 
-        self.assertEqual(c.package, "dbt-labs-test/a")
+        self.assertEqual(c.package, "dvt-labs-test/a")
         self.assertEqual(
             c.versions,
             [
@@ -625,21 +625,21 @@ class TestHubPackage(unittest.TestCase):
         )
 
         c_pinned = c.resolved()
-        self.assertEqual(c_pinned.package, "dbt-labs-test/a")
+        self.assertEqual(c_pinned.package, "dvt-labs-test/a")
         self.assertEqual(c_pinned.version, "0.1.3")
         self.assertEqual(c_pinned.get_version_latest(), "0.1.4a1")
         self.assertEqual(c_pinned.source_type(), "hub")
 
     def test_get_version_latest_prelease_false(self):
         a_contract = RegistryPackage(
-            package="dbt-labs-test/a", version=">0.1.0", install_prerelease=False
+            package="dvt-labs-test/a", version=">0.1.0", install_prerelease=False
         )
-        b_contract = RegistryPackage(package="dbt-labs-test/a", version="<0.1.4")
+        b_contract = RegistryPackage(package="dvt-labs-test/a", version="<0.1.4")
         a = RegistryUnpinnedPackage.from_contract(a_contract)
         b = RegistryUnpinnedPackage.from_contract(b_contract)
         c = a.incorporate(b)
 
-        self.assertEqual(c.package, "dbt-labs-test/a")
+        self.assertEqual(c.package, "dvt-labs-test/a")
         self.assertEqual(
             c.versions,
             [
@@ -663,19 +663,19 @@ class TestHubPackage(unittest.TestCase):
         )
 
         c_pinned = c.resolved()
-        self.assertEqual(c_pinned.package, "dbt-labs-test/a")
+        self.assertEqual(c_pinned.package, "dvt-labs-test/a")
         self.assertEqual(c_pinned.version, "0.1.3")
         self.assertEqual(c_pinned.get_version_latest(), "0.1.3")
         self.assertEqual(c_pinned.source_type(), "hub")
 
     def test_get_version_prerelease_explicitly_requested(self):
         a_contract = RegistryPackage(
-            package="dbt-labs-test/a", version="0.1.4a1", install_prerelease=None
+            package="dvt-labs-test/a", version="0.1.4a1", install_prerelease=None
         )
 
         a = RegistryUnpinnedPackage.from_contract(a_contract)
 
-        self.assertEqual(a.package, "dbt-labs-test/a")
+        self.assertEqual(a.package, "dvt-labs-test/a")
         self.assertEqual(
             a.versions,
             [
@@ -691,7 +691,7 @@ class TestHubPackage(unittest.TestCase):
         )
 
         a_pinned = a.resolved()
-        self.assertEqual(a_pinned.package, "dbt-labs-test/a")
+        self.assertEqual(a_pinned.package, "dvt-labs-test/a")
         self.assertEqual(a_pinned.version, "0.1.4a1")
         self.assertEqual(a_pinned.get_version_latest(), "0.1.4a1")
         self.assertEqual(a_pinned.source_type(), "hub")
@@ -734,13 +734,13 @@ class TestPackageSpec(unittest.TestCase):
         next_version.prerelease = None
         require_next_version = ">" + next_version.to_version_string()
 
-        self.patcher = mock.patch("dbt.deps.registry.registry")
+        self.patcher = mock.patch("dvt.deps.registry.registry")
         self.registry = self.patcher.start()
         self.mock_registry = MockRegistry(
             packages={
-                "dbt-labs-test/a": {
+                "dvt-labs-test/a": {
                     "0.1.2": {
-                        "id": "dbt-labs-test/a/0.1.2",
+                        "id": "dvt-labs-test/a/0.1.2",
                         "name": "a",
                         "version": "0.1.2",
                         "packages": [],
@@ -754,7 +754,7 @@ class TestPackageSpec(unittest.TestCase):
                         "newfield": ["another", "value"],
                     },
                     "0.1.3": {
-                        "id": "dbt-labs-test/a/0.1.3",
+                        "id": "dvt-labs-test/a/0.1.3",
                         "name": "a",
                         "version": "0.1.3",
                         "packages": [],
@@ -768,7 +768,7 @@ class TestPackageSpec(unittest.TestCase):
                         "newfield": ["another", "value"],
                     },
                     "0.1.4a1": {
-                        "id": "dbt-labs-test/a/0.1.3a1",
+                        "id": "dvt-labs-test/a/0.1.3a1",
                         "name": "a",
                         "version": "0.1.4a1",
                         "packages": [],
@@ -782,7 +782,7 @@ class TestPackageSpec(unittest.TestCase):
                         "newfield": ["another", "value"],
                     },
                     "0.2.0": {
-                        "id": "dbt-labs-test/a/0.2.0",
+                        "id": "dvt-labs-test/a/0.2.0",
                         "name": "a",
                         "version": "0.2.0",
                         "packages": [],
@@ -798,12 +798,12 @@ class TestPackageSpec(unittest.TestCase):
                         "newfield": ["another", "value"],
                     },
                 },
-                "dbt-labs-test/b": {
+                "dvt-labs-test/b": {
                     "0.2.1": {
-                        "id": "dbt-labs-test/b/0.2.1",
+                        "id": "dvt-labs-test/b/0.2.1",
                         "name": "b",
                         "version": "0.2.1",
-                        "packages": [{"package": "dbt-labs-test/a", "version": ">=0.1.3"}],
+                        "packages": [{"package": "dvt-labs-test/a", "version": ">=0.1.3"}],
                         "_source": {
                             "blahblah": "asdfas",
                         },
@@ -830,8 +830,8 @@ class TestPackageSpec(unittest.TestCase):
         package_config = PackageConfig.from_dict(
             {
                 "packages": [
-                    {"package": "dbt-labs-test/a", "version": ">0.1.2"},
-                    {"package": "dbt-labs-test/b", "version": "0.2.1"},
+                    {"package": "dvt-labs-test/a", "version": ">0.1.2"},
+                    {"package": "dvt-labs-test/b", "version": "0.2.1"},
                 ],
             }
         )
@@ -839,21 +839,21 @@ class TestPackageSpec(unittest.TestCase):
             package_config.packages, mock.MagicMock(project_name="test"), {}
         )
         self.assertEqual(len(resolved), 2)
-        self.assertEqual(resolved[0].name, "dbt-labs-test/a")
+        self.assertEqual(resolved[0].name, "dvt-labs-test/a")
         self.assertEqual(resolved[0].version, "0.1.3")
-        self.assertEqual(resolved[1].name, "dbt-labs-test/b")
+        self.assertEqual(resolved[1].name, "dvt-labs-test/b")
         self.assertEqual(resolved[1].version, "0.2.1")
 
     def test_private_package_raise_error(self):
         package_config = PackageConfig.from_dict(
             {
                 "packages": [
-                    {"private": "dbt-labs-test/a", "subdirectory": "foo-bar"},
+                    {"private": "dvt-labs-test/a", "subdirectory": "foo-bar"},
                 ],
             }
         )
         with self.assertRaisesRegex(
-            dbt.exceptions.DependencyError, "Cannot resolve private package"
+            dvt.exceptions.DependencyError, "Cannot resolve private package"
         ):
             resolve_packages(package_config.packages, mock.MagicMock(project_name="test"), {})
 
@@ -862,36 +862,36 @@ class TestPackageSpec(unittest.TestCase):
             {
                 "packages": [
                     {
-                        "package": "dbt-labs-test/a",
+                        "package": "dvt-labs-test/a",
                         "version": ">0.1.2",
                         "install_prerelease": True,
                     },
-                    {"package": "dbt-labs-test/b", "version": "0.2.1"},
+                    {"package": "dvt-labs-test/b", "version": "0.2.1"},
                 ],
             }
         )
         resolved = resolve_packages(
             package_config.packages, mock.MagicMock(project_name="test"), {}
         )
-        self.assertEqual(resolved[0].name, "dbt-labs-test/a")
+        self.assertEqual(resolved[0].name, "dvt-labs-test/a")
         self.assertEqual(resolved[0].version, "0.1.4a1")
 
     def test_validation_error_when_version_is_missing_from_package_config(self):
-        packages_data = {"packages": [{"package": "dbt-labs-test/b", "version": None}]}
+        packages_data = {"packages": [{"package": "dvt-labs-test/b", "version": None}]}
 
         with self.assertRaises(ValidationError) as exc:
             PackageConfig.validate(data=packages_data)
 
-        msg = "dbt-labs-test/b is missing the version. When installing from the Hub package index, version is a required property"
+        msg = "dvt-labs-test/b is missing the version. When installing from the Hub package index, version is a required property"
         assert msg in str(exc.exception)
 
     def test_validation_error_when_namespace_is_missing_from_package_config(self):
-        packages_data = {"packages": [{"package": "dbt-labs", "version": "1.0.0"}]}
+        packages_data = {"packages": [{"package": "dvt-labs", "version": "1.0.0"}]}
 
         with self.assertRaises(ValidationError) as exc:
             PackageConfig.validate(data=packages_data)
 
-        msg = "dbt-labs was not found in the package index. Packages on the index require a namespace, e.g dbt-labs/dbt_utils"
+        msg = "dvt-labs was not found in the package index. Packages on the index require a namespace, e.g dvt-labs/dbt_utils"
         assert msg in str(exc.exception)
 
 
@@ -911,7 +911,7 @@ class TestCheckForDuplicatePackagesWithBooleans(unittest.TestCase):
         )
 
         # Mock project - we don't need a real one for this test
-        with mock.patch("dbt.task.deps.BaseTask.__init__"):
+        with mock.patch("dvt.task.deps.BaseTask.__init__"):
             task = DepsTask.__new__(DepsTask)
             task.args = mock_args
 
@@ -919,7 +919,7 @@ class TestCheckForDuplicatePackagesWithBooleans(unittest.TestCase):
         packages_yml = {
             "packages": [
                 {
-                    "git": "https://github.com/dbt-labs/dbt-utils.git",
+                    "git": "https://github.com/dvt-labs/dvt-utils.git",
                     "revision": "1.0.0",
                     "warn-unpinned": False,  # This is the problematic boolean
                 },
@@ -941,14 +941,14 @@ class TestCheckForDuplicatePackagesWithBooleans(unittest.TestCase):
             add_package={"name": "audit_helper", "version": "0.9.0"}, source="hub"
         )
 
-        with mock.patch("dbt.task.deps.BaseTask.__init__"):
+        with mock.patch("dvt.task.deps.BaseTask.__init__"):
             task = DepsTask.__new__(DepsTask)
             task.args = mock_args
 
         packages_yml = {
             "packages": [
                 {
-                    "git": "https://github.com/dbt-labs/dbt-utils.git",
+                    "git": "https://github.com/dvt-labs/dvt-utils.git",
                     "revision": "1.0.0",
                     "warn-unpinned": True,  # Another boolean value
                 },
@@ -966,14 +966,14 @@ class TestCheckForDuplicatePackagesWithBooleans(unittest.TestCase):
             add_package={"name": "audit_helper", "version": "0.9.0"}, source="hub"
         )
 
-        with mock.patch("dbt.task.deps.BaseTask.__init__"):
+        with mock.patch("dvt.task.deps.BaseTask.__init__"):
             task = DepsTask.__new__(DepsTask)
             task.args = mock_args
 
         packages_yml = {
             "packages": [
                 {
-                    "git": "https://github.com/dbt-labs/dbt-utils.git",
+                    "git": "https://github.com/dvt-labs/dvt-utils.git",
                     "revision": "1.0.0",
                     "subdirectory": "some_dir",
                     "warn-unpinned": False,
@@ -988,16 +988,16 @@ class TestCheckForDuplicatePackagesWithBooleans(unittest.TestCase):
 
     def test_check_duplicate_detects_git_match(self):
         """Test that duplicate detection still works for git packages"""
-        mock_args = Namespace(add_package={"name": "dbt-utils", "version": "1.1.0"}, source="git")
+        mock_args = Namespace(add_package={"name": "dvt-utils", "version": "1.1.0"}, source="git")
 
-        with mock.patch("dbt.task.deps.BaseTask.__init__"):
+        with mock.patch("dvt.task.deps.BaseTask.__init__"):
             task = DepsTask.__new__(DepsTask)
             task.args = mock_args
 
         packages_yml = {
             "packages": [
                 {
-                    "git": "https://github.com/dbt-labs/dbt-utils.git",
+                    "git": "https://github.com/dvt-labs/dvt-utils.git",
                     "revision": "1.0.0",
                     "warn-unpinned": False,
                 },
@@ -1018,14 +1018,14 @@ class TestCheckForDuplicatePackagesWithBooleans(unittest.TestCase):
             add_package={"name": "another_package", "version": "1.0.0"}, source="hub"
         )
 
-        with mock.patch("dbt.task.deps.BaseTask.__init__"):
+        with mock.patch("dvt.task.deps.BaseTask.__init__"):
             task = DepsTask.__new__(DepsTask)
             task.args = mock_args
 
         packages_yml = {
             "packages": [
                 {
-                    "package": "dbt-labs/dbt_utils",
+                    "package": "dvt-labs/dbt_utils",
                     "version": "1.0.0",
                 },
             ]
@@ -1042,14 +1042,14 @@ class TestCheckForDuplicatePackagesWithBooleans(unittest.TestCase):
             add_package={"name": "audit_helper", "version": "0.9.0"}, source="hub"
         )
 
-        with mock.patch("dbt.task.deps.BaseTask.__init__"):
+        with mock.patch("dvt.task.deps.BaseTask.__init__"):
             task = DepsTask.__new__(DepsTask)
             task.args = mock_args
 
         packages_yml = {
             "packages": [
                 {
-                    "package": "dbt-labs/dbt_utils",
+                    "package": "dvt-labs/dbt_utils",
                     "version": "1.0.0",
                 },
                 {
@@ -1071,17 +1071,17 @@ class TestCheckForDuplicatePackagesWithBooleans(unittest.TestCase):
         # When adding "dbt-labs/dbt_utils", it should match git URLs containing "dbt_utils"
         # Note: The full package name "dbt-labs/dbt_utils" is what gets checked
         mock_args = Namespace(
-            add_package={"name": "dbt-labs/dbt_utils", "version": "1.0.0"}, source="hub"
+            add_package={"name": "dvt-labs/dbt_utils", "version": "1.0.0"}, source="hub"
         )
 
-        with mock.patch("dbt.task.deps.BaseTask.__init__"):
+        with mock.patch("dvt.task.deps.BaseTask.__init__"):
             task = DepsTask.__new__(DepsTask)
             task.args = mock_args
 
         packages_yml = {
             "packages": [
                 {
-                    "git": "https://github.com/dbt-labs/dbt_utils.git",
+                    "git": "https://github.com/dvt-labs/dbt_utils.git",
                     "revision": "1.0.0",
                     "warn-unpinned": False,
                 },
@@ -1101,17 +1101,17 @@ class TestCheckForDuplicatePackagesWithBooleans(unittest.TestCase):
         """Test that all duplicate packages are removed, not just the first one"""
         # When adding "dbt-labs/dbt_utils", it should match any identifier containing "dbt_utils"
         mock_args = Namespace(
-            add_package={"name": "dbt-labs/dbt_utils", "version": "1.0.0"}, source="hub"
+            add_package={"name": "dvt-labs/dbt_utils", "version": "1.0.0"}, source="hub"
         )
 
-        with mock.patch("dbt.task.deps.BaseTask.__init__"):
+        with mock.patch("dvt.task.deps.BaseTask.__init__"):
             task = DepsTask.__new__(DepsTask)
             task.args = mock_args
 
         packages_yml = {
             "packages": [
                 {
-                    "git": "https://github.com/dbt-labs/dbt_utils.git",
+                    "git": "https://github.com/dvt-labs/dbt_utils.git",
                     "revision": "0.9.0",
                 },
                 {
@@ -1119,7 +1119,7 @@ class TestCheckForDuplicatePackagesWithBooleans(unittest.TestCase):
                     "revision": "1.0.0",
                 },
                 {
-                    "package": "dbt-labs/dbt_utils",  # Exact match
+                    "package": "dvt-labs/dbt_utils",  # Exact match
                     "version": "0.8.0",
                 },
             ]
@@ -1135,20 +1135,20 @@ class TestCheckForDuplicatePackagesWithBooleans(unittest.TestCase):
         self.assertIn("dbt_amplitude", result["packages"][0]["git"])
 
     def test_check_duplicate_underscore_hyphen_matching(self):
-        """Test that underscore and hyphen variants match (dbt_utils matches dbt-utils)"""
+        """Test that underscore and hyphen variants match (dbt_utils matches dvt-utils)"""
         # Adding hub package with underscore should match git package with hyphen
         mock_args = Namespace(
-            add_package={"name": "dbt-labs/dbt_utils", "version": "1.0.0"}, source="hub"
+            add_package={"name": "dvt-labs/dbt_utils", "version": "1.0.0"}, source="hub"
         )
 
-        with mock.patch("dbt.task.deps.BaseTask.__init__"):
+        with mock.patch("dvt.task.deps.BaseTask.__init__"):
             task = DepsTask.__new__(DepsTask)
             task.args = mock_args
 
         packages_yml = {
             "packages": [
                 {
-                    "git": "https://github.com/dbt-labs/dbt-utils.git",  # hyphen in URL
+                    "git": "https://github.com/dvt-labs/dvt-utils.git",  # hyphen in URL
                     "revision": "1.0.0",
                 },
             ]
@@ -1162,23 +1162,23 @@ class TestCheckForDuplicatePackagesWithBooleans(unittest.TestCase):
         self.assertEqual(len(result["packages"]), 0)  # Git package removed
 
     def test_check_duplicate_no_partial_word_match(self):
-        """Test that partial word matches are rejected (dbt-core shouldn't match dbt-core-utils)"""
+        """Test that partial word matches are rejected (dvt-core shouldn't match dvt-core-utils)"""
         mock_args = Namespace(
-            add_package={"name": "dbt-labs/dbt-core", "version": "1.0.0"}, source="hub"
+            add_package={"name": "dvt-labs/dvt-core", "version": "1.0.0"}, source="hub"
         )
 
-        with mock.patch("dbt.task.deps.BaseTask.__init__"):
+        with mock.patch("dvt.task.deps.BaseTask.__init__"):
             task = DepsTask.__new__(DepsTask)
             task.args = mock_args
 
         packages_yml = {
             "packages": [
                 {
-                    "git": "https://github.com/dbt-labs/dbt-core-utils.git",
+                    "git": "https://github.com/dvt-labs/dvt-core-utils.git",
                     "revision": "1.0.0",
                 },
                 {
-                    "package": "other-org/my-dbt-core-fork",
+                    "package": "other-org/my-dvt-core-fork",
                     "version": "2.0.0",
                 },
             ]
@@ -1195,25 +1195,25 @@ class TestCheckForDuplicatePackagesWithBooleans(unittest.TestCase):
     def test_check_duplicate_exact_word_boundary_match(self):
         """Test that exact matches with word boundaries work correctly"""
         mock_args = Namespace(
-            add_package={"name": "dbt-labs/dbt-utils", "version": "1.0.0"}, source="hub"
+            add_package={"name": "dvt-labs/dvt-utils", "version": "1.0.0"}, source="hub"
         )
 
-        with mock.patch("dbt.task.deps.BaseTask.__init__"):
+        with mock.patch("dvt.task.deps.BaseTask.__init__"):
             task = DepsTask.__new__(DepsTask)
             task.args = mock_args
 
         packages_yml = {
             "packages": [
                 {
-                    "git": "https://github.com/dbt-labs/dbt-utils.git",  # Should match
+                    "git": "https://github.com/dvt-labs/dvt-utils.git",  # Should match
                     "revision": "1.0.0",
                 },
                 {
-                    "git": "https://github.com/other/dbt-utils-extra.git",  # Should NOT match
+                    "git": "https://github.com/other/dvt-utils-extra.git",  # Should NOT match
                     "revision": "2.0.0",
                 },
                 {
-                    "package": "dbt-labs/dbt_utils",  # Should match (underscore variant)
+                    "package": "dvt-labs/dbt_utils",  # Should match (underscore variant)
                     "version": "0.9.0",
                 },
             ]
@@ -1225,4 +1225,4 @@ class TestCheckForDuplicatePackagesWithBooleans(unittest.TestCase):
         # Only dbt-utils-extra should remain
         self.assertIsNotNone(result)
         self.assertEqual(len(result["packages"]), 1)
-        self.assertIn("dbt-utils-extra", result["packages"][0]["git"])
+        self.assertIn("dvt-utils-extra", result["packages"][0]["git"])

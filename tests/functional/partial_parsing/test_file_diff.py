@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from dbt.tests.util import run_dbt, write_artifact, write_file
+from dvt.tests.util import run_dbt, write_artifact, write_file
 from tests.functional.partial_parsing.fixtures import model_one_sql, model_two_sql
 
 first_file_diff = {

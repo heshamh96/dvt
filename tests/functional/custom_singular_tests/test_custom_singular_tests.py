@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from dbt.tests.util import run_dbt
+from dvt.tests.util import run_dbt
 
 # from `test/integration/009_data_test`
 

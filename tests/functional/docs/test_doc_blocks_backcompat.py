@@ -3,7 +3,7 @@ import os
 
 import pytest
 
-from dbt.tests.util import run_dbt
+from dvt.tests.util import run_dbt
 
 schema_yml = """
 models:

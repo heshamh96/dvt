@@ -2,13 +2,13 @@ from typing import Dict
 
 import pytest
 
-from dbt import deprecations
-from dbt.cli.main import dbtRunner
-from dbt.events.types import (
+from dvt import deprecations
+from dvt.cli.main import dbtRunner
+from dvt.events.types import (
     ResourceNamesWithSpacesDeprecation,
     SpacesInResourceNameDeprecation,
 )
-from dbt.tests.util import update_config_file
+from dvt.tests.util import update_config_file
 from dbt_common.events.base_types import EventLevel
 from dbt_common.events.event_catcher import EventCatcher
 

@@ -6,8 +6,8 @@ import pytest
 import pytz
 from click import BadParameter, Option
 
-from dbt.cli.option_types import YAML, SampleType
-from dbt.event_time.sample_window import SampleWindow
+from dvt.cli.option_types import YAML, SampleType
+from dvt.event_time.sample_window import SampleWindow
 
 
 class TestYAML:

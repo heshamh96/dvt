@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, patch
 
-from dbt.flags import get_flags
-from dbt.task.clone import CloneTask
+from dvt.flags import get_flags
+from dvt.task.clone import CloneTask
 
 
 def test_clone_task_not_preserve_edges():

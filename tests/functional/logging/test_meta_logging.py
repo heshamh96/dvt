@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from dbt.tests.util import read_file, run_dbt
+from dvt.tests.util import read_file, run_dbt
 
 model1 = "select 1 as fun"
 model2 = '{{ config(meta={"owners": ["team1", "team2"]})}} select 1 as fun'
@@ -18,7 +18,7 @@ def run_and_capture_node_info_logs(logs_dir):
     run_dbt(["--log-format=json", "run"])
 
     # get log file
-    log_file = read_file(logs_dir, "dbt.log")
+    log_file = read_file(logs_dir, "dvt.log")
     assert log_file
 
     for log_line in log_file.split("\n"):

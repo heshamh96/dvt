@@ -2,7 +2,7 @@ from typing import Any, Dict, List
 
 import pytest
 
-from dbt.artifacts.resources import (
+from dvt.artifacts.resources import (
     ExposureType,
     MacroDependsOn,
     MetricInputMeasure,
@@ -17,17 +17,17 @@ from dbt.artifacts.resources import (
     WhereFilter,
     WhereFilterIntersection,
 )
-from dbt.artifacts.resources.types import ModelLanguage
-from dbt.artifacts.resources.v1.model import ModelConfig
-from dbt.artifacts.resources.v1.semantic_model import (
+from dvt.artifacts.resources.types import ModelLanguage
+from dvt.artifacts.resources.v1.model import ModelConfig
+from dvt.artifacts.resources.v1.semantic_model import (
     Defaults,
     Dimension,
     DimensionTypeParams,
     Measure,
 )
-from dbt.contracts.files import AnySourceFile, FileHash
-from dbt.contracts.graph.manifest import Manifest, ManifestMetadata
-from dbt.contracts.graph.nodes import (
+from dvt.contracts.files import AnySourceFile, FileHash
+from dvt.contracts.graph.manifest import Manifest, ManifestMetadata
+from dvt.contracts.graph.nodes import (
     AccessType,
     DependsOn,
     Documentation,
@@ -48,8 +48,8 @@ from dbt.contracts.graph.nodes import (
     SourceDefinition,
     UnitTestDefinition,
 )
-from dbt.contracts.graph.unparsed import UnitTestInputFixture, UnitTestOutputFixture
-from dbt.node_types import NodeType
+from dvt.contracts.graph.unparsed import UnitTestInputFixture, UnitTestOutputFixture
+from dvt.node_types import NodeType
 from dbt_semantic_interfaces.type_enums import (
     AggregationType,
     DimensionType,
@@ -117,7 +117,7 @@ def make_model(
     return ModelNode(
         language="sql",
         raw_code=code,
-        database="dbt",
+        database="dvt",
         schema="dbt_schema",
         alias=alias,
         name=name,
@@ -161,7 +161,7 @@ def make_seed(
 
     fqn = [pkg] + fqn_extras + [name]
     return SeedNode(
-        database="dbt",
+        database="dvt",
         schema="dbt_schema",
         alias=alias,
         name=name,
@@ -193,7 +193,7 @@ def make_source(
 
     return SourceDefinition(
         fqn=fqn,
-        database="dbt",
+        database="dvt",
         schema="dbt_schema",
         unique_id=f"source.{pkg}.{source_name}.{table_name}",
         package_name=pkg,
@@ -284,7 +284,7 @@ def make_generic_test(
         macro_depends = f"macro.{namespace}.test_{test_name}"
     elif len(name_parts) == 1:
         namespace = None
-        macro_depends = f"macro.dbt.test_{test_name}"
+        macro_depends = f"macro.dvt.test_{test_name}"
     else:
         assert False, f"invalid test name: {test_name}"
 
@@ -316,7 +316,7 @@ def make_generic_test(
             name=test_name,
             kwargs=kwargs,
         ),
-        database="dbt",
+        database="dvt",
         schema="dbt_postgres",
         name=node_name,
         alias=node_name,
@@ -392,7 +392,7 @@ def make_singular_test(
     return SingularTestNode(
         language="sql",
         raw_code=sql,
-        database="dbt",
+        database="dvt",
         schema="dbt_schema",
         name=name,
         alias=name,
@@ -486,7 +486,7 @@ def make_semantic_model(
         model=model,
         node_relation=NodeRelation(
             alias=model.alias,
-            schema_name="dbt",
+            schema_name="dvt",
             relation_name=model.name,
         ),
         package_name=pkg,
@@ -568,32 +568,32 @@ def make_source_snapshot(pkg: str, name: str, source: SourceDefinition, path=Non
 @pytest.fixture
 def macro_test_unique() -> Macro:
     return make_macro(
-        "dbt", "test_unique", "blablabla", depends_on_macros=["macro.dbt.default__test_unique"]
+        "dvt", "test_unique", "blablabla", depends_on_macros=["macro.dvt.default__test_unique"]
     )
 
 
 @pytest.fixture
 def macro_default_test_unique() -> Macro:
-    return make_macro("dbt", "default__test_unique", "blablabla")
+    return make_macro("dvt", "default__test_unique", "blablabla")
 
 
 @pytest.fixture
 def macro_test_not_null() -> Macro:
     return make_macro(
-        "dbt", "test_not_null", "blablabla", depends_on_macros=["macro.dbt.default__test_not_null"]
+        "dvt", "test_not_null", "blablabla", depends_on_macros=["macro.dvt.default__test_not_null"]
     )
 
 
 @pytest.fixture
 def macro_materialization_table_default() -> Macro:
-    macro = make_macro("dbt", "materialization_table_default", "SELECT 1")
+    macro = make_macro("dvt", "materialization_table_default", "SELECT 1")
     macro.supported_languages = [ModelLanguage.sql]
     return macro
 
 
 @pytest.fixture
 def macro_default_test_not_null() -> Macro:
-    return make_macro("dbt", "default__test_not_null", "blabla")
+    return make_macro("dvt", "default__test_not_null", "blabla")
 
 
 @pytest.fixture
@@ -940,7 +940,7 @@ def semantic_model(table_model) -> SemanticModel:
 def metricflow_time_spine_model() -> ModelNode:
     return ModelNode(
         name="metricflow_time_spine",
-        database="dbt",
+        database="dvt",
         schema="analytics",
         alias="events",
         resource_type=NodeType.Model,

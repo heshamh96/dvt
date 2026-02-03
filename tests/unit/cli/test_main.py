@@ -1,8 +1,8 @@
 import click
 
-from dbt.cli.flags import command_args
-from dbt.cli.main import cli
-from dbt.cli.types import Command
+from dvt.cli.flags import command_args
+from dvt.cli.main import cli
+from dvt.cli.types import Command
 
 
 class TestCLI:

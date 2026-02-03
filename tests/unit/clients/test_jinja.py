@@ -3,7 +3,7 @@ from contextlib import contextmanager
 import pytest
 import yaml
 
-from dbt.clients.jinja import get_rendered, get_template
+from dvt.clients.jinja import get_rendered, get_template
 from dbt_common.exceptions import JinjaRenderingError
 
 

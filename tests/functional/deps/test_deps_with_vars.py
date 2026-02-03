@@ -1,18 +1,18 @@
-"""Test that dbt deps works when vars are used in dbt_project.yml without defaults.
+"""Test that dvt deps works when vars are used in dbt_project.yml without defaults.
 
 The key behavior being tested:
-- dbt deps uses lenient mode (require_vars=False) and succeeds even with missing vars
-- dbt run/compile/build/debug use strict mode (require_vars=True) and show the right error messages
+- dvt deps uses lenient mode (require_vars=False) and succeeds even with missing vars
+- dvt run/compile/build/debug use strict mode (require_vars=True) and show the right error messages
 
 Expected behavior from reviewer's scenario:
-1. dbt deps succeeds (doesn't need vars)
-2. dbt run fails with error "Required var 'X' not found"
-3. dbt run --vars succeeds when vars provided
+1. dvt deps succeeds (doesn't need vars)
+2. dvt run fails with error "Required var 'X' not found"
+3. dvt run --vars succeeds when vars provided
 """
 
 import pytest
 
-from dbt.tests.util import run_dbt, update_config_file
+from dvt.tests.util import run_dbt, update_config_file
 from dbt_common.exceptions import CompilationError
 
 # Simple model for testing
@@ -38,7 +38,7 @@ class VarTestingBase:
 
 # Test 1: Happy path - deps with defaults
 class TestDepsSucceedsWithVarDefaults(VarTestingBase):
-    """Test that dbt deps succeeds when vars have default values"""
+    """Test that dvt deps succeeds when vars have default values"""
 
     @pytest.fixture(scope="class")
     def project_config_update(self):
@@ -54,7 +54,7 @@ class TestDepsSucceedsWithVarDefaults(VarTestingBase):
 
 # Test 2: Happy path - run with defaults
 class TestRunSucceedsWithVarDefaults(VarTestingBase):
-    """Test that dbt run succeeds when vars have default values"""
+    """Test that dvt run succeeds when vars have default values"""
 
     def test_run_succeeds(self, project):
         # run: dbt run
@@ -65,7 +65,7 @@ class TestRunSucceedsWithVarDefaults(VarTestingBase):
 
 # Test 3: Happy path - run with explicit vars
 class TestRunSucceedsWithExplicitVars(VarTestingBase):
-    """Test that dbt run succeeds when vars provided via --vars"""
+    """Test that dvt run succeeds when vars provided via --vars"""
 
     def test_run_succeeds_with_vars(self, project):
         # run: dbt run --vars '{"my_var": "table"}'
@@ -76,7 +76,7 @@ class TestRunSucceedsWithExplicitVars(VarTestingBase):
 
 # Test 4: Run fails with the right error message
 class TestRunFailsWithMissingVar(VarTestingBase):
-    """Test dbt run fails with right error"""
+    """Test dvt run fails with right error"""
 
     def test_run_fails_with_error(self, project):
         # IN TEST: dynamically remove default
@@ -102,7 +102,7 @@ class TestRunFailsWithMissingVar(VarTestingBase):
 
 # Test 5: compile also fails with the correct error
 class TestCompileFailsWithMissingVar(VarTestingBase):
-    """Test dbt compile fails with error for missing vars"""
+    """Test dvt compile fails with error for missing vars"""
 
     @pytest.fixture(scope="class")
     def project_config_update(self):
@@ -130,7 +130,7 @@ class TestCompileFailsWithMissingVar(VarTestingBase):
 
 # Test 6: deps succeeds even when var missing
 class TestDepsSucceedsEvenWhenVarMissing(VarTestingBase):
-    """Test dbt deps succeeds even when var has no default"""
+    """Test dvt deps succeeds even when var has no default"""
 
     def test_deps_still_succeeds(self, project):
         # run: dbt deps (succeeds)
@@ -160,7 +160,7 @@ class TestDepsSucceedsEvenWhenVarMissing(VarTestingBase):
 
 # Test 7: build also fails
 class TestBuildFailsWithMissingVar(VarTestingBase):
-    """Test dbt build fails with error for missing vars"""
+    """Test dvt build fails with error for missing vars"""
 
     @pytest.fixture(scope="class")
     def project_config_update(self):
@@ -188,7 +188,7 @@ class TestBuildFailsWithMissingVar(VarTestingBase):
 
 # Test 8: debug with defaults
 class TestDebugSucceedsWithVarDefaults(VarTestingBase):
-    """Test dbt debug succeeds when vars have defaults (no regression)"""
+    """Test dvt debug succeeds when vars have defaults (no regression)"""
 
     def test_debug_succeeds(self, project):
         # run: dbt debug
@@ -198,7 +198,7 @@ class TestDebugSucceedsWithVarDefaults(VarTestingBase):
 
 # Test 9: debug fails like run/compile (strict mode)
 class TestDebugFailsWithMissingVar(VarTestingBase):
-    """Test dbt debug fails with error (strict mode like run/compile)"""
+    """Test dvt debug fails with error (strict mode like run/compile)"""
 
     def test_debug_fails_with_error(self, project):
         # First verify debug works with default

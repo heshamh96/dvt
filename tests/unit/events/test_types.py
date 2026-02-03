@@ -1,8 +1,8 @@
 from dbtlabs.proto.public.v1.fields import core_types_pb2
 from google.protobuf.json_format import MessageToDict
 
-from dbt.adapters.events.types import PluginLoadError, RollbackFailed
-from dbt.events.types import (
+from dvt.adapters.events.types import PluginLoadError, RollbackFailed
+from dvt.events.types import (
     LogNodeResult,
     LogStartLine,
     LogTestResult,
@@ -10,7 +10,7 @@ from dbt.events.types import (
     MainReportArgs,
     MainReportVersion,
 )
-from dbt.version import installed
+from dvt.version import installed
 from dbt_common.events import types_pb2
 from dbt_common.events.base_types import EventLevel, msg_from_base_event
 from dbt_common.events.functions import (
@@ -42,7 +42,7 @@ def test_events():
     msg_dict = msg_to_dict(msg)
     msg_json = msg_to_json(msg)
     serialized = msg.SerializeToString()
-    assert "Running with dbt=" in str(serialized)
+    assert "Running with dvt=" in str(serialized)
     assert set(msg_dict.keys()) == {"info", "data"}
     assert set(msg_dict["data"].keys()) == {"version", "log_version"}
     assert set(msg_dict["info"].keys()) == info_keys

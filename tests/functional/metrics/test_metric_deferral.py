@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from dbt.tests.util import copy_file, run_dbt, write_file
+from dvt.tests.util import copy_file, run_dbt, write_file
 from tests.functional.metrics.fixtures import (
     metrics_1_yml,
     metrics_2_yml,
@@ -34,7 +34,7 @@ class TestMetricDeferral:
                         "port": int(os.getenv("POSTGRES_TEST_PORT", 5432)),
                         "user": os.getenv("POSTGRES_TEST_USER", "root"),
                         "pass": os.getenv("POSTGRES_TEST_PASS", "password"),
-                        "dbname": os.getenv("POSTGRES_TEST_DATABASE", "dbt"),
+                        "dbname": os.getenv("POSTGRES_TEST_DATABASE", "dvt"),
                         "schema": unique_schema,
                     },
                     "prod": {
@@ -44,7 +44,7 @@ class TestMetricDeferral:
                         "port": int(os.getenv("POSTGRES_TEST_PORT", 5432)),
                         "user": os.getenv("POSTGRES_TEST_USER", "root"),
                         "pass": os.getenv("POSTGRES_TEST_PASS", "password"),
-                        "dbname": os.getenv("POSTGRES_TEST_DATABASE", "dbt"),
+                        "dbname": os.getenv("POSTGRES_TEST_DATABASE", "dvt"),
                         "schema": unique_schema + "_prod",
                     },
                 },

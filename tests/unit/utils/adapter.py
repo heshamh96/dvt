@@ -4,14 +4,14 @@ from unittest.mock import MagicMock
 import pytest
 from pytest_mock import MockerFixture
 
-from dbt.adapters.factory import get_adapter, register_adapter, reset_adapters
-from dbt.adapters.postgres import PostgresAdapter
-from dbt.adapters.sql import SQLConnectionManager
-from dbt.config.runtime import RuntimeConfig
-from dbt.context.providers import generate_runtime_macro_context
-from dbt.contracts.graph.manifest import ManifestStateCheck
-from dbt.mp_context import get_mp_context
-from dbt.parser.manifest import ManifestLoader
+from dvt.adapters.factory import get_adapter, register_adapter, reset_adapters
+from dvt.adapters.postgres import PostgresAdapter
+from dvt.adapters.sql import SQLConnectionManager
+from dvt.config.runtime import RuntimeConfig
+from dvt.context.providers import generate_runtime_macro_context
+from dvt.contracts.graph.manifest import ManifestStateCheck
+from dvt.mp_context import get_mp_context
+from dvt.parser.manifest import ManifestLoader
 
 if sys.version_info < (3, 9):
     from typing import Generator
@@ -42,7 +42,7 @@ def postgres_adapter(
     adapter = get_adapter(runtime_config)
     assert isinstance(adapter, PostgresAdapter)
 
-    mocker.patch("dbt.parser.manifest.ManifestLoader.build_manifest_state_check").return_value = (
+    mocker.patch("dvt.parser.manifest.ManifestLoader.build_manifest_state_check").return_value = (
         ManifestStateCheck()
     )
     manifest = ManifestLoader.load_macros(

@@ -1,12 +1,12 @@
 import pytest
 
-from dbt.tests.util import run_dbt
+from dvt.tests.util import run_dbt
 
 my_model_with_macros = """
 SELECT
 {{ current_timestamp() }} as global_current_timestamp,
-{{ dbt.current_timestamp() }} as dbt_current_timestamp,
-{{ dbt.type_int() }} as dbt_type_int,
+{{ dvt.current_timestamp() }} as dbt_current_timestamp,
+{{ dvt.type_int() }} as dbt_type_int,
 {{ my_macro() }} as user_defined_my_macro,
 {{ dbt_utils.generate_surrogate_key() }} as package_defined_macro
 """
@@ -18,7 +18,7 @@ unit_tests:
     overrides:
       macros:
         current_timestamp: "'current_timestamp_override'"
-        dbt.type_int: "'dbt_macro_override'"
+        dvt.type_int: "'dbt_macro_override'"
         my_macro: "'global_user_defined_macro_override'"
         dbt_utils.generate_surrogate_key: "'package_macro_override'"
     given: []
@@ -44,7 +44,7 @@ class TestUnitTestingMacroOverrides:
         return {
             "packages": [
                 {
-                    "package": "dbt-labs/dbt_utils",
+                    "package": "dvt-labs/dbt_utils",
                     "version": "1.1.1",
                 },
             ]

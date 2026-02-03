@@ -1,7 +1,7 @@
 import agate
 import pytest
 
-from dbt.task.test import list_rows_from_table
+from dvt.task.test import list_rows_from_table
 
 
 class TestListRowsFromTable:

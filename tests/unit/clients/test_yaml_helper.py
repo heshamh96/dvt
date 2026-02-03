@@ -1,4 +1,4 @@
-from dbt.clients.checked_load import checked_load
+from dvt.clients.checked_load import checked_load
 
 no_dupe__yml = """
 a:
@@ -49,7 +49,7 @@ version: 2
 models:
   - name: my_first_dbt_model
     description: &description
-      "A starter dbt model"
+      "A starter dvt model"
     columns:
       - &copy_me
         name: id
@@ -71,7 +71,7 @@ version: 2
 models:
   - name: my_first_dbt_model
     description: &description
-      "A starter dbt model"
+      "A starter dvt model"
     columns:
       - &copy_me
         name: id

@@ -2,7 +2,7 @@ import re
 
 import pytest
 
-from dbt.tests.util import run_dbt_and_capture
+from dvt.tests.util import run_dbt_and_capture
 
 models__do_nothing_then_fail_sql = """
 select 1,

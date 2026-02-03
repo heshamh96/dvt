@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from dbt.tests.util import run_dbt
+from dvt.tests.util import run_dbt
 
 models__one_sql = """
 select 1

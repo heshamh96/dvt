@@ -3,18 +3,18 @@ from unittest import mock
 
 import pytest
 
-from dbt.adapters.factory import FACTORY, reset_adapters
-from dbt.cli.exceptions import DbtUsageException
-from dbt.cli.main import dbtRunner
-from dbt.exceptions import DbtProjectError
-from dbt.tests.util import read_file, write_file
-from dbt.version import __version__ as dbt_version
+from dvt.adapters.factory import FACTORY, reset_adapters
+from dvt.cli.exceptions import DbtUsageException
+from dvt.cli.main import dbtRunner
+from dvt.exceptions import DbtProjectError
+from dvt.tests.util import read_file, write_file
+from dvt.version import __version__ as dbt_version
 from dbt_common.events.contextvars import get_node_info
 
 
 class TestDbtRunner:
     @pytest.fixture
-    def dbt(self) -> dbtRunner:
+    def dvt(self) -> dbtRunner:
         return dbtRunner()
 
     @pytest.fixture(scope="class")
@@ -23,36 +23,36 @@ class TestDbtRunner:
             "models.sql": "select 1 as id",
         }
 
-    def test_group_invalid_option(self, dbt: dbtRunner) -> None:
-        res = dbt.invoke(["--invalid-option"])
+    def test_group_invalid_option(self, dvt: dbtRunner) -> None:
+        res = dvt.invoke(["--invalid-option"])
         assert type(res.exception) == DbtUsageException
 
-    def test_command_invalid_option(self, dbt: dbtRunner) -> None:
-        res = dbt.invoke(["deps", "--invalid-option"])
+    def test_command_invalid_option(self, dvt: dbtRunner) -> None:
+        res = dvt.invoke(["deps", "--invalid-option"])
         assert type(res.exception) == DbtUsageException
 
-    def test_command_mutually_exclusive_option(self, dbt: dbtRunner) -> None:
-        res = dbt.invoke(["--warn-error", "--warn-error-options", '{"error": "all"}', "deps"])
+    def test_command_mutually_exclusive_option(self, dvt: dbtRunner) -> None:
+        res = dvt.invoke(["--warn-error", "--warn-error-options", '{"error": "all"}', "deps"])
         assert type(res.exception) == DbtUsageException
-        res = dbt.invoke(["deps", "--warn-error", "--warn-error-options", '{"error": "all"}'])
-        assert type(res.exception) == DbtUsageException
-
-        res = dbt.invoke(["compile", "--select", "models", "--inline", "select 1 as id"])
+        res = dvt.invoke(["deps", "--warn-error", "--warn-error-options", '{"error": "all"}'])
         assert type(res.exception) == DbtUsageException
 
-    def test_invalid_command(self, dbt: dbtRunner) -> None:
-        res = dbt.invoke(["invalid-command"])
+        res = dvt.invoke(["compile", "--select", "models", "--inline", "select 1 as id"])
         assert type(res.exception) == DbtUsageException
 
-    def test_invoke_version(self, dbt: dbtRunner) -> None:
-        dbt.invoke(["--version"])
+    def test_invalid_command(self, dvt: dbtRunner) -> None:
+        res = dvt.invoke(["invalid-command"])
+        assert type(res.exception) == DbtUsageException
+
+    def test_invoke_version(self, dvt: dbtRunner) -> None:
+        dvt.invoke(["--version"])
 
     def test_callbacks(self) -> None:
         mock_callback = mock.MagicMock()
-        dbt = dbtRunner(callbacks=[mock_callback])
+        dvt = dbtRunner(callbacks=[mock_callback])
         # the `debug` command is one of the few commands wherein you don't need
         # to have a project to run it and it will emit events
-        dbt.invoke(["debug"])
+        dvt.invoke(["debug"])
         mock_callback.assert_called()
 
     def test_callback_node_finished_exceptions_are_raised(self, project):
@@ -62,8 +62,8 @@ class TestDbtRunner:
             if event.info.name == "NodeFinished":
                 raise Exception("This should let continue the execution registering the failure")
 
-        dbt = dbtRunner(callbacks=[callback_with_exception])
-        result = dbt.invoke(["run", "--select", "models"])
+        dvt = dbtRunner(callbacks=[callback_with_exception])
+        result = dvt.invoke(["run", "--select", "models"])
 
         assert result is not None
         assert (
@@ -71,8 +71,8 @@ class TestDbtRunner:
             == "Exception on worker thread. This should let continue the execution registering the failure"
         )
 
-    def test_invoke_kwargs(self, project, dbt):
-        res = dbt.invoke(
+    def test_invoke_kwargs(self, project, dvt):
+        res = dvt.invoke(
             ["run"],
             log_format="json",
             log_path="some_random_path",
@@ -86,25 +86,25 @@ class TestDbtRunner:
         assert res.result.args["profile_name"] == "some_random_profile_name"
         assert res.result.args["target_dir"] == "some_random_target_dir"
 
-    def test_invoke_kwargs_project_dir(self, project, dbt):
-        res = dbt.invoke(["run"], project_dir="some_random_project_dir")
+    def test_invoke_kwargs_project_dir(self, project, dvt):
+        res = dvt.invoke(["run"], project_dir="some_random_project_dir")
         assert type(res.exception) == DbtProjectError
 
         msg = "No dbt_project.yml found at expected path some_random_project_dir"
         assert msg in res.exception.msg
 
-    def test_invoke_kwargs_profiles_dir(self, project, dbt):
-        res = dbt.invoke(["run"], profiles_dir="some_random_profiles_dir")
+    def test_invoke_kwargs_profiles_dir(self, project, dvt):
+        res = dvt.invoke(["run"], profiles_dir="some_random_profiles_dir")
         assert type(res.exception) == DbtProjectError
         msg = "Could not find profile named 'test'"
         assert msg in res.exception.msg
 
-    def test_invoke_kwargs_and_flags(self, project, dbt):
-        res = dbt.invoke(["--log-format=text", "run"], log_format="json")
+    def test_invoke_kwargs_and_flags(self, project, dvt):
+        res = dvt.invoke(["--log-format=text", "run"], log_format="json")
         assert res.result.args["log_format"] == "json"
 
-    def test_pass_in_manifest(self, project, dbt):
-        result = dbt.invoke(["parse"])
+    def test_pass_in_manifest(self, project, dvt):
+        result = dvt.invoke(["parse"])
         manifest = result.result
 
         reset_adapters()
@@ -114,23 +114,23 @@ class TestDbtRunner:
         assert result.success
         assert len(FACTORY.adapters) == 1
 
-    def test_pass_in_args_variable(self, dbt):
+    def test_pass_in_args_variable(self, dvt):
         args = ["--log-format", "text"]
         args_before = args.copy()
-        dbt.invoke(args)
+        dvt.invoke(args)
         assert args == args_before
 
-    def test_directory_does_not_change(self, project, dbt: dbtRunner) -> None:
+    def test_directory_does_not_change(self, project, dvt: dbtRunner) -> None:
         project_dir = os.getcwd()  # The directory where dbt_project.yml exists.
         os.chdir("../")
-        cmd_execution_dir = os.getcwd()  # The directory where dbt command will be run
+        cmd_execution_dir = os.getcwd()  # The directory where dvt command will be run
 
         commands = ["init", "deps", "clean"]
         for command in commands:
             args = [command, "--project-dir", project_dir]
             if command == "init":
                 args.append("--skip-profile-setup")
-            res = dbt.invoke(args)
+            res = dvt.invoke(args)
             after_dir = os.getcwd()
             assert res.success is True
             assert cmd_execution_dir == after_dir
@@ -153,14 +153,14 @@ class TestDbtRunnerQueryComments:
         }
 
     def test_query_comment_saved_manifest(self, project, logs_dir):
-        dbt = dbtRunner()
-        dbt.invoke(["build", "--select", "models"])
-        result = dbt.invoke(["parse"])
-        write_file("", logs_dir, "dbt.log")
+        dvt = dbtRunner()
+        dvt.invoke(["build", "--select", "models"])
+        result = dvt.invoke(["parse"])
+        write_file("", logs_dir, "dvt.log")
         # pass in manifest from parse command
-        dbt = dbtRunner(result.result)
-        dbt.invoke(["build", "--select", "models"])
-        log_file = read_file(logs_dir, "dbt.log")
+        dvt = dbtRunner(result.result)
+        dvt.invoke(["build", "--select", "models"])
+        log_file = read_file(logs_dir, "dvt.log")
         assert f"comment: {dbt_version}" in log_file
 
 
@@ -176,6 +176,6 @@ class TestDbtRunnerHooks:
         return {"on-run-end": ["select 1;"]}
 
     def test_node_info_non_persistence(self, project):
-        dbt = dbtRunner()
-        dbt.invoke(["run", "--select", "models"])
+        dvt = dbtRunner()
+        dvt.invoke(["run", "--select", "models"])
         assert get_node_info() == {}

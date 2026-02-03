@@ -1,4 +1,4 @@
-from dbt.contracts.graph.node_args import ModelNodeArgs
+from dvt.contracts.graph.node_args import ModelNodeArgs
 
 
 class TestModelNodeArgs:

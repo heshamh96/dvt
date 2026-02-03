@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from dbt.tests.util import get_manifest, run_dbt, run_dbt_and_capture, write_file
+from dvt.tests.util import get_manifest, run_dbt, run_dbt_and_capture, write_file
 from tests.functional.data_test_patch.fixtures import (
     tests__doc_block_md,
     tests__invalid_name_schema_yml,

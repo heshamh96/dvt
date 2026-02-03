@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.util import run_dbt
+from dvt.tests.util import run_dbt
 from tests.functional.snapshots.fixtures import (
     macros__test_no_overlaps_sql,
     models__ref_snapshot_sql,

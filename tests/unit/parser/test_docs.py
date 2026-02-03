@@ -2,13 +2,13 @@ import os
 import unittest
 from argparse import Namespace
 
-from dbt.contracts.files import FileHash, FilePath, SourceFile
-from dbt.contracts.graph.manifest import Manifest
-from dbt.contracts.graph.nodes import Documentation
-from dbt.flags import set_from_args
-from dbt.node_types import NodeType
-from dbt.parser import docs
-from dbt.parser.search import FileBlock
+from dvt.contracts.files import FileHash, FilePath, SourceFile
+from dvt.contracts.graph.manifest import Manifest
+from dvt.contracts.graph.nodes import Documentation
+from dvt.flags import set_from_args
+from dvt.node_types import NodeType
+from dvt.parser import docs
+from dvt.parser.search import FileBlock
 from tests.unit.utils import config_from_parts_or_dicts
 
 set_from_args(Namespace(WARN_ERROR=False), None)

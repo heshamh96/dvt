@@ -1,9 +1,9 @@
 import pytest
 import yaml
 
-from dbt.exceptions import CompilationError, DbtRuntimeError
-from dbt.tests.fixtures.project import write_project_files
-from dbt.tests.util import (
+from dvt.exceptions import CompilationError, DbtRuntimeError
+from dvt.tests.fixtures.project import write_project_files
+from dvt.tests.util import (
     get_artifact,
     get_logging_events,
     run_dbt,

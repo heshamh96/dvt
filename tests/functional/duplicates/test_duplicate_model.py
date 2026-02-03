@@ -1,8 +1,8 @@
 import pytest
 
-from dbt.exceptions import AmbiguousAliasError, CompilationError
-from dbt.tests.fixtures.project import write_project_files
-from dbt.tests.util import get_manifest, run_dbt
+from dvt.exceptions import AmbiguousAliasError, CompilationError
+from dvt.tests.fixtures.project import write_project_files
+from dvt.tests.util import get_manifest, run_dbt
 
 disabled_model_sql = """
 {{
@@ -72,7 +72,7 @@ class TestDuplicateModelEnabled:
         }
 
     def test_duplicate_model_enabled(self, project):
-        message = "dbt found two models with the name"
+        message = "dvt found two models with the name"
         with pytest.raises(CompilationError) as exc:
             run_dbt(["compile"])
         exc_str = " ".join(str(exc.value).split())  # flatten all whitespace
@@ -126,7 +126,7 @@ class TestDuplicateModelAliasEnabledAcrossPackages:
 
     def test_duplicate_model_alias_enabled_across_packages(self, project):
         run_dbt(["deps"])
-        message = "dbt found two resources with the database representation"
+        message = "dvt found two resources with the database representation"
         with pytest.raises(AmbiguousAliasError) as exc:
             run_dbt(["run"])
         assert message in str(exc.value)

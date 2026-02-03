@@ -1,8 +1,8 @@
 from argparse import Namespace
 from unittest.mock import patch
 
-from dbt.flags import get_flags, set_from_args
-from dbt.task.list import ListTask
+from dvt.flags import get_flags, set_from_args
+from dvt.task.list import ListTask
 from dbt_common.events.types import PrintEvent
 
 
@@ -12,7 +12,7 @@ def test_list_output_results():
     results = ["node1", "node2", "node3"]
     expected_node_results = ["node1", "node2", "node3"]
 
-    with patch("dbt.task.list.fire_event") as mock_fire_event:
+    with patch("dvt.task.list.fire_event") as mock_fire_event:
         node_results = task.output_results(results)
 
     assert node_results == expected_node_results

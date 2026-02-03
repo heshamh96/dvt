@@ -1,6 +1,6 @@
 from unittest.mock import ANY
 
-from dbt.tests.util import AnyFloat
+from dvt.tests.util import AnyFloat
 
 
 def expected_run_results():

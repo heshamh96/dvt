@@ -2,11 +2,11 @@ from unittest import mock
 
 import pytest
 
-from dbt.exceptions import DbtRuntimeError
-from dbt.plugins import PluginManager, dbt_hook, dbtPlugin
-from dbt.plugins.contracts import PluginArtifact, PluginArtifacts
-from dbt.plugins.exceptions import dbtPluginError
-from dbt.plugins.manifest import ModelNodeArgs, PluginNodes
+from dvt.exceptions import DbtRuntimeError
+from dvt.plugins import PluginManager, dbt_hook, dbtPlugin
+from dvt.plugins.contracts import PluginArtifact, PluginArtifacts
+from dvt.plugins.exceptions import dbtPluginError
+from dvt.plugins.manifest import ModelNodeArgs, PluginNodes
 
 
 class ExceptionInitializePlugin(dbtPlugin):
@@ -94,7 +94,7 @@ class TestPluginManager:
         assert len(pm.hooks["get_manifest_artifacts"]) == 1
         assert pm.hooks["get_manifest_artifacts"][0] == get_artifacts_plugin.get_manifest_artifacts
 
-    @mock.patch("dbt.tracking")
+    @mock.patch("dvt.tracking")
     def test_get_nodes(self, tracking, get_nodes_plugins):
         tracking.active_user = mock.Mock()
         pm = PluginManager(plugins=get_nodes_plugins)

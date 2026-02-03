@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.util import check_relations_equal, run_dbt
+from dvt.tests.util import check_relations_equal, run_dbt
 
 snapshot_sql = """
 {% snapshot snapshot_check_cols_updated_at_actual %}
@@ -80,9 +80,9 @@ def test_snapshots(project):
 
     Approach:
     1. Create a table that represents the expected data after a series of snapshots
-        - Use dbt seed to create the expected relation (`snapshot_check_cols_updated_at_expected`)
+        - Use dvt seed to create the expected relation (`snapshot_check_cols_updated_at_expected`)
     2. Execute a series of snapshots to create the data
-        - Use a series of (3) dbt snapshot commands to create the actual relation (`snapshot_check_cols_updated_at_actual`)
+        - Use a series of (3) dvt snapshot commands to create the actual relation (`snapshot_check_cols_updated_at_actual`)
         - The logic can switch between 3 different versions of the data (depending on the `version` number)
         - The `updated_at` value is passed in via `--vars` and cast to a timestamp in the snapshot config
     3. Compare the two relations for equality

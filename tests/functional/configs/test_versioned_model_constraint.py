@@ -1,7 +1,7 @@
 import pytest
 
-from dbt.exceptions import ParsingError
-from dbt.tests.util import get_manifest, rm_file, run_dbt, write_file
+from dvt.exceptions import ParsingError
+from dvt.tests.util import get_manifest, rm_file, run_dbt, write_file
 
 schema_yml = """
 models:

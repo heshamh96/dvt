@@ -3,7 +3,7 @@ import shutil
 
 import pytest
 
-from dbt.tests.util import run_dbt
+from dvt.tests.util import run_dbt
 
 
 class TestDepsOptions(object):
@@ -43,7 +43,7 @@ class TestDepsOptions(object):
         # dbt-utils is a dep in fivetran so we can't check for a specific version or this test fails everytime a new dbt-utils version comes out
         dbt_labs_package = """
   - name: dbt_utils
-    package: dbt-labs/dbt_utils
+    package: dvt-labs/dbt_utils
 """
         package_sha = "sha1_hash: 71304bca2138cf8004070b3573a1e17183c0c1a8"
         assert fivetran_package in contents
@@ -65,7 +65,7 @@ class TestDepsOptions(object):
         # dbt-utils is a dep in fivetran so we can't check for a specific version or this test fails everytime a new dbt-utils version comes out
         dbt_labs_package = """
   - name: dbt_utils
-    package: dbt-labs/dbt_utils
+    package: dvt-labs/dbt_utils
 """
         package_sha = "sha1_hash: 71304bca2138cf8004070b3573a1e17183c0c1a8"
         assert fivetran_package in contents
@@ -73,7 +73,7 @@ class TestDepsOptions(object):
         assert package_sha in contents
 
     def test_deps_add(self, clean_start):
-        run_dbt(["deps", "--add-package", "dbt-labs/audit_helper@0.9.0"])
+        run_dbt(["deps", "--add-package", "dvt-labs/audit_helper@0.9.0"])
         with open("packages.yml") as fp:
             contents = fp.read()
         assert (
@@ -81,7 +81,7 @@ class TestDepsOptions(object):
             == """packages:
   - package: fivetran/fivetran_utils
     version: 0.4.7
-  - package: dbt-labs/audit_helper
+  - package: dvt-labs/audit_helper
     version: 0.9.0
 """
         )
@@ -93,7 +93,7 @@ class TestDepsOptions(object):
             [
                 "deps",
                 "--add-package",
-                "dbt-labs/audit_helper@0.9.0",
+                "dvt-labs/audit_helper@0.9.0",
                 "--lock",
             ]
         )
@@ -106,13 +106,13 @@ class TestDepsOptions(object):
             == """packages:
   - package: fivetran/fivetran_utils
     version: 0.4.7
-  - package: dbt-labs/audit_helper
+  - package: dvt-labs/audit_helper
     version: 0.9.0
 """
         )
 
     def test_deps_upgrade(self, clean_start, mocker):
         run_dbt(["deps", "--lock"])
-        patched_lock = mocker.patch("dbt.task.deps.DepsTask.lock")
+        patched_lock = mocker.patch("dvt.task.deps.DepsTask.lock")
         run_dbt(["deps", "--upgrade"])
         assert patched_lock.call_count == 1

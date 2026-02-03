@@ -7,11 +7,11 @@ from contextlib import contextmanager
 
 import yaml
 
-import dbt.config
-import dbt.exceptions
-from dbt import flags
-from dbt.constants import PACKAGES_FILE_NAME
-from dbt.flags import set_from_args
+import dvt.config
+import dvt.exceptions
+from dvt import flags
+from dvt.constants import PACKAGES_FILE_NAME
+from dvt.flags import set_from_args
 from tests.unit.utils import normalize
 
 INITIAL_ROOT = os.getcwd()
@@ -33,11 +33,11 @@ def raises_nothing():
 
 
 def empty_profile_renderer():
-    return dbt.config.renderer.ProfileRenderer({})
+    return dvt.config.renderer.ProfileRenderer({})
 
 
 def empty_project_renderer():
-    return dbt.config.renderer.DbtProjectYamlRenderer()
+    return dvt.config.renderer.DbtProjectYamlRenderer()
 
 
 model_config = {
@@ -238,7 +238,7 @@ def project_from_config_norender(
 ):
     if packages is None:
         packages = {}
-    partial = dbt.config.project.PartialProject.from_dicts(
+    partial = dvt.config.project.PartialProject.from_dicts(
         project_root,
         project_dict=cfg,
         packages_dict=packages,
@@ -247,7 +247,7 @@ def project_from_config_norender(
     )
     # no rendering ... Why?
     partial.project_dict["project-root"] = project_root
-    rendered = dbt.config.project.RenderComponents(
+    rendered = dvt.config.project.RenderComponents(
         project_dict=partial.project_dict,
         packages_dict=partial.packages_dict,
         selectors_dict=partial.selectors_dict,
@@ -264,7 +264,7 @@ def project_from_config_rendered(
 ):
     if packages is None:
         packages = {}
-    partial = dbt.config.project.PartialProject.from_dicts(
+    partial = dvt.config.project.PartialProject.from_dicts(
         project_root,
         project_dict=cfg,
         packages_dict=packages,

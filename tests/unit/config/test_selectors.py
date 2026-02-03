@@ -3,9 +3,9 @@ import unittest
 
 import yaml
 
-import dbt.exceptions
-from dbt.config.selectors import SelectorConfig, SelectorDict, selector_config_from_data
-from dbt.exceptions import DbtSelectorsError
+import dvt.exceptions
+from dvt.config.selectors import SelectorConfig, SelectorDict, selector_config_from_data
+from dvt.exceptions import DbtSelectorsError
 
 
 def get_selector_dict(txt: str) -> dict:
@@ -33,7 +33,7 @@ class SelectorUnitTest(unittest.TestCase):
             """
         )
         with self.assertRaisesRegex(
-            dbt.exceptions.DbtSelectorsError, "cannot provide multiple exclude arguments"
+            dvt.exceptions.DbtSelectorsError, "cannot provide multiple exclude arguments"
         ):
             selector_config_from_data(dct)
 
@@ -54,7 +54,7 @@ class SelectorUnitTest(unittest.TestCase):
             """
         )
         with self.assertRaisesRegex(
-            dbt.exceptions.DbtSelectorsError, "Valid root-level selector definitions"
+            dvt.exceptions.DbtSelectorsError, "Valid root-level selector definitions"
         ):
             selector_config_from_data(dct)
 
@@ -70,7 +70,7 @@ class SelectorUnitTest(unittest.TestCase):
             """
         )
         with self.assertRaisesRegex(
-            dbt.exceptions.DbtSelectorsError, "Valid root-level selector definitions"
+            dvt.exceptions.DbtSelectorsError, "Valid root-level selector definitions"
         ):
             selector_config_from_data(dct)
 
@@ -92,7 +92,7 @@ class SelectorUnitTest(unittest.TestCase):
             """
         )
         with self.assertRaisesRegex(
-            dbt.exceptions.DbtSelectorsError,
+            dvt.exceptions.DbtSelectorsError,
             "Only a single 'union' or 'intersection' key is allowed",
         ):
             selector_config_from_data(dct)
@@ -139,7 +139,7 @@ class SelectorUnitTest(unittest.TestCase):
                             value: daily
             """
         )
-        with self.assertRaisesRegex(dbt.exceptions.DbtSelectorsError, "Expected a list"):
+        with self.assertRaisesRegex(dvt.exceptions.DbtSelectorsError, "Expected a list"):
             selector_config_from_data(dct)
 
     def test_invalid_key(self):
@@ -152,7 +152,7 @@ class SelectorUnitTest(unittest.TestCase):
                       key: nightly
             """
         )
-        with self.assertRaisesRegex(dbt.exceptions.DbtSelectorsError, "Expected either 1 key"):
+        with self.assertRaisesRegex(dvt.exceptions.DbtSelectorsError, "Expected either 1 key"):
             selector_config_from_data(dct)
 
     def test_invalid_single_def(self):
@@ -164,7 +164,7 @@ class SelectorUnitTest(unittest.TestCase):
                       fubar: tag
             """
         )
-        with self.assertRaisesRegex(dbt.exceptions.DbtSelectorsError, "not a valid method name"):
+        with self.assertRaisesRegex(dvt.exceptions.DbtSelectorsError, "not a valid method name"):
             selector_config_from_data(dct)
 
     def test_method_no_value(self):
@@ -176,7 +176,7 @@ class SelectorUnitTest(unittest.TestCase):
                       method: tag
             """
         )
-        with self.assertRaisesRegex(dbt.exceptions.DbtSelectorsError, "not a valid method name"):
+        with self.assertRaisesRegex(dvt.exceptions.DbtSelectorsError, "not a valid method name"):
             selector_config_from_data(dct)
 
     def test_multiple_default_true(self):
@@ -199,7 +199,7 @@ class SelectorUnitTest(unittest.TestCase):
         """
         )
         with self.assertRaisesRegex(
-            dbt.exceptions.DbtSelectorsError, "Found multiple selectors with `default: true`:"
+            dvt.exceptions.DbtSelectorsError, "Found multiple selectors with `default: true`:"
         ):
             selector_config_from_data(dct)
 

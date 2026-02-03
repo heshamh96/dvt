@@ -7,21 +7,21 @@ from unittest import mock
 
 import pytest
 
-import dbt.config
-import dbt.exceptions
-from dbt.adapters.contracts.connection import DEFAULT_QUERY_COMMENT, QueryComment
-from dbt.adapters.factory import load_plugin
-from dbt.config.project import Project, _get_required_version
-from dbt.constants import DEPENDENCIES_FILE_NAME
-from dbt.contracts.project import GitPackage, LocalPackage, PackageConfig
-from dbt.deprecations import (
+import dvt.config
+import dvt.exceptions
+from dvt.adapters.contracts.connection import DEFAULT_QUERY_COMMENT, QueryComment
+from dvt.adapters.factory import load_plugin
+from dvt.config.project import Project, _get_required_version
+from dvt.constants import DEPENDENCIES_FILE_NAME
+from dvt.contracts.project import GitPackage, LocalPackage, PackageConfig
+from dvt.deprecations import (
     GenericJSONSchemaValidationDeprecation as GenericJSONSchemaValidationDeprecationCore,
 )
-from dbt.events.types import GenericJSONSchemaValidationDeprecation
-from dbt.flags import set_from_args
-from dbt.jsonschemas.jsonschemas import project_schema
-from dbt.node_types import NodeType
-from dbt.tests.util import safe_set_invocation_context
+from dvt.events.types import GenericJSONSchemaValidationDeprecation
+from dvt.flags import set_from_args
+from dvt.jsonschemas.jsonschemas import project_schema
+from dvt.node_types import NodeType
+from dvt.tests.util import safe_set_invocation_context
 from dbt_common.events.event_catcher import EventCatcher
 from dbt_common.events.event_manager_client import get_event_manager
 from dbt_common.events.types import Note
@@ -51,7 +51,7 @@ class TestProjectMethods:
     def test__str__(self, project: Project):
         assert (
             str(project)
-            == "{'name': 'test_project', 'version': 1.0, 'project-root': 'doesnt/actually/exist', 'profile': 'test_profile', 'model-paths': ['models'], 'macro-paths': ['macros'], 'seed-paths': ['seeds'], 'test-paths': ['tests'], 'analysis-paths': ['analyses'], 'docs-paths': ['docs'], 'asset-paths': ['assets'], 'target-path': 'target', 'snapshot-paths': ['snapshots'], 'clean-targets': ['target'], 'log-path': 'path/to/project/logs', 'quoting': {}, 'models': {}, 'on-run-start': [], 'on-run-end': [], 'dispatch': [{'macro_namespace': 'dbt_utils', 'search_order': ['test_project', 'dbt_utils']}], 'seeds': {}, 'snapshots': {}, 'sources': {}, 'data_tests': {}, 'unit_tests': {}, 'metrics': {}, 'semantic-models': {}, 'saved-queries': {}, 'exposures': {}, 'functions': {}, 'vars': {}, 'require-dbt-version': ['=0.0.0'], 'restrict-access': False, 'dbt-cloud': {}, 'flags': {}, 'query-comment': {'comment': \"\\n{%- set comment_dict = {} -%}\\n{%- do comment_dict.update(\\n    app='dbt',\\n    dbt_version=dbt_version,\\n    profile_name=target.get('profile_name'),\\n    target_name=target.get('target_name'),\\n) -%}\\n{%- if node is not none -%}\\n  {%- do comment_dict.update(\\n    node_id=node.unique_id,\\n  ) -%}\\n{% else %}\\n  {# in the node context, the connection name is the node_id #}\\n  {%- do comment_dict.update(connection_name=connection_name) -%}\\n{%- endif -%}\\n{{ return(tojson(comment_dict)) }}\\n\", 'append': False, 'job-label': False}, 'packages': []}"
+            == "{'name': 'test_project', 'version': 1.0, 'project-root': 'doesnt/actually/exist', 'profile': 'test_profile', 'model-paths': ['models'], 'macro-paths': ['macros'], 'seed-paths': ['seeds'], 'test-paths': ['tests'], 'analysis-paths': ['analyses'], 'docs-paths': ['docs'], 'asset-paths': ['assets'], 'target-path': 'target', 'snapshot-paths': ['snapshots'], 'clean-targets': ['target'], 'log-path': 'path/to/project/logs', 'quoting': {}, 'models': {}, 'on-run-start': [], 'on-run-end': [], 'dispatch': [{'macro_namespace': 'dbt_utils', 'search_order': ['test_project', 'dbt_utils']}], 'seeds': {}, 'snapshots': {}, 'sources': {}, 'data_tests': {}, 'unit_tests': {}, 'metrics': {}, 'semantic-models': {}, 'saved-queries': {}, 'exposures': {}, 'functions': {}, 'vars': {}, 'require-dvt-version': ['=0.0.0'], 'restrict-access': False, 'dvt-cloud': {}, 'flags': {}, 'query-comment': {'comment': \"\\n{%- set comment_dict = {} -%}\\n{%- do comment_dict.update(\\n    app='dvt',\\n    dbt_version=dbt_version,\\n    profile_name=target.get('profile_name'),\\n    target_name=target.get('target_name'),\\n) -%}\\n{%- if node is not none -%}\\n  {%- do comment_dict.update(\\n    node_id=node.unique_id,\\n  ) -%}\\n{% else %}\\n  {# in the node context, the connection name is the node_id #}\\n  {%- do comment_dict.update(connection_name=connection_name) -%}\\n{%- endif -%}\\n{{ return(tojson(comment_dict)) }}\\n\", 'append': False, 'job-label': False}, 'packages': []}"
         )
 
     def test_get_selector(self, project: Project):
@@ -188,7 +188,7 @@ class TestProjectInitialization(BaseConfigTest):
                     },
                 },
                 "data_tests": {"my_test_project": {"fail_calc": "sum(failures)"}},
-                "require-dbt-version": ">=0.1.0",
+                "require-dvt-version": ">=0.1.0",
             }
         )
         packages = {
@@ -196,7 +196,7 @@ class TestProjectInitialization(BaseConfigTest):
                 {
                     "local": "foo",
                 },
-                {"git": "git@example.com:dbt-labs/dbt-utils.git", "revision": "test-rev"},
+                {"git": "git@example.com:dvt-labs/dvt-utils.git", "revision": "test-rev"},
             ],
         }
         project = project_from_config_norender(
@@ -263,10 +263,10 @@ class TestProjectInitialization(BaseConfigTest):
                 packages=[
                     LocalPackage(local="foo", unrendered={"local": "foo"}),
                     GitPackage(
-                        git="git@example.com:dbt-labs/dbt-utils.git",
+                        git="git@example.com:dvt-labs/dvt-utils.git",
                         revision="test-rev",
                         unrendered={
-                            "git": "git@example.com:dbt-labs/dbt-utils.git",
+                            "git": "git@example.com:dvt-labs/dvt-utils.git",
                             "revision": "test-rev",
                         },
                     ),
@@ -289,7 +289,7 @@ class TestProjectInitialization(BaseConfigTest):
 
     def test_invalid_project_name(self):
         self.default_project_data["name"] = "invalid-project-name"
-        with self.assertRaises(dbt.exceptions.DbtProjectError) as exc:
+        with self.assertRaises(dvt.exceptions.DbtProjectError) as exc:
             project_from_config_norender(self.default_project_data, project_root=self.project_dir)
 
         self.assertIn("invalid-project-name", str(exc.exception))
@@ -297,18 +297,18 @@ class TestProjectInitialization(BaseConfigTest):
     def test_no_project(self):
         os.remove(os.path.join(self.project_dir, "dbt_project.yml"))
         renderer = empty_project_renderer()
-        with self.assertRaises(dbt.exceptions.DbtProjectError) as exc:
-            dbt.config.Project.from_project_root(self.project_dir, renderer)
+        with self.assertRaises(dvt.exceptions.DbtProjectError) as exc:
+            dvt.config.Project.from_project_root(self.project_dir, renderer)
 
         self.assertIn("No dbt_project.yml", str(exc.exception))
 
     def test_invalid_version(self):
-        self.default_project_data["require-dbt-version"] = "hello!"
-        with self.assertRaises(dbt.exceptions.DbtProjectError):
+        self.default_project_data["require-dvt-version"] = "hello!"
+        with self.assertRaises(dvt.exceptions.DbtProjectError):
             project_from_config_norender(self.default_project_data, project_root=self.project_dir)
 
     def test_unsupported_version(self):
-        self.default_project_data["require-dbt-version"] = ">99999.0.0"
+        self.default_project_data["require-dvt-version"] = ">99999.0.0"
         # allowed, because the RuntimeConfig checks, not the Project itself
         project_from_config_norender(self.default_project_data, project_root=self.project_dir)
 
@@ -349,7 +349,7 @@ class TestProjectInitialization(BaseConfigTest):
                 "models": models,
             }
         )
-        with self.assertRaises(dbt.exceptions.DbtProjectError) as exc:
+        with self.assertRaises(dvt.exceptions.DbtProjectError) as exc:
             project_from_config_rendered(self.default_project_data)
 
         assert "Cycle detected" in str(exc.exception)
@@ -452,7 +452,7 @@ class TestProjectInitialization(BaseConfigTest):
 class TestProjectFile(BaseConfigTest):
     def test_from_project_root(self):
         renderer = empty_project_renderer()
-        project = dbt.config.Project.from_project_root(self.project_dir, renderer)
+        project = dvt.config.Project.from_project_root(self.project_dir, renderer)
         from_config = project_from_config_norender(
             self.default_project_data, project_root=self.project_dir
         )
@@ -463,8 +463,8 @@ class TestProjectFile(BaseConfigTest):
     def test_with_invalid_package(self):
         renderer = empty_project_renderer()
         self.write_packages({"invalid": ["not a package of any kind"]})
-        with self.assertRaises(dbt.exceptions.DbtProjectError):
-            dbt.config.Project.from_project_root(self.project_dir, renderer)
+        with self.assertRaises(dvt.exceptions.DbtProjectError):
+            dvt.config.Project.from_project_root(self.project_dir, renderer)
 
 
 class TestVariableProjectFile(BaseConfigTest):
@@ -476,10 +476,10 @@ class TestVariableProjectFile(BaseConfigTest):
         self.write_project(self.default_project_data)
 
     def test_cli_and_env_vars(self):
-        renderer = dbt.config.renderer.DbtProjectYamlRenderer(None, {"cli_version": "0.1.2"})
+        renderer = dvt.config.renderer.DbtProjectYamlRenderer(None, {"cli_version": "0.1.2"})
         with mock.patch.dict(os.environ, self.env_override):
             safe_set_invocation_context()  # reset invocation context with new env
-            project = dbt.config.Project.from_project_root(
+            project = dvt.config.Project.from_project_root(
                 self.project_dir,
                 renderer,
             )
@@ -525,7 +525,7 @@ class TestVarLookups(unittest.TestCase):
         )
 
     def test_lookups(self):
-        vars_provider = dbt.config.project.VarProvider(self.initial_src_vars)
+        vars_provider = dvt.config.project.VarProvider(self.initial_src_vars)
 
         expected = [
             (self.local_var_search, "foo", 123),
@@ -566,7 +566,7 @@ class TestMultipleProjectFlags(BaseConfigTest):
         self.write_profile(self.default_profile_data)
 
     def test_setting_multiple_flags(self):
-        with pytest.raises(dbt.exceptions.DbtProjectError):
+        with pytest.raises(dvt.exceptions.DbtProjectError):
             set_from_args(self.args, None)
 
 
@@ -575,7 +575,7 @@ class TestGetRequiredVersion:
     def project_dict(self) -> Dict[str, Any]:
         return {
             "name": "test_project",
-            "require-dbt-version": ">0.0.0",
+            "require-dvt-version": ">0.0.0",
         }
 
     def test_supported_version(self, project_dict: Dict[str, Any]) -> None:
@@ -583,38 +583,38 @@ class TestGetRequiredVersion:
         assert set(x.to_version_string() for x in specifiers) == {">0.0.0"}
 
     def test_unsupported_version(self, project_dict: Dict[str, Any]) -> None:
-        project_dict["require-dbt-version"] = ">99999.0.0"
+        project_dict["require-dvt-version"] = ">99999.0.0"
         with pytest.raises(
-            dbt.exceptions.DbtProjectError, match="This version of dbt is not supported"
+            dvt.exceptions.DbtProjectError, match="This version of dvt is not supported"
         ):
             _get_required_version(project_dict=project_dict, verify_version=True)
 
     def test_unsupported_version_no_check(self, project_dict: Dict[str, Any]) -> None:
-        project_dict["require-dbt-version"] = ">99999.0.0"
+        project_dict["require-dvt-version"] = ">99999.0.0"
         specifiers = _get_required_version(project_dict=project_dict, verify_version=False)
         assert set(x.to_version_string() for x in specifiers) == {">99999.0.0"}
 
     def test_supported_version_range(self, project_dict: Dict[str, Any]) -> None:
-        project_dict["require-dbt-version"] = [">0.0.0", "<=99999.0.0"]
+        project_dict["require-dvt-version"] = [">0.0.0", "<=99999.0.0"]
         specifiers = _get_required_version(project_dict=project_dict, verify_version=True)
         assert set(x.to_version_string() for x in specifiers) == {">0.0.0", "<=99999.0.0"}
 
     def test_unsupported_version_range(self, project_dict: Dict[str, Any]) -> None:
-        project_dict["require-dbt-version"] = [">0.0.0", "<=0.0.1"]
+        project_dict["require-dvt-version"] = [">0.0.0", "<=0.0.1"]
         with pytest.raises(
-            dbt.exceptions.DbtProjectError, match="This version of dbt is not supported"
+            dvt.exceptions.DbtProjectError, match="This version of dvt is not supported"
         ):
             _get_required_version(project_dict=project_dict, verify_version=True)
 
     def test_unsupported_version_range_no_check(self, project_dict: Dict[str, Any]) -> None:
-        project_dict["require-dbt-version"] = [">0.0.0", "<=0.0.1"]
+        project_dict["require-dvt-version"] = [">0.0.0", "<=0.0.1"]
         specifiers = _get_required_version(project_dict=project_dict, verify_version=False)
         assert set(x.to_version_string() for x in specifiers) == {">0.0.0", "<=0.0.1"}
 
     def test_impossible_version_range(self, project_dict: Dict[str, Any]) -> None:
-        project_dict["require-dbt-version"] = [">99999.0.0", "<=0.0.1"]
+        project_dict["require-dvt-version"] = [">99999.0.0", "<=0.0.1"]
         with pytest.raises(
-            dbt.exceptions.DbtProjectError,
+            dvt.exceptions.DbtProjectError,
             match="The package version requirement can never be satisfied",
         ):
             _get_required_version(project_dict=project_dict, verify_version=True)
@@ -623,7 +623,7 @@ class TestGetRequiredVersion:
 class TestDeprecations:
 
     def test_jsonschema_validate(self) -> None:
-        from dbt.jsonschemas.jsonschemas import jsonschema_validate
+        from dvt.jsonschemas.jsonschemas import jsonschema_validate
 
         project_dict: Dict[str, Any] = {}
 

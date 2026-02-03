@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.util import (
+from dvt.tests.util import (
     check_relations_equal,
     get_relation_columns,
     relation_from_name,

@@ -1,7 +1,7 @@
 import pytest
 
-from dbt.artifacts.resources import SourceConfig
-from dbt.tests.util import get_manifest, run_dbt, update_config_file
+from dvt.artifacts.resources import SourceConfig
+from dvt.tests.util import get_manifest, run_dbt, update_config_file
 from dbt_common.dataclass_schema import ValidationError
 from tests.functional.sources.fixtures import (
     all_configs_everywhere_schema_yml,

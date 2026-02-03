@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.util import check_relations_equal, run_dbt
+from dvt.tests.util import check_relations_equal, run_dbt
 from tests.functional.schema.fixtures.macros import (
     _CUSTOM_MACRO,
     _CUSTOM_MACRO_MULTI_SCHEMA,
@@ -140,8 +140,8 @@ class TestCustomSchemaWithPrefixAndDispatch(BaseTestCustomSchema):
             "models": {"schema": _CUSTOM_SCHEMA},
             "dispatch": [
                 {
-                    "macro_namespace": "dbt",
-                    "search_order": ["test", "package_macro_overrides", "dbt"],
+                    "macro_namespace": "dvt",
+                    "search_order": ["test", "package_macro_overrides", "dvt"],
                 }
             ],
         }

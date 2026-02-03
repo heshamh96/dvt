@@ -3,8 +3,8 @@ import os
 
 import pytest
 
-from dbt.events.types import InvalidOptionYAML
-from dbt.tests.util import get_manifest, read_file, run_dbt
+from dvt.events.types import InvalidOptionYAML
+from dvt.tests.util import get_manifest, read_file, run_dbt
 from dbt_common.events import EventLevel
 from dbt_common.events.functions import fire_event
 
@@ -27,7 +27,7 @@ def test_basic(project, logs_dir):
     assert "model.test.my_model" in manifest.nodes
 
     # get log file
-    log_file = read_file(logs_dir, "dbt.log")
+    log_file = read_file(logs_dir, "dvt.log")
     assert log_file
     node_start = False
     node_finished = False
@@ -76,7 +76,7 @@ def test_formatted_logs(project, logs_dir):
     assert len(results) == 1
 
     # get log file
-    json_log_file = read_file(logs_dir, "dbt.log")
+    json_log_file = read_file(logs_dir, "dvt.log")
     formatted_json_lines = 0
     for log_line in json_log_file.split("\n"):
         # skip the empty line at the end
@@ -152,7 +152,7 @@ class TestRunResultErrorNodeInfo:
         results = run_dbt(["--log-format=json", "run"], expect_pass=False)
         assert len(results) == 1
 
-        log_file = read_file(logs_dir, "dbt.log")
+        log_file = read_file(logs_dir, "dvt.log")
 
         for log_line in log_file.split("\n"):
             if not log_line:
@@ -190,7 +190,7 @@ class TestRunResultErrorGroup:
         results = run_dbt(["--log-format=json", "run"], expect_pass=False)
         assert len(results) == 1
 
-        log_file = read_file(logs_dir, "dbt.log")
+        log_file = read_file(logs_dir, "dvt.log")
         run_result_error_count = 0
 
         for log_line in log_file.split("\n"):
@@ -231,7 +231,7 @@ class TestRunResultFailureGroup:
         results = run_dbt(["--log-format=json", "build"], expect_pass=False)
         assert len(results) == 2
 
-        log_file = read_file(logs_dir, "dbt.log")
+        log_file = read_file(logs_dir, "dvt.log")
         run_result_error_count = 0
         run_result_failure_count = 0
 
@@ -281,7 +281,7 @@ class TestRunResultWarningGroup:
         results = run_dbt(["--log-format=json", "build"])
         assert len(results) == 2
 
-        log_file = read_file(logs_dir, "dbt.log")
+        log_file = read_file(logs_dir, "dvt.log")
         run_result_warning_count = 0
 
         for log_line in log_file.split("\n"):
@@ -324,7 +324,7 @@ class TestRunResultGroupWithMultipleEmails:
         results = run_dbt(["--log-format=json", "build"], expect_pass=False)
         assert len(results) == 2
 
-        log_file = read_file(logs_dir, "dbt.log")
+        log_file = read_file(logs_dir, "dvt.log")
         run_result_error_count = 0
 
         for log_line in log_file.split("\n"):

@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.util import run_dbt
+from dvt.tests.util import run_dbt
 
 models__sample_model_sql = """
 select * from {{ source("raw", "sample_seed") }}

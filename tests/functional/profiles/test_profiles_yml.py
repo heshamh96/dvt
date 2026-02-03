@@ -2,7 +2,7 @@ import pathlib
 
 from test_profile_dir import environ
 
-from dbt.cli.main import dbtRunner
+from dvt.cli.main import dbtRunner
 
 jinjaesque_password = "no{{jinja{%re{#ndering"
 

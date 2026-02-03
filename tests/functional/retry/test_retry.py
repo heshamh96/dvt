@@ -3,9 +3,9 @@ from shutil import copytree, move
 
 import pytest
 
-from dbt.contracts.results import RunStatus, TestStatus
-from dbt.exceptions import DbtRuntimeError, TargetNotFoundError
-from dbt.tests.util import (
+from dvt.contracts.results import RunStatus, TestStatus
+from dvt.exceptions import DbtRuntimeError, TargetNotFoundError
+from dvt.tests.util import (
     rm_file,
     run_dbt,
     run_dbt_and_capture,

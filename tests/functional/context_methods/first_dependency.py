@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.fixtures.project import write_project_files
+from dvt.tests.fixtures.project import write_project_files
 
 first_dependency__dbt_project_yml = """
 name: 'first_dep'
@@ -15,10 +15,10 @@ test-paths: ["tests"]
 seed-paths: ["seeds"]
 macro-paths: ["macros"]
 
-require-dbt-version: '>=0.1.0'
+require-dvt-version: '>=0.1.0'
 
 target-path: "target"  # directory which will store compiled SQL files
-clean-targets:         # directories to be removed by `dbt clean`
+clean-targets:         # directories to be removed by `dvt clean`
     - "target"
     - "dbt_packages"
 

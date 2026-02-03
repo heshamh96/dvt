@@ -1,8 +1,8 @@
 import pytest
 
-from dbt.context.providers import generate_runtime_model_context
-from dbt.exceptions import DbtRuntimeError
-from dbt.tests.util import get_manifest, run_dbt
+from dvt.context.providers import generate_runtime_model_context
+from dvt.exceptions import DbtRuntimeError
+from dvt.tests.util import get_manifest, run_dbt
 
 my_model_sql = """
   select 1 as fun

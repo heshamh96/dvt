@@ -4,7 +4,7 @@ import re
 
 import pytest
 
-from dbt.tests.util import read_file, run_dbt, run_dbt_and_capture
+from dvt.tests.util import read_file, run_dbt, run_dbt_and_capture
 from dbt_common.exceptions import DbtBaseException as DbtException
 from dbt_common.exceptions import DbtRuntimeError
 from tests.functional.assertions.test_runner import dbtTestRunner
@@ -34,7 +34,7 @@ def get_lines(model_name):
 
 
 def file_exists(model_name):
-    from dbt.tests.util import file_exists
+    from dvt.tests.util import file_exists
 
     return file_exists("target", "compiled", "test", "models", model_name + ".sql")
 
@@ -254,26 +254,26 @@ class TestCompile:
         json.loads(log_output)
 
     def test_compile_inline_not_add_node(self, project):
-        dbt = dbtTestRunner()
-        parse_result = dbt.invoke(["parse"])
+        dvt = dbtTestRunner()
+        parse_result = dvt.invoke(["parse"])
         manifest = parse_result.result
         assert len(manifest.nodes) == 4
-        dbt = dbtTestRunner(manifest=manifest)
-        dbt.invoke(
+        dvt = dbtTestRunner(manifest=manifest)
+        dvt.invoke(
             ["compile", "--inline", "select * from {{ ref('second_model') }}"],
             populate_cache=False,
         )
         assert len(manifest.nodes) == 4
 
     def test_compile_inline_syntax_error(self, project, mocker):
-        patched_fire_event = mocker.patch("dbt.task.compile.fire_event")
+        patched_fire_event = mocker.patch("dvt.task.compile.fire_event")
         with pytest.raises(DbtException, match="Error parsing inline query"):
             run_dbt(["compile", "--inline", "select * from {{ ref(1) }}"])
         # Event for parsing error fired
         patched_fire_event.assert_called_once()
 
     def test_compile_inline_ref_node_not_exist(self, project, mocker):
-        patched_fire_event = mocker.patch("dbt.task.compile.fire_event")
+        patched_fire_event = mocker.patch("dvt.task.compile.fire_event")
         with pytest.raises(DbtException, match="Error parsing inline query"):
             run_dbt(["compile", "--inline", "select * from {{ ref('third_model') }}"])
         # Event for parsing error fired

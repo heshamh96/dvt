@@ -5,7 +5,7 @@ import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis.strategies import builds, none, text
 
-from dbt.artifacts.resources import (
+from dvt.artifacts.resources import (
     ConstantPropertyInput,
     ConversionTypeParams,
     CumulativeTypeParams,
@@ -26,8 +26,8 @@ from dbt.artifacts.resources import (
     SourceFileMetadata,
     WhereFilter,
 )
-from dbt.contracts.graph.nodes import Metric, SavedQuery, SemanticModel
-from dbt.node_types import NodeType
+from dvt.contracts.graph.nodes import Metric, SavedQuery, SemanticModel
+from dvt.node_types import NodeType
 from dbt_semantic_interfaces.protocols import WhereFilter as WhereFilterProtocol
 from dbt_semantic_interfaces.protocols import dimension as DimensionProtocols
 from dbt_semantic_interfaces.protocols import entity as EntityProtocols

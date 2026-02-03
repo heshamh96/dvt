@@ -5,11 +5,11 @@ import freezegun
 import pytest
 import pytz
 
-from dbt.artifacts.resources.types import BatchSize
-from dbt.event_time.sample_window import SampleWindow
-from dbt.events.types import JinjaLogInfo
-from dbt.materializations.incremental.microbatch import MicrobatchBuilder
-from dbt.tests.util import read_file, relation_from_name, run_dbt, write_file
+from dvt.artifacts.resources.types import BatchSize
+from dvt.event_time.sample_window import SampleWindow
+from dvt.events.types import JinjaLogInfo
+from dvt.materializations.incremental.microbatch import MicrobatchBuilder
+from dvt.tests.util import read_file, relation_from_name, run_dbt, write_file
 from dbt_common.events.event_catcher import EventCatcher
 
 input_model_sql = """

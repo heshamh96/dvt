@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tracking import (
+from dvt.tracking import (
     disable_tracking,
     initialize_from_flags,
     track_behavior_change_warn,
@@ -16,14 +16,14 @@ from dbt_common.events.event_manager_client import (
 def snowplow_tracker(mocker):
     # initialize `active_user` without writing the cookie to disk
     initialize_from_flags(True, "")
-    mocker.patch("dbt.tracking.User.set_cookie").return_value = {"id": 42}
+    mocker.patch("dvt.tracking.User.set_cookie").return_value = {"id": 42}
 
     # add the relevant callback to the event manager
     add_callback_to_manager(track_behavior_change_warn)
 
     # don't make a call, catch the request
     # to avoid confusion, this is snowplow_tracker's track, not our wrapper that's also named track
-    snowplow_tracker = mocker.patch("dbt.tracking.tracker.track")
+    snowplow_tracker = mocker.patch("dvt.tracking.tracker.track")
 
     yield snowplow_tracker
 

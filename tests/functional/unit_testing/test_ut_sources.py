@@ -2,8 +2,8 @@ from copy import deepcopy
 
 import pytest
 
-from dbt.contracts.results import RunStatus, TestStatus
-from dbt.tests.util import run_dbt, write_file
+from dvt.contracts.results import RunStatus, TestStatus
+from dvt.tests.util import run_dbt, write_file
 
 raw_customers_csv = """id,first_name,last_name,email
 1,Michael,Perez,mperez0@chronoengine.com

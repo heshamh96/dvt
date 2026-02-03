@@ -3,11 +3,11 @@ from typing import Dict
 import agate
 import pytest
 
-from dbt.artifacts.resources import FunctionReturns
-from dbt.artifacts.resources.types import FunctionType, FunctionVolatility
-from dbt.contracts.graph.nodes import FunctionNode
-from dbt.exceptions import ParsingError
-from dbt.tests.util import run_dbt, write_file
+from dvt.artifacts.resources import FunctionReturns
+from dvt.artifacts.resources.types import FunctionType, FunctionVolatility
+from dvt.contracts.graph.nodes import FunctionNode
+from dvt.exceptions import ParsingError
+from dvt.tests.util import run_dbt, write_file
 
 double_it_sql = """
 SELECT value * 2

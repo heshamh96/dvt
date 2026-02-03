@@ -7,12 +7,12 @@ from unittest import mock
 import pytest
 import yaml
 
-import dbt.config
-import dbt.exceptions
+import dvt.config
+import dvt.exceptions
 import dbt_common.exceptions
 import dbt_common.semver as semver
-from dbt import deprecations
-from dbt.tests.util import (
+from dvt import deprecations
+from dvt.tests.util import (
     check_relations_equal,
     run_dbt,
     run_dbt_and_capture,
@@ -75,7 +75,7 @@ sources:
 """
 
 macros__macro_sql = """
-{# This macro also exists in the dependency -dbt should be fine with that #}
+{# This macro also exists in the dependency -dvt should be fine with that #}
 {% macro some_overridden_macro() -%}
 999
 {%- endmacro %}
@@ -224,20 +224,20 @@ class TestSimpleDependencyWithSchema(BaseDependencyTest):
             },
         }
 
-    @mock.patch("dbt.config.project.get_installed_version")
+    @mock.patch("dvt.config.project.get_installed_version")
     def test_local_dependency_out_of_date(self, mock_get, project):
         mock_get.return_value = semver.VersionSpecifier.from_version_string("0.0.1")
         run_dbt(["deps"] + self.dbt_vargs(project.test_schema))
         # check seed
-        with pytest.raises(dbt.exceptions.DbtProjectError) as exc:
+        with pytest.raises(dvt.exceptions.DbtProjectError) as exc:
             run_dbt(["seed"] + self.dbt_vargs(project.test_schema))
         assert "--no-version-check" in str(exc.value)
         # check run too
-        with pytest.raises(dbt.exceptions.DbtProjectError) as exc:
+        with pytest.raises(dvt.exceptions.DbtProjectError) as exc:
             run_dbt(["run"] + self.dbt_vargs(project.test_schema))
         assert "--no-version-check" in str(exc.value)
 
-    @mock.patch("dbt.config.project.get_installed_version")
+    @mock.patch("dvt.config.project.get_installed_version")
     def test_local_dependency_out_of_date_no_check(self, mock_get):
         mock_get.return_value = semver.VersionSpecifier.from_version_string("0.0.1")
         run_dbt(["deps"])
@@ -266,7 +266,7 @@ class TestSimpleDependencyNoVersionCheckConfig(BaseDependencyTest):
     def macros(self):
         return {"macro.sql": macros__macro_override_schema_sql}
 
-    @mock.patch("dbt.config.project.get_installed_version")
+    @mock.patch("dvt.config.project.get_installed_version")
     def test_local_dependency_out_of_date_no_check(self, mock_get, project):
         # we can't add this to the config because Sources don't respect dbt_project.yml
         base_schema = "dbt_test_{}_macro".format(project.test_schema)
@@ -349,7 +349,7 @@ class TestSimpleDependencyDuplicateName(BaseDependencyTest):
         )
 
     def test_local_dependency_same_name(self, prepare_dependencies, project):
-        with pytest.raises(dbt.exceptions.DependencyError):
+        with pytest.raises(dvt.exceptions.DependencyError):
             run_dbt(["deps"], expect_pass=False)
 
     def test_local_dependency_same_name_sneaky(self, prepare_dependencies, project):

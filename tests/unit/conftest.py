@@ -1,8 +1,8 @@
 import pytest
 
-from dbt.artifacts.resources import Quoting, SourceConfig
-from dbt.artifacts.resources.types import NodeType
-from dbt.contracts.graph.nodes import SourceDefinition
+from dvt.artifacts.resources import Quoting, SourceConfig
+from dvt.artifacts.resources.types import NodeType
+from dvt.contracts.graph.nodes import SourceDefinition
 
 # All manifest related fixtures.
 from tests.unit.utils.adapter import *  # noqa

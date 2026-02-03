@@ -2,8 +2,8 @@ from dataclasses import dataclass
 
 import pytest
 
-from dbt.artifacts.resources.base import BaseResource
-from dbt.artifacts.resources.types import NodeType
+from dvt.artifacts.resources.base import BaseResource
+from dvt.artifacts.resources.types import NodeType
 
 
 @dataclass

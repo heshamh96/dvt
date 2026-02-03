@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.util import read_file, run_dbt
+from dvt.tests.util import read_file, run_dbt
 
 _SOURCES_YML = """
 sources:
@@ -61,4 +61,4 @@ class TestModelQuoting:
         run_dbt(["compile"])
 
         generated_sql = read_file("target", "compiled", "test", "models", "model_downstream.sql")
-        assert generated_sql == f"select * from dbt.{project.test_schema}.model"
+        assert generated_sql == f"select * from dvt.{project.test_schema}.model"

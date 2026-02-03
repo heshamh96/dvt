@@ -1,7 +1,7 @@
 import pytest
 
-from dbt.exceptions import CompilationError
-from dbt.tests.util import run_dbt
+from dvt.exceptions import CompilationError
+from dvt.tests.util import run_dbt
 
 exposure_dupes_schema_yml = """
 version: 2
@@ -24,7 +24,7 @@ class TestDuplicateExposure:
         return {"schema.yml": exposure_dupes_schema_yml}
 
     def test_duplicate_exposure(self, project):
-        message = "dbt found two exposures with the name"
+        message = "dvt found two exposures with the name"
         with pytest.raises(CompilationError) as exc:
             run_dbt(["compile"])
         assert message in str(exc.value)

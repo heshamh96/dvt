@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from dbt.exceptions import DbtProjectError
-from dbt.tests.util import check_relations_equal, run_dbt, write_config_file
+from dvt.exceptions import DbtProjectError
+from dvt.tests.util import check_relations_equal, run_dbt, write_config_file
 
 models__disabled_one = """
 {{config(enabled=False)}}
@@ -61,7 +61,7 @@ class SimpleDependencyBase(object):
         return {
             "packages": [
                 {
-                    "git": "https://github.com/dbt-labs/dbt-integration-project",
+                    "git": "https://github.com/dvt-labs/dvt-integration-project",
                     "revision": "1.1",
                 }
             ]
@@ -112,7 +112,7 @@ class TestSimpleDependencyWithDependenciesFile(SimpleDependencyBase):
         return {
             "packages": [
                 {
-                    "git": "https://github.com/dbt-labs/dbt-integration-project",
+                    "git": "https://github.com/dvt-labs/dvt-integration-project",
                     "warn-unpinned": True,
                 }
             ]
@@ -136,7 +136,7 @@ class TestSimpleDependencyWithEmptyPackagesFile(SimpleDependencyBase):
 
 
 class TestSimpleDependencyNoProfile(SimpleDependencyBase):
-    """dbt deps and clean commands should not require a profile."""
+    """dvt deps and clean commands should not require a profile."""
 
     @pytest.fixture(scope="class")
     def run_deps(self, project):
@@ -152,7 +152,7 @@ class TestSimpleDependencyNoProfile(SimpleDependencyBase):
 
     def test_simple_dependency_no_profile(self, project, run_deps, run_clean):
         """only need fixtures as opposed to any model assertions since those are
-        irrelevant and won't occur within the same runtime as a dbt run -s ..."""
+        irrelevant and won't occur within the same runtime as a dvt run -s ..."""
         pass
 
 
@@ -182,7 +182,7 @@ class TestSimpleDependencyUnpinned(object):
         return {
             "packages": [
                 {
-                    "git": "https://github.com/dbt-labs/dbt-integration-project",
+                    "git": "https://github.com/dvt-labs/dvt-integration-project",
                     "warn-unpinned": True,
                 }
             ]
@@ -199,12 +199,12 @@ class TestSimpleDependencyWithDuplicates(object):
         return {
             "packages": [
                 {
-                    "git": "https://github.com/dbt-labs/dbt-integration-project",
-                    "revision": "dbt/1.0.0",
+                    "git": "https://github.com/dvt-labs/dvt-integration-project",
+                    "revision": "dvt/1.0.0",
                 },
                 {
-                    "git": "https://github.com/dbt-labs/dbt-integration-project.git",
-                    "revision": "dbt/1.0.0",
+                    "git": "https://github.com/dvt-labs/dvt-integration-project.git",
+                    "revision": "dvt/1.0.0",
                 },
             ]
         }
@@ -220,13 +220,13 @@ class TestSimpleDependencyWithSubdirs(object):
         return {
             "packages": [
                 {
-                    "git": "https://github.com/dbt-labs/dbt-multipe-packages.git",
-                    "subdirectory": "dbt-utils-main",
+                    "git": "https://github.com/dvt-labs/dvt-multipe-packages.git",
+                    "subdirectory": "dvt-utils-main",
                     "revision": "v0.1.0",
                 },
                 {
-                    "git": "https://github.com/dbt-labs/dbt-multipe-packages.git",
-                    "subdirectory": "dbt-date-main",
+                    "git": "https://github.com/dvt-labs/dvt-multipe-packages.git",
+                    "subdirectory": "dvt-date-main",
                     "revision": "v0.1.0",
                 },
             ]
@@ -236,14 +236,14 @@ class TestSimpleDependencyWithSubdirs(object):
         run_dbt(["deps"])
         assert os.path.exists("package-lock.yml")
         expected = """packages:
-  - git: https://github.com/dbt-labs/dbt-multipe-packages.git
+  - git: https://github.com/dvt-labs/dvt-multipe-packages.git
     name: dbt_utils
     revision: 53782f3ede8fdf307ee1d8e418aa65733a4b72fa
-    subdirectory: dbt-utils-main
-  - git: https://github.com/dbt-labs/dbt-multipe-packages.git
+    subdirectory: dvt-utils-main
+  - git: https://github.com/dvt-labs/dvt-multipe-packages.git
     name: dbt_date
     revision: 53782f3ede8fdf307ee1d8e418aa65733a4b72fa
-    subdirectory: dbt-date-main
+    subdirectory: dvt-date-main
 sha1_hash: b9c8042f29446c55a33f9f211737f445a640c7a1
 """
         with open("package-lock.yml") as fp:
@@ -260,11 +260,11 @@ class TestRekeyedDependencyWithSubduplicates(object):
         return {
             "packages": [
                 {
-                    "git": "https://github.com/dbt-labs/dbt-integration-project",
+                    "git": "https://github.com/dvt-labs/dvt-integration-project",
                     "revision": "config-1.0.0-deps",
                 },
                 {
-                    "git": "https://github.com/dbt-labs/dbt-utils",
+                    "git": "https://github.com/dvt-labs/dvt-utils",
                     "revision": "0.5.0",
                 },
             ]
@@ -283,7 +283,7 @@ class TestTarballNestedDependencies(object):
         return {
             "packages": [
                 {
-                    "tarball": "https://github.com/calogica/dbt-expectations/archive/refs/tags/0.9.0.tar.gz",
+                    "tarball": "https://github.com/calogica/dvt-expectations/archive/refs/tags/0.9.0.tar.gz",
                     "name": "dbt_expectations",
                 },
             ]
@@ -304,8 +304,8 @@ class DependencyBranchBase(object):
         return {
             "packages": [
                 {
-                    "git": "https://github.com/dbt-labs/dbt-integration-project",
-                    "revision": "dbt/1.0.0",
+                    "git": "https://github.com/dvt-labs/dvt-integration-project",
+                    "revision": "dvt/1.0.0",
                 },
             ]
         }
@@ -385,7 +385,7 @@ class TestSimpleDependencyBadProfile(object):
             "port": 5432,
             "user": "root",
             "pass": "password",
-            "dbname": "dbt",
+            "dbname": "dvt",
         }
 
     def test_deps_bad_profile(self, project):
@@ -400,7 +400,7 @@ class TestSimpleDependcyTarball(object):
         return {
             "packages": [
                 {
-                    "tarball": "https://codeload.github.com/dbt-labs/dbt-utils/tar.gz/0.9.6",
+                    "tarball": "https://codeload.github.com/dvt-labs/dvt-utils/tar.gz/0.9.6",
                     "name": "dbt_utils",
                 }
             ]
@@ -419,7 +419,7 @@ class TestBadTarballDependency(object):
         bad_tarball_package_spec = {
             "packages": [
                 {
-                    "tarball": "https://codeload.github.com/dbt-labs/dbt-utils/tar.gz/0.9.6",
+                    "tarball": "https://codeload.github.com/dvt-labs/dvt-utils/tar.gz/0.9.6",
                     "version": "dbt_utils",
                 }
             ]

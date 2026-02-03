@@ -2,9 +2,9 @@ import os
 
 import pytest
 
-from dbt.exceptions import CompilationError
-from dbt.tests.fixtures.project import write_project_files
-from dbt.tests.util import run_dbt
+from dvt.exceptions import CompilationError
+from dvt.tests.fixtures.project import write_project_files
+from dvt.tests.util import run_dbt
 from tests.functional.source_overrides.fixtures import (  # noqa: F401
     dupe_models__schema1_yml,
     dupe_models__schema2_yml,
@@ -60,7 +60,7 @@ class TestSourceOverrideDuplicates:
         with pytest.raises(CompilationError) as exc:
             run_dbt(["compile"])
 
-        assert "dbt found two schema.yml entries for the same source named" in str(exc.value)
+        assert "dvt found two schema.yml entries for the same source named" in str(exc.value)
         assert "one of these files" in str(exc.value)
         schema1_path = os.path.join("models", "schema1.yml")
         schema2_path = os.path.join("models", "schema2.yml")

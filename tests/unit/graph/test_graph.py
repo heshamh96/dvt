@@ -1,9 +1,9 @@
 import pytest
 
-from dbt.compilation import Linker
-from dbt.contracts.graph.manifest import Manifest
-from dbt.contracts.graph.nodes import ModelNode
-from dbt.graph.graph import Graph
+from dvt.compilation import Linker
+from dvt.contracts.graph.manifest import Manifest
+from dvt.contracts.graph.nodes import ModelNode
+from dvt.graph.graph import Graph
 from tests.unit.utils.manifest import make_model
 
 

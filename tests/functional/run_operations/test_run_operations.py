@@ -3,8 +3,8 @@ import os
 import pytest
 import yaml
 
-from dbt.artifacts.schemas.results import RunStatus
-from dbt.tests.util import (
+from dvt.artifacts.schemas.results import RunStatus
+from dvt.tests.util import (
     check_table_does_exist,
     mkdir,
     rm_dir,
@@ -42,7 +42,7 @@ class TestOperations:
                         "port": int(os.getenv("POSTGRES_TEST_PORT", 5432)),
                         "user": os.getenv("POSTGRES_TEST_USER", "root"),
                         "pass": os.getenv("POSTGRES_TEST_PASS", "password"),
-                        "dbname": os.getenv("POSTGRES_TEST_DATABASE", "dbt"),
+                        "dbname": os.getenv("POSTGRES_TEST_DATABASE", "dvt"),
                         "schema": unique_schema,
                     },
                     "noaccess": {
@@ -52,7 +52,7 @@ class TestOperations:
                         "port": int(os.getenv("POSTGRES_TEST_PORT", 5432)),
                         "user": "noaccess",
                         "pass": "password",
-                        "dbname": os.getenv("POSTGRES_TEST_DATABASE", "dbt"),
+                        "dbname": os.getenv("POSTGRES_TEST_DATABASE", "dvt"),
                         "schema": unique_schema,
                     },
                 },
@@ -82,7 +82,7 @@ class TestOperations:
     def test_macro_missing(self, project):
         with pytest.raises(
             UndefinedMacroError,
-            match="dbt could not find a macro with the name 'this_macro_does_not_exist' in any package",
+            match="dvt could not find a macro with the name 'this_macro_does_not_exist' in any package",
         ):
             self.run_operation("this_macro_does_not_exist", False)
 

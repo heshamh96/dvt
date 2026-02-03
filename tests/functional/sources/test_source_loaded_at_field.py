@@ -1,7 +1,7 @@
 import pytest
 
-from dbt.exceptions import YamlParseDictError
-from dbt.tests.util import get_manifest, run_dbt, write_file
+from dvt.exceptions import YamlParseDictError
+from dvt.tests.util import get_manifest, run_dbt, write_file
 
 loaded_at_field_null_schema_yml = """
 sources:

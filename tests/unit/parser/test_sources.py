@@ -2,8 +2,8 @@ from typing import List, Optional
 
 import pytest
 
-from core.dbt.artifacts.resources.v1.components import FreshnessThreshold, Time
-from core.dbt.parser.sources import merge_source_freshness
+from core.dvt.artifacts.resources.v1.components import FreshnessThreshold, Time
+from core.dvt.parser.sources import merge_source_freshness
 
 
 class TestMergeSourceFreshness:

@@ -9,24 +9,24 @@ import pytest
 from psycopg2 import DatabaseError
 from pytest_mock import MockerFixture
 
-from core.dbt.task.run import MicrobatchBatchRunner
-from dbt.adapters.contracts.connection import AdapterResponse
-from dbt.adapters.postgres import PostgresAdapter
-from dbt.artifacts.resources.base import FileHash
-from dbt.artifacts.resources.types import NodeType, RunHookType
-from dbt.artifacts.resources.v1.components import DependsOn
-from dbt.artifacts.resources.v1.config import NodeConfig
-from dbt.artifacts.resources.v1.model import ModelConfig
-from dbt.artifacts.schemas.results import RunStatus
-from dbt.artifacts.schemas.run import RunResult
-from dbt.config.runtime import RuntimeConfig
-from dbt.contracts.graph.manifest import Manifest
-from dbt.contracts.graph.nodes import HookNode, ModelNode
-from dbt.events.types import LogModelResult
-from dbt.exceptions import DbtRuntimeError
-from dbt.flags import get_flags, set_from_args
-from dbt.task.run import MicrobatchModelRunner, ModelRunner, RunTask, _get_adapter_info
-from dbt.tests.util import safe_set_invocation_context
+from core.dvt.task.run import MicrobatchBatchRunner
+from dvt.adapters.contracts.connection import AdapterResponse
+from dvt.adapters.postgres import PostgresAdapter
+from dvt.artifacts.resources.base import FileHash
+from dvt.artifacts.resources.types import NodeType, RunHookType
+from dvt.artifacts.resources.v1.components import DependsOn
+from dvt.artifacts.resources.v1.config import NodeConfig
+from dvt.artifacts.resources.v1.model import ModelConfig
+from dvt.artifacts.schemas.results import RunStatus
+from dvt.artifacts.schemas.run import RunResult
+from dvt.config.runtime import RuntimeConfig
+from dvt.contracts.graph.manifest import Manifest
+from dvt.contracts.graph.nodes import HookNode, ModelNode
+from dvt.events.types import LogModelResult
+from dvt.exceptions import DbtRuntimeError
+from dvt.flags import get_flags, set_from_args
+from dvt.task.run import MicrobatchModelRunner, ModelRunner, RunTask, _get_adapter_info
+from dvt.tests.util import safe_set_invocation_context
 from dbt_common.events.base_types import EventLevel
 from dbt_common.events.event_catcher import EventCatcher
 from dbt_common.events.event_manager_client import add_callback_to_manager
@@ -86,8 +86,8 @@ def test_adapter_info_tracking():
     assert _get_adapter_info(PostgresAdapter, mock_run_result) == {
         "model_adapter_details": {},
         "adapter_name": PostgresAdapter.__name__.split("Adapter")[0].lower(),
-        "adapter_version": import_module("dbt.adapters.postgres.__version__").version,
-        "base_adapter_version": import_module("dbt.adapters.__about__").version,
+        "adapter_version": import_module("dvt.adapters.postgres.__version__").version,
+        "base_adapter_version": import_module("dvt.adapters.__about__").version,
     }
 
 
@@ -351,8 +351,8 @@ class TestRunTask:
         error_to_raise: Optional[Type[Exception]],
         expected_result: Union[RunStatus, Type[Exception]],
     ):
-        mocker.patch("dbt.task.run.RunTask.get_hooks_by_type").return_value = [hook_node]
-        mocker.patch("dbt.task.run.RunTask.get_hook_sql").return_value = hook_node.raw_code
+        mocker.patch("dvt.task.run.RunTask.get_hooks_by_type").return_value = [hook_node]
+        mocker.patch("dvt.task.run.RunTask.get_hook_sql").return_value = hook_node.raw_code
 
         flags = mock.Mock()
         flags.state = None

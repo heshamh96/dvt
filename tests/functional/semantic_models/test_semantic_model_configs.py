@@ -1,8 +1,8 @@
 import pytest
 
-from dbt.artifacts.resources import SemanticModelConfig
-from dbt.exceptions import ParsingError
-from dbt.tests.util import get_manifest, run_dbt, update_config_file
+from dvt.artifacts.resources import SemanticModelConfig
+from dvt.exceptions import ParsingError
+from dvt.tests.util import get_manifest, run_dbt, update_config_file
 from tests.functional.semantic_models.fixtures import (
     disabled_models_people_metrics_yml,
     disabled_semantic_model_people_yml,

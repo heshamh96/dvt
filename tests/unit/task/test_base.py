@@ -1,8 +1,8 @@
 import os
 
 import dbt_common.exceptions
-from dbt.contracts.graph.nodes import SourceDefinition
-from dbt.task.base import BaseRunner, ConfiguredTask
+from dvt.contracts.graph.nodes import SourceDefinition
+from dvt.task.base import BaseRunner, ConfiguredTask
 from tests.unit.config import BaseConfigTest
 
 INITIAL_ROOT = os.getcwd()

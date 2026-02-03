@@ -2,7 +2,7 @@ from unittest import mock
 
 import pytest
 
-from dbt.tests.util import run_dbt, run_dbt_and_capture
+from dvt.tests.util import run_dbt, run_dbt_and_capture
 from dbt_common.exceptions import CompilationError
 from tests.functional.unit_testing.fixtures import (
     my_model_a_sql,

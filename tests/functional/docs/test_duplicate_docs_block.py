@@ -1,7 +1,7 @@
 import pytest
 
 import dbt_common.exceptions
-from dbt.tests.util import run_dbt
+from dvt.tests.util import run_dbt
 
 duplicate_doc_blocks_model_sql = "select 1 as id, 'joe' as first_name"
 

@@ -66,7 +66,7 @@ macro-paths: ["macros"]
 """
 
 local_dependency__macros__equality_sql = """
-{#-- taken from dbt-utils --#}
+{#-- taken from dvt-utils --#}
 {% test equality(model, compare_model, compare_columns=None) %}
   {{ return(adapter.dispatch('test_equality')(model, compare_model, compare_columns)) }}
 {% endtest %}
@@ -1251,13 +1251,13 @@ alt_local_utils__macros__type_timestamp_sql = """
 {%- endmacro -%}
 
 {% macro default__type_timestamp() %}
-    {{ return(adapter.dispatch('type_timestamp', 'dbt')()) }}
+    {{ return(adapter.dispatch('type_timestamp', 'dvt')()) }}
 {% endmacro %}
 """
 
 macro_resolution_order_macros__my_custom_test_sql = """
 {% test my_custom_test(model) %}
-  select cast(current_timestamp as {{ dbt.type_timestamp() }})
+  select cast(current_timestamp as {{ dvt.type_timestamp() }})
   limit 0
 {% endtest %}
 """

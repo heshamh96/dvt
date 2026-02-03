@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.util import run_dbt
+from dvt.tests.util import run_dbt
 from tests.functional.snapshots.fixtures import models_slow__gen_sql
 
 test_snapshots_changing_strategy__test_snapshot_sql = """

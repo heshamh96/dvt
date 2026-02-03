@@ -1,7 +1,7 @@
 import pytest
 
-from dbt.exceptions import CompilationError
-from dbt.tests.util import run_dbt, update_config_file
+from dvt.exceptions import CompilationError
+from dvt.tests.util import run_dbt, update_config_file
 
 model_sql = """
 select 1 as id
@@ -10,7 +10,7 @@ select 1 as id
 bad_generate_macros__generate_names_sql = """
 {% macro generate_schema_name(custom_schema_name, node) -%}
     {% do var('somevar') %}
-    {% do return(dbt.generate_schema_name(custom_schema_name, node)) %}
+    {% do return(dvt.generate_schema_name(custom_schema_name, node)) %}
 {%- endmacro %}
 
 """

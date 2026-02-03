@@ -7,10 +7,10 @@ from unittest import mock
 import pytest
 
 import dbt_common.exceptions
-from dbt.artifacts.resources import ColumnInfo, FileHash
-from dbt.contracts.graph.manifest import Manifest
-from dbt.contracts.state import PreviousState
-from dbt.graph.selector_methods import (
+from dvt.artifacts.resources import ColumnInfo, FileHash
+from dvt.contracts.graph.manifest import Manifest
+from dvt.contracts.state import PreviousState
+from dvt.graph.selector_methods import (
     AccessSelectorMethod,
     ConfigSelectorMethod,
     ExposureSelectorMethod,
@@ -774,20 +774,20 @@ def test_select_state_changed_seed_checksum_path_to_path(manifest, previous_stat
         manifest, replace(seed, checksum=FileHash(name="path", checksum=seed.original_file_path))
     )
     method = statemethod(manifest, previous_state)
-    with mock.patch("dbt.contracts.graph.nodes.warn_or_error") as warn_or_error_patch:
+    with mock.patch("dvt.contracts.graph.nodes.warn_or_error") as warn_or_error_patch:
         assert not search_manifest_using_method(manifest, method, "modified")
         warn_or_error_patch.assert_called_once()
         event = warn_or_error_patch.call_args[0][0]
         assert type(event).__name__ == "SeedExceedsLimitSamePath"
         msg = event.message()
         assert msg.startswith("Found a seed (pkg.seed) >1MB in size")
-    with mock.patch("dbt.contracts.graph.nodes.warn_or_error") as warn_or_error_patch:
+    with mock.patch("dvt.contracts.graph.nodes.warn_or_error") as warn_or_error_patch:
         assert not search_manifest_using_method(manifest, method, "new")
         warn_or_error_patch.assert_not_called()
-    with mock.patch("dbt.contracts.graph.nodes.warn_or_error") as warn_or_error_patch:
+    with mock.patch("dvt.contracts.graph.nodes.warn_or_error") as warn_or_error_patch:
         assert search_manifest_using_method(manifest, method, "old")
         warn_or_error_patch.assert_not_called()
-    with mock.patch("dbt.contracts.graph.nodes.warn_or_error") as warn_or_error_patch:
+    with mock.patch("dvt.contracts.graph.nodes.warn_or_error") as warn_or_error_patch:
         assert search_manifest_using_method(manifest, method, "unmodified")
         warn_or_error_patch.assert_called_once()
         event = warn_or_error_patch.call_args[0][0]
@@ -801,20 +801,20 @@ def test_select_state_changed_seed_checksum_sha_to_path(manifest, previous_state
         manifest, replace(seed, checksum=FileHash(name="path", checksum=seed.original_file_path))
     )
     method = statemethod(manifest, previous_state)
-    with mock.patch("dbt.contracts.graph.nodes.warn_or_error") as warn_or_error_patch:
+    with mock.patch("dvt.contracts.graph.nodes.warn_or_error") as warn_or_error_patch:
         assert search_manifest_using_method(manifest, method, "modified") == {"seed"}
         warn_or_error_patch.assert_called_once()
         event = warn_or_error_patch.call_args[0][0]
         assert type(event).__name__ == "SeedIncreased"
         msg = event.message()
         assert msg.startswith("Found a seed (pkg.seed) >1MB in size")
-    with mock.patch("dbt.contracts.graph.nodes.warn_or_error") as warn_or_error_patch:
+    with mock.patch("dvt.contracts.graph.nodes.warn_or_error") as warn_or_error_patch:
         assert not search_manifest_using_method(manifest, method, "new")
         warn_or_error_patch.assert_not_called()
-    with mock.patch("dbt.contracts.graph.nodes.warn_or_error") as warn_or_error_patch:
+    with mock.patch("dvt.contracts.graph.nodes.warn_or_error") as warn_or_error_patch:
         assert search_manifest_using_method(manifest, method, "old")
         warn_or_error_patch.assert_not_called()
-    with mock.patch("dbt.contracts.graph.nodes.warn_or_error") as warn_or_error_patch:
+    with mock.patch("dvt.contracts.graph.nodes.warn_or_error") as warn_or_error_patch:
         assert search_manifest_using_method(manifest, method, "unmodified")
         warn_or_error_patch.assert_called_once()
         event = warn_or_error_patch.call_args[0][0]
@@ -829,16 +829,16 @@ def test_select_state_changed_seed_checksum_path_to_sha(manifest, previous_state
         replace(seed, checksum=FileHash(name="path", checksum=seed.original_file_path)),
     )
     method = statemethod(manifest, previous_state)
-    with mock.patch("dbt.contracts.graph.nodes.warn_or_error") as warn_or_error_patch:
+    with mock.patch("dvt.contracts.graph.nodes.warn_or_error") as warn_or_error_patch:
         assert search_manifest_using_method(manifest, method, "modified") == {"seed"}
         warn_or_error_patch.assert_not_called()
-    with mock.patch("dbt.contracts.graph.nodes.warn_or_error") as warn_or_error_patch:
+    with mock.patch("dvt.contracts.graph.nodes.warn_or_error") as warn_or_error_patch:
         assert not search_manifest_using_method(manifest, method, "new")
         warn_or_error_patch.assert_not_called()
-    with mock.patch("dbt.contracts.graph.nodes.warn_or_error") as warn_or_error_patch:
+    with mock.patch("dvt.contracts.graph.nodes.warn_or_error") as warn_or_error_patch:
         assert "seed" not in search_manifest_using_method(manifest, method, "unmodified")
         warn_or_error_patch.assert_not_called()
-    with mock.patch("dbt.contracts.graph.nodes.warn_or_error") as warn_or_error_patch:
+    with mock.patch("dvt.contracts.graph.nodes.warn_or_error") as warn_or_error_patch:
         assert "seed" in search_manifest_using_method(manifest, method, "old")
         warn_or_error_patch.assert_not_called()
 
@@ -972,16 +972,16 @@ def test_select_state_changed_test_macro_sql(
 
 
 def test_select_state_changed_test_macros(manifest, previous_state):
-    changed_macro = make_macro("dbt", "changed_macro", "blablabla")
+    changed_macro = make_macro("dvt", "changed_macro", "blablabla")
     add_macro(manifest, changed_macro)
     add_macro(previous_state.manifest, replace(changed_macro, macro_sql="something different"))
 
-    unchanged_macro = make_macro("dbt", "unchanged_macro", "blablabla")
+    unchanged_macro = make_macro("dvt", "unchanged_macro", "blablabla")
     add_macro(manifest, unchanged_macro)
     add_macro(previous_state.manifest, unchanged_macro)
 
     model1 = make_model(
-        "dbt",
+        "dvt",
         "model1",
         "blablabla",
         depends_on_macros=[changed_macro.unique_id, unchanged_macro.unique_id],
@@ -990,7 +990,7 @@ def test_select_state_changed_test_macros(manifest, previous_state):
     add_node(previous_state.manifest, model1)
 
     model2 = make_model(
-        "dbt",
+        "dvt",
         "model2",
         "blablabla",
         depends_on_macros=[unchanged_macro.unique_id, changed_macro.unique_id],
@@ -1013,16 +1013,16 @@ def test_select_state_changed_test_macros(manifest, previous_state):
 
 
 def test_select_state_changed_test_macros_with_upstream_change(manifest, previous_state):
-    changed_macro = make_macro("dbt", "changed_macro", "blablabla")
+    changed_macro = make_macro("dvt", "changed_macro", "blablabla")
     add_macro(manifest, changed_macro)
     add_macro(previous_state.manifest, replace(changed_macro, macro_sql="something different"))
 
-    unchanged_macro1 = make_macro("dbt", "unchanged_macro", "blablabla")
+    unchanged_macro1 = make_macro("dvt", "unchanged_macro", "blablabla")
     add_macro(manifest, unchanged_macro1)
     add_macro(previous_state.manifest, unchanged_macro1)
 
     unchanged_macro2 = make_macro(
-        "dbt",
+        "dvt",
         "unchanged_macro",
         "blablabla",
         depends_on_macros=[unchanged_macro1.unique_id, changed_macro.unique_id],
@@ -1031,7 +1031,7 @@ def test_select_state_changed_test_macros_with_upstream_change(manifest, previou
     add_macro(previous_state.manifest, unchanged_macro2)
 
     unchanged_macro3 = make_macro(
-        "dbt",
+        "dvt",
         "unchanged_macro",
         "blablabla",
         depends_on_macros=[changed_macro.unique_id, unchanged_macro1.unique_id],
@@ -1040,13 +1040,13 @@ def test_select_state_changed_test_macros_with_upstream_change(manifest, previou
     add_macro(previous_state.manifest, unchanged_macro3)
 
     model1 = make_model(
-        "dbt", "model1", "blablabla", depends_on_macros=[unchanged_macro1.unique_id]
+        "dvt", "model1", "blablabla", depends_on_macros=[unchanged_macro1.unique_id]
     )
     add_node(manifest, model1)
     add_node(previous_state.manifest, model1)
 
     model2 = make_model(
-        "dbt", "model2", "blablabla", depends_on_macros=[unchanged_macro3.unique_id]
+        "dvt", "model2", "blablabla", depends_on_macros=[unchanged_macro3.unique_id]
     )
     add_node(manifest, model2)
     add_node(previous_state.manifest, model2)

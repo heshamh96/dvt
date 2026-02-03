@@ -26,7 +26,7 @@ snapshots__sample_snapshot = """
 
 {{
     config(
-      target_database='dbt',
+      target_database='dvt',
       target_schema='snapshots',
       unique_key='sample_num',
       strategy='timestamp',
@@ -73,7 +73,7 @@ class BaseConfigProject:
                 "outputs": {
                     "dev": {
                         "type": "postgres",
-                        "dbname": "dbt",
+                        "dbname": "dvt",
                         "schema": "jaffle_shop",
                         "host": "localhost",
                         "user": "root",
@@ -87,7 +87,7 @@ class BaseConfigProject:
 
     @pytest.fixture(scope="class")
     def packages(self):
-        return {"packages": [{"package": "dbt-labs/dbt_utils", "version": "1.0.0"}]}
+        return {"packages": [{"package": "dvt-labs/dbt_utils", "version": "1.0.0"}]}
 
     @pytest.fixture(scope="class")
     def models(self):

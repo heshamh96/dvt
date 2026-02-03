@@ -1,14 +1,14 @@
 import pytest
 
-from dbt.artifacts.resources import RefArgs
-from dbt.clients.jinja_static import (
+from dvt.artifacts.resources import RefArgs
+from dvt.clients.jinja_static import (
     statically_extract_has_name_this,
     statically_extract_macro_calls,
     statically_parse_ref_or_source,
     statically_parse_unrendered_config,
 )
-from dbt.context.base import generate_base_context
-from dbt.exceptions import ParsingError
+from dvt.context.base import generate_base_context
+from dvt.exceptions import ParsingError
 
 
 @pytest.mark.parametrize(

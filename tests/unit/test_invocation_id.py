@@ -1,9 +1,9 @@
-from dbt.cli.main import dbtRunner
+from dvt.cli.main import dbtRunner
 
 
 class TestInvocationId:
     def test_invocation_id(self):
-        """Runs dbt programmatically twice, checking that invocation_id is
+        """Runs dvt programmatically twice, checking that invocation_id is
         consistent within an invocation, but changes for the second invocation."""
 
         runner = dbtRunner()

@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from dbt.tests.util import get_manifest, rm_file, run_dbt, write_file
+from dvt.tests.util import get_manifest, rm_file, run_dbt, write_file
 
 os.environ["DBT_PP_TEST"] = "true"
 

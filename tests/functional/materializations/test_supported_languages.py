@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.util import run_dbt
+from dvt.tests.util import run_dbt
 
 custom_mat_tmpl = """
 {% materialization custom_mat{} %}
@@ -18,8 +18,8 @@ select 1 as fun
 """
 
 models__py_model = """
-def model(dbt, session):
-    dbt.config(materialized='custom_mat')
+def model(dvt, session):
+    dvt.config(materialized='custom_mat')
     return
 """
 

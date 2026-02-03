@@ -1,7 +1,7 @@
 import pytest
 
-from dbt.events.types import NoNodesForSelectionCriteria
-from dbt.tests.util import check_result_nodes_by_name, run_dbt
+from dvt.events.types import NoNodesForSelectionCriteria
+from dvt.tests.util import check_result_nodes_by_name, run_dbt
 from dbt_common.events.event_catcher import EventCatcher
 from tests.functional.graph_selection.fixtures import SelectionFixtures
 

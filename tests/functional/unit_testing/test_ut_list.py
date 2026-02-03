@@ -14,7 +14,7 @@ from fixtures import (  # noqa: F401
     test_my_model_yml,
 )
 
-from dbt.tests.util import run_dbt
+from dvt.tests.util import run_dbt
 
 
 class TestUnitTestList:

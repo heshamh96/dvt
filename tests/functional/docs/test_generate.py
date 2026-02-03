@@ -2,8 +2,8 @@ from unittest import mock
 
 import pytest
 
-from dbt.plugins.manifest import ModelNodeArgs, PluginNodes
-from dbt.tests.util import get_manifest, run_dbt
+from dvt.plugins.manifest import ModelNodeArgs, PluginNodes
+from dvt.tests.util import get_manifest, run_dbt
 
 sample_seed = """sample_num,sample_bool
 1,true
@@ -99,7 +99,7 @@ class TestGenerateCatalogWithSources(TestBaseGenerate):
 
 
 class TestGenerateCatalogWithExternalNodes(TestBaseGenerate):
-    @mock.patch("dbt.plugins.get_plugin_manager")
+    @mock.patch("dvt.plugins.get_plugin_manager")
     def test_catalog_with_external_node(self, get_plugin_manager, project):
         project.run_sql("create table {}.external_model (id int)".format(project.test_schema))
 
@@ -111,7 +111,7 @@ class TestGenerateCatalogWithExternalNodes(TestBaseGenerate):
             package_name="external_package",
             identifier="external_model",
             schema=project.test_schema,
-            database="dbt",
+            database="dvt",
         )
         external_nodes.add_model(external_model_node)
         get_plugin_manager.return_value.get_nodes.return_value = external_nodes

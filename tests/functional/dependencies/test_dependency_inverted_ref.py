@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from dbt.events.types import PackageNodeDependsOnRootProjectNode
-from dbt.tests.util import run_dbt
+from dvt.events.types import PackageNodeDependsOnRootProjectNode
+from dvt.tests.util import run_dbt
 from dbt_common.events.event_catcher import EventCatcher
 
 

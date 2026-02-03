@@ -6,13 +6,13 @@ from unittest import mock
 import pytest
 import yaml
 
-import dbt.flags as flags
-from dbt.contracts.files import ParseFileType
-from dbt.contracts.results import TestStatus
-from dbt.exceptions import CompilationError
-from dbt.plugins.manifest import ModelNodeArgs, PluginNodes
-from dbt.tests.fixtures.project import write_project_files
-from dbt.tests.util import (
+import dvt.flags as flags
+from dvt.contracts.files import ParseFileType
+from dvt.contracts.results import TestStatus
+from dvt.exceptions import CompilationError
+from dvt.plugins.manifest import ModelNodeArgs, PluginNodes
+from dvt.tests.fixtures.project import write_project_files
+from dvt.tests.util import (
     get_manifest,
     rename_dir,
     rm_file,
@@ -804,14 +804,14 @@ class TestExternalModels:
             package_name="test",
             identifier="test_identifier",
             schema="test_schema",
-            database="dbt",
+            database="dvt",
         )
 
     @pytest.fixture(scope="class")
     def models(self):
         return {"model_one.sql": model_one_sql}
 
-    @mock.patch("dbt.plugins.get_plugin_manager")
+    @mock.patch("dvt.plugins.get_plugin_manager")
     def test_pp_external_models(
         self,
         get_plugin_manager,

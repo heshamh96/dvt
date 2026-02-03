@@ -6,8 +6,8 @@ from fixtures import (
     test_model_a_with_duplicate_test_name_yml,
 )
 
-from dbt.exceptions import DuplicateResourceNameError
-from dbt.tests.util import run_dbt, run_dbt_and_capture
+from dvt.exceptions import DuplicateResourceNameError
+from dvt.tests.util import run_dbt, run_dbt_and_capture
 
 
 class TestUnitTestDuplicateTestNamesAcrossModels:

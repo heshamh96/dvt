@@ -1,7 +1,7 @@
 import pytest
 
-from dbt.contracts.results import RunStatus
-from dbt.tests.util import run_dbt
+from dvt.contracts.results import RunStatus
+from dvt.tests.util import run_dbt
 
 # Test coverage: A relation is a name for a database entity, i.e. a table or view. Every relation has
 # a name. These tests verify the default Postgres rules for relation names are followed. Adapters

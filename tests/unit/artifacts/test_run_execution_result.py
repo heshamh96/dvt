@@ -10,7 +10,7 @@ from hypothesis.strategies import (
     text,
 )
 
-from dbt.contracts.results import RunExecutionResult, RunResult, RunStatus, TimingInfo
+from dvt.contracts.results import RunExecutionResult, RunResult, RunStatus, TimingInfo
 from tests.unit.fixtures import model_node
 
 

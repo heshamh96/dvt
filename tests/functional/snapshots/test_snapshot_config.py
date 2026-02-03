@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.util import run_dbt, write_file
+from dvt.tests.util import run_dbt, write_file
 
 orders_sql = """
 select 1 as id, 101 as user_id, 'pending' as status

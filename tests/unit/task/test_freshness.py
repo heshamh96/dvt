@@ -3,7 +3,7 @@ from unittest import mock
 
 import pytest
 
-from dbt.task.freshness import FreshnessResponse, FreshnessTask
+from dvt.task.freshness import FreshnessResponse, FreshnessTask
 
 
 class TestFreshnessTaskMetadataCache:

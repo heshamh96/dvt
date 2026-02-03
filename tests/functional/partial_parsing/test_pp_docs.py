@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.util import get_manifest, rm_file, run_dbt, write_file
+from dvt.tests.util import get_manifest, rm_file, run_dbt, write_file
 
 model_one_sql = """
 select 1 as fun

@@ -1,7 +1,7 @@
 import pytest
 
-import dbt.exceptions
-from dbt.tests.util import check_table_does_exist, check_table_does_not_exist, run_dbt
+import dvt.exceptions
+from dvt.tests.util import check_table_does_exist, check_table_does_not_exist, run_dbt
 from tests.functional.exit_codes.fixtures import (
     BaseConfigProject,
     data_seed_bad_csv,
@@ -71,8 +71,8 @@ class TestExitCodesDeps:
         return {
             "packages": [
                 {
-                    "git": "https://github.com/dbt-labs/dbt-integration-project",
-                    "revision": "dbt/1.0.0",
+                    "git": "https://github.com/dvt-labs/dvt-integration-project",
+                    "revision": "dvt/1.0.0",
                 }
             ]
         }
@@ -88,14 +88,14 @@ class TestExitCodesDepsFail:
         return {
             "packages": [
                 {
-                    "git": "https://github.com/dbt-labs/dbt-integration-project",
+                    "git": "https://github.com/dvt-labs/dvt-integration-project",
                     "revision": "bad-branch",
                 },
             ]
         }
 
     def test_deps_fail(self, project):
-        with pytest.raises(dbt.exceptions.GitCheckoutError) as exc:
+        with pytest.raises(dvt.exceptions.GitCheckoutError) as exc:
             run_dbt(["deps"])
         expected_msg = "Error checking out spec='bad-branch'"
         assert expected_msg in str(exc.value)

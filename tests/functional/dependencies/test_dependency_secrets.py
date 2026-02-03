@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from dbt.tests.util import run_dbt_and_capture
+from dvt.tests.util import run_dbt_and_capture
 from dbt_common.constants import SECRET_ENV_PREFIX
 
 
@@ -18,7 +18,7 @@ class TestSecretInPackage:
         return {
             "packages": [
                 {
-                    "package": "dbt-labs/dbt_utils{{ log(env_var('DBT_ENV_SECRET_FOR_LOGGING'), info = true) }}",
+                    "package": "dvt-labs/dbt_utils{{ log(env_var('DBT_ENV_SECRET_FOR_LOGGING'), info = true) }}",
                     "version": "1.0.0",
                 }
             ]

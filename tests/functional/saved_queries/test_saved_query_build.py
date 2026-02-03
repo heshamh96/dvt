@@ -1,8 +1,8 @@
 import pytest
 
-from dbt.artifacts.schemas.results import RunStatus
-from dbt.contracts.graph.nodes import SavedQuery
-from dbt.tests.util import run_dbt
+from dvt.artifacts.schemas.results import RunStatus
+from dvt.contracts.graph.nodes import SavedQuery
+from dvt.tests.util import run_dbt
 from tests.functional.saved_queries.fixtures import (
     saved_queries_yml,
     saved_query_description,
@@ -29,7 +29,7 @@ class TestSavedQueryBuild:
     def packages(self):
         return """
 packages:
-  - package: dbt-labs/dbt_utils
+  - package: dvt-labs/dbt_utils
     version: 1.1.1
 """
 

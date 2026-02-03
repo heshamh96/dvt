@@ -3,11 +3,11 @@ from unittest import mock
 import yaml
 from pytest_mock import MockerFixture
 
-from dbt.deprecations import (
+from dvt.deprecations import (
     GenericJSONSchemaValidationDeprecation as GenericJSONSchemaValidationDeprecationCore,
 )
-from dbt.events.types import GenericJSONSchemaValidationDeprecation
-from dbt.tests.util import run_dbt, write_file
+from dvt.events.types import GenericJSONSchemaValidationDeprecation
+from dvt.tests.util import run_dbt, write_file
 from dbt_common.events.event_catcher import EventCatcher
 from dbt_common.events.types import Note
 
@@ -17,13 +17,13 @@ class TestProjectJsonschemaValidatedOnlyOnce:
 
     def test_project(self, project, mocker: MockerFixture) -> None:
         mocked_jsonschema_validate = mocker.patch(
-            "dbt.jsonschemas.jsonschemas.jsonschema_validate"
+            "dvt.jsonschemas.jsonschemas.jsonschema_validate"
         )
         run_dbt(["parse"])
         assert mocked_jsonschema_validate.call_count == 1
 
 
-@mock.patch("dbt.jsonschemas.jsonschemas._JSONSCHEMA_SUPPORTED_ADAPTERS", {"postgres"})
+@mock.patch("dvt.jsonschemas.jsonschemas._JSONSCHEMA_SUPPORTED_ADAPTERS", {"postgres"})
 class TestGenericJsonSchemaValidationDeprecation:
     """Ensure that the generic jsonschema validation deprecation can be fired"""
 

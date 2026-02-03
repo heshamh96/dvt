@@ -5,8 +5,8 @@ from typing import List
 
 import pytest
 
-from dbt.contracts.graph.manifest import Manifest
-from dbt.tests.util import run_dbt, write_file
+from dvt.contracts.graph.manifest import Manifest
+from dvt.tests.util import run_dbt, write_file
 from dbt_common.events.base_types import BaseEvent
 from dbt_semantic_interfaces.type_enums.export_destination_type import (
     ExportDestinationType,

@@ -4,9 +4,9 @@ from copy import deepcopy
 
 import pytest
 
-from dbt.contracts.results import RunStatus
-from dbt.exceptions import DbtRuntimeError
-from dbt.tests.util import rm_file, run_dbt, write_file
+from dvt.contracts.results import RunStatus
+from dvt.exceptions import DbtRuntimeError
+from dvt.tests.util import rm_file, run_dbt, write_file
 from tests.functional.defer_state.fixtures import (
     changed_ephemeral_model_sql,
     changed_table_model_sql,

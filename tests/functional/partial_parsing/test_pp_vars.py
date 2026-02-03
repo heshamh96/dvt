@@ -3,9 +3,9 @@ from pathlib import Path
 
 import pytest
 
-from dbt.adapters.exceptions import FailedToConnectError
-from dbt.exceptions import ParsingError
-from dbt.tests.util import get_manifest, run_dbt, run_dbt_and_capture, write_file
+from dvt.adapters.exceptions import FailedToConnectError
+from dvt.exceptions import ParsingError
+from dvt.tests.util import get_manifest, run_dbt, run_dbt_and_capture, write_file
 from dbt_common.constants import SECRET_ENV_PREFIX
 from tests.functional.partial_parsing.fixtures import (
     env_var_macro_sql,
@@ -82,7 +82,7 @@ class TestEnvVars:
         assert expected_env_vars == manifest.env_vars
 
         # env vars in a source
-        os.environ["ENV_VAR_DATABASE"] = "dbt"
+        os.environ["ENV_VAR_DATABASE"] = "dvt"
         os.environ["ENV_VAR_SEVERITY"] = "warn"
         write_file(raw_customers_csv, project.project_root, "seeds", "raw_customers.csv")
         write_file(env_var_sources_yml, project.project_root, "models", "sources.yml")
@@ -93,14 +93,14 @@ class TestEnvVars:
         expected_env_vars = {
             "ENV_VAR_TEST": "second",
             "TEST_SCHEMA_VAR": "view",
-            "ENV_VAR_DATABASE": "dbt",
+            "ENV_VAR_DATABASE": "dvt",
             "ENV_VAR_SEVERITY": "warn",
         }
         assert expected_env_vars == manifest.env_vars
         assert len(manifest.sources) == 1
         source_id = "source.test.seed_sources.raw_customers"
         source = manifest.sources[source_id]
-        assert source.database == "dbt"
+        assert source.database == "dvt"
         schema_file = manifest.files[source.file_id]
         test_id = "test.test.source_not_null_seed_sources_raw_customers_id.e39ee7bf0d"
         test_node = manifest.nodes[test_id]
@@ -113,7 +113,7 @@ class TestEnvVars:
         expected_env_vars = {
             "ENV_VAR_TEST": "second",
             "TEST_SCHEMA_VAR": "view",
-            "ENV_VAR_DATABASE": "dbt",
+            "ENV_VAR_DATABASE": "dvt",
             "ENV_VAR_SEVERITY": "error",
         }
         assert expected_env_vars == manifest.env_vars
@@ -148,7 +148,7 @@ class TestEnvVars:
         os.environ["ENV_VAR_DATABASE"] = "test_dbt"
 
         # Add generic test with test kwarg that's rendered late (no curly brackets)
-        os.environ["ENV_VAR_DATABASE"] = "dbt"
+        os.environ["ENV_VAR_DATABASE"] = "dvt"
         write_file(test_color_sql, project.project_root, "macros", "test_color.sql")
         results = run_dbt(["--partial-parse", "run"])
         # Add source test using test_color and an env_var for color
@@ -172,7 +172,7 @@ class TestEnvVars:
         expected_env_vars = {
             "ENV_VAR_TEST": "second",
             "TEST_SCHEMA_VAR": "view",
-            "ENV_VAR_DATABASE": "dbt",
+            "ENV_VAR_DATABASE": "dvt",
             "ENV_VAR_SEVERITY": "error",
             "ENV_VAR_COLOR": "green",
             "ENV_VAR_OWNER": "John Doe",
@@ -195,7 +195,7 @@ class TestEnvVars:
         expected_env_vars = {
             "ENV_VAR_TEST": "second",
             "TEST_SCHEMA_VAR": "view",
-            "ENV_VAR_DATABASE": "dbt",
+            "ENV_VAR_DATABASE": "dvt",
             "ENV_VAR_SEVERITY": "error",
             "ENV_VAR_COLOR": "green",
             "ENV_VAR_OWNER": "John Doe",
@@ -329,7 +329,7 @@ class TestProfileEnvVars:
             "port": 5432,
             "user": "root",
             "pass": "password",
-            "dbname": "dbt",
+            "dbname": "dvt",
         }
 
     def test_profile_env_vars(self, project, logs_dir):
@@ -346,7 +346,7 @@ class TestProfileEnvVars:
         with pytest.raises(FailedToConnectError):
             run_dbt(["run"], expect_pass=False)
 
-        log_output = Path(logs_dir, "dbt.log").read_text()
+        log_output = Path(logs_dir, "dvt.log").read_text()
         assert "Unable to do partial parsing because profile has changed" in log_output
 
 
@@ -375,7 +375,7 @@ class TestProfileSecretEnvVars:
             "port": 5432,
             "user": "{{ env_var('DBT_ENV_SECRET_USER') }}",
             "pass": "{{ env_var('ENV_VAR_PASS') }}",
-            "dbname": "dbt",
+            "dbname": "dvt",
         }
 
     def test_profile_secret_env_vars(self, project):

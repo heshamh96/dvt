@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from dbt.tests.util import run_dbt
+from dvt.tests.util import run_dbt
 
 snapshots_with_comment_at_end__snapshot_sql = """
 {% snapshot snapshot_actual %}
@@ -16,7 +16,7 @@ snapshots_with_comment_at_end__snapshot_sql = """
         )
     }}
     select * from {{target.database}}.{{schema}}.seed
-    -- Test comment to prevent recurrence of https://github.com/dbt-labs/dbt-core/issues/6781
+    -- Test comment to prevent recurrence of https://github.com/dvt-labs/dvt-core/issues/6781
 {% endsnapshot %}
 """
 

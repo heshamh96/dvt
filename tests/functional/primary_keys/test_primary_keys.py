@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.util import get_manifest, run_dbt
+from dvt.tests.util import get_manifest, run_dbt
 from tests.functional.primary_keys.fixtures import (
     invalid_model_unique_combo_of_columns,
     invalid_model_unique_test,
@@ -138,7 +138,7 @@ class TestSimpleModelCombinationOfColumns:
         return {
             "packages": [
                 {
-                    "git": "https://github.com/dbt-labs/dbt-utils.git",
+                    "git": "https://github.com/dvt-labs/dvt-utils.git",
                     "revision": "1.1.0",
                 },
             ]
@@ -165,7 +165,7 @@ class TestInvalidModelCombinationOfColumns:
         return {
             "packages": [
                 {
-                    "git": "https://github.com/dbt-labs/dbt-utils.git",
+                    "git": "https://github.com/dvt-labs/dvt-utils.git",
                     "revision": "1.1.0",
                 },
             ]
@@ -192,7 +192,7 @@ class TestInvalidModelUniqueTest:
         return {
             "packages": [
                 {
-                    "git": "https://github.com/dbt-labs/dbt-utils.git",
+                    "git": "https://github.com/dvt-labs/dvt-utils.git",
                     "revision": "1.1.0",
                 },
             ]

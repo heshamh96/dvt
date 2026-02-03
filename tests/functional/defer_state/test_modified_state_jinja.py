@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.util import (
+from dvt.tests.util import (
     get_artifact,
     get_project_config,
     run_dbt,

@@ -5,12 +5,12 @@ from unittest import mock
 import pytest
 
 import dbt_common.exceptions
-from dbt.adapters import factory, postgres
-from dbt.clients.jinja import MacroStack
-from dbt.config.project import VarProvider
-from dbt.context import base, docs, macros, providers, query_header
-from dbt.contracts.files import FileHash
-from dbt.contracts.graph.nodes import (
+from dvt.adapters import factory, postgres
+from dvt.clients.jinja import MacroStack
+from dvt.config.project import VarProvider
+from dvt.context import base, docs, macros, providers, query_header
+from dvt.contracts.files import FileHash
+from dvt.contracts.graph.nodes import (
     DependsOn,
     Macro,
     ModelNode,
@@ -18,7 +18,7 @@ from dbt.contracts.graph.nodes import (
     UnitTestNode,
     UnitTestOverrides,
 )
-from dbt.node_types import NodeType
+from dvt.node_types import NodeType
 from dbt_common.events.functions import reset_metadata_vars
 from tests.unit.mock_adapter import adapter_factory
 from tests.unit.utils import clear_plugin, config_from_parts_or_dicts, inject_adapter
@@ -30,7 +30,7 @@ class TestVar:
         return ModelNode(
             alias="model_one",
             name="model_one",
-            database="dbt",
+            database="dvt",
             schema="analytics",
             resource_type=NodeType.Model,
             unique_id="model.root.model_one",
@@ -210,7 +210,7 @@ REQUIRED_BASE_KEYS = frozenset(
 
 REQUIRED_TARGET_KEYS = REQUIRED_BASE_KEYS | {"target"}
 REQUIRED_DOCS_KEYS = REQUIRED_TARGET_KEYS | {"project_name"} | {"doc"}
-MACROS = frozenset({"macro_a", "macro_b", "root", "dbt"})
+MACROS = frozenset({"macro_a", "macro_b", "root", "dvt"})
 REQUIRED_QUERY_HEADER_KEYS = (
     REQUIRED_TARGET_KEYS | {"project_name", "context_macro_stack"} | MACROS
 )
@@ -282,7 +282,7 @@ def model():
     return ModelNode(
         alias="model_one",
         name="model_one",
-        database="dbt",
+        database="dvt",
         schema="analytics",
         resource_type=NodeType.Model,
         unique_id="model.root.model_one",
@@ -359,7 +359,7 @@ def mock_model():
         __class__=ModelNode,
         alias="model_one",
         name="model_one",
-        database="dbt",
+        database="dvt",
         schema="analytics",
         resource_type=NodeType.Model,
         unique_id="model.root.model_one",
@@ -459,7 +459,7 @@ def test_invocation_args_to_dict_in_macro_runtime_context(
         package_name="root",
     )
 
-    # Comes from dbt/flags.py as they are the only values set that aren't None at default
+    # Comes from dvt/flags.py as they are the only values set that aren't None at default
     assert ctx["invocation_args_dict"]["printer_width"] == 80
 
     # Comes from unit/utils.py config_from_parts_or_dicts method
@@ -498,7 +498,7 @@ def test_docs_runtime_context(config_postgres):
 
 
 def test_macro_namespace_duplicates(config_postgres, manifest_fx):
-    mn = macros.MacroNamespaceBuilder("root", "search", MacroStack(), ["dbt_postgres", "dbt"])
+    mn = macros.MacroNamespaceBuilder("root", "search", MacroStack(), ["dbt_postgres", "dvt"])
     mn.add_macros(manifest_fx.macros.values(), {})
 
     # same pkg, same name: error
@@ -506,15 +506,15 @@ def test_macro_namespace_duplicates(config_postgres, manifest_fx):
         mn.add_macro(mock_macro("macro_a", "root"), {})
 
     # different pkg, same name: no error
-    mn.add_macros(mock_macro("macro_a", "dbt"), {})
+    mn.add_macros(mock_macro("macro_a", "dvt"), {})
 
 
 def test_macro_namespace(config_postgres, manifest_fx):
-    mn = macros.MacroNamespaceBuilder("root", "search", MacroStack(), ["dbt_postgres", "dbt"])
+    mn = macros.MacroNamespaceBuilder("root", "search", MacroStack(), ["dbt_postgres", "dvt"])
 
     mbp = manifest_fx.get_macros_by_package()
-    dbt_macro = mock_macro("some_macro", "dbt")
-    mbp["dbt"] = {"some_macro": dbt_macro}
+    dbt_macro = mock_macro("some_macro", "dvt")
+    mbp["dvt"] = {"some_macro": dbt_macro}
 
     # same namespace, same name, different pkg!
     pg_macro = mock_macro("some_macro", "dbt_postgres")
@@ -527,18 +527,18 @@ def test_macro_namespace(config_postgres, manifest_fx):
     namespace = mn.build_namespace(mbp, {})
     dct = dict(namespace)
     for result in [dct, namespace]:
-        assert "dbt" in result
+        assert "dvt" in result
         assert "root" in result
         assert "some_macro" in result
         assert "dbt_postgres" not in result
         # tests __len__
         assert len(result) == 5
         # tests __iter__
-        assert set(result) == {"dbt", "root", "some_macro", "macro_a", "macro_b"}
-        assert len(result["dbt"]) == 1
+        assert set(result) == {"dvt", "root", "some_macro", "macro_a", "macro_b"}
+        assert len(result["dvt"]) == 1
         # from the regular manifest + some_macro
         assert len(result["root"]) == 3
-        assert result["dbt"]["some_macro"].macro is pg_macro
+        assert result["dvt"]["some_macro"].macro is pg_macro
         assert result["root"]["some_macro"].macro is package_macro
         assert result["some_macro"].macro is package_macro
 
@@ -614,15 +614,15 @@ def test_unit_test_runtime_context_macro_overrides_package(
         # override dbt macro at global level
         ({"some_macro": "override"}, "override"),
         # # override dbt macro at dbt-namespaced level level
-        ({"dbt.some_macro": "override"}, "override"),
+        ({"dvt.some_macro": "override"}, "override"),
         # override dbt macro at both levels - global override should win
         (
-            {"some_macro": "dbt_global_override", "dbt.some_macro": "dbt_namespaced_override"},
+            {"some_macro": "dbt_global_override", "dvt.some_macro": "dbt_namespaced_override"},
             "dbt_global_override",
         ),
         # override dbt macro at both levels - global override should win, regardless of order
         (
-            {"dbt.some_macro": "dbt_namespaced_override", "some_macro": "dbt_global_override"},
+            {"dvt.some_macro": "dbt_namespaced_override", "some_macro": "dbt_global_override"},
             "dbt_global_override",
         ),
     ],
@@ -638,7 +638,7 @@ def test_unit_test_runtime_context_macro_overrides_dbt_macro(
     unit_test = mock_unit_test_node()
     unit_test.overrides = UnitTestOverrides(macros=overrides)
 
-    dbt_macro = mock_macro("some_macro", "dbt")
+    dbt_macro = mock_macro("some_macro", "dvt")
     manifest_with_dbt_macro = mock_manifest(config_postgres, additional_macros=[dbt_macro])
 
     ctx = providers.generate_runtime_unit_test_context(
@@ -647,4 +647,4 @@ def test_unit_test_runtime_context_macro_overrides_dbt_macro(
         manifest=manifest_with_dbt_macro,
     )
     assert ctx["some_macro"]() == expected_override_value
-    assert ctx["dbt"]["some_macro"]() == expected_override_value
+    assert ctx["dvt"]["some_macro"]() == expected_override_value

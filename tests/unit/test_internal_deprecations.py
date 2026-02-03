@@ -1,4 +1,4 @@
-from dbt.internal_deprecations import deprecated
+from dvt.internal_deprecations import deprecated
 
 
 @deprecated(reason="just because", version="1.23.0", suggested_action="Make some updates")

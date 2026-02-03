@@ -2,7 +2,7 @@ import os
 
 from jinja2.runtime import Undefined
 
-from dbt.context.base import BaseContext
+from dvt.context.base import BaseContext
 
 
 class TestBaseContext:

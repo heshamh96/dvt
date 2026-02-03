@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.util import get_artifact, get_manifest, run_dbt
+from dvt.tests.util import get_artifact, get_manifest, run_dbt
 
 # This is a place to put specific tests for contents of artifacts that we
 # don't want to bother putting in the big artifact output test, which is

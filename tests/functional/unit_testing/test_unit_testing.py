@@ -25,11 +25,11 @@ from fixtures import (  # noqa: F401
     valid_emails_sql,
 )
 
-from dbt.contracts.results import NodeStatus
-from dbt.exceptions import DuplicateResourceNameError, ParsingError
-from dbt.plugins.manifest import ModelNodeArgs, PluginNodes
-from dbt.tests.fixtures.project import write_project_files
-from dbt.tests.util import (
+from dvt.contracts.results import NodeStatus
+from dvt.exceptions import DuplicateResourceNameError, ParsingError
+from dvt.plugins.manifest import ModelNodeArgs, PluginNodes
+from dvt.tests.fixtures.project import write_project_files
+from dvt.tests.util import (
     file_exists,
     get_manifest,
     read_file,
@@ -616,7 +616,7 @@ class TestUnitTestExternalProjectNode:
             "unit_test_ext_node.yml": unit_test_ext_node_yml,
         }
 
-    @mock.patch("dbt.plugins.get_plugin_manager")
+    @mock.patch("dvt.plugins.get_plugin_manager")
     def test_unit_test_ext_nodes(
         self,
         get_plugin_manager,

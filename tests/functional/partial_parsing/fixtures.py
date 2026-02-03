@@ -12,10 +12,10 @@ test-paths: ["tests"]
 seed-paths: ["seeds"]
 macro-paths: ["macros"]
 
-require-dbt-version: '>=0.1.0'
+require-dvt-version: '>=0.1.0'
 
 target-path: "target"  # directory which will store compiled SQL files
-clean-targets:         # directories to be removed by `dbt clean`
+clean-targets:         # directories to be removed by `dvt clean`
     - "target"
     - "dbt_packages"
 

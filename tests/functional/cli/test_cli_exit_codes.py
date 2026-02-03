@@ -1,7 +1,7 @@
 import pytest
 
-from dbt.cli.exceptions import ResultExit
-from dbt.cli.main import cli
+from dvt.cli.exceptions import ResultExit
+from dvt.cli.main import cli
 
 good_sql = """
 select 1 as fun

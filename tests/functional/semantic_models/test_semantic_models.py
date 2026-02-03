@@ -1,8 +1,8 @@
 import pytest
 
-from dbt.contracts.graph.manifest import Manifest
-from dbt.exceptions import CompilationError
-from dbt.tests.util import run_dbt, write_file
+from dvt.contracts.graph.manifest import Manifest
+from dvt.exceptions import CompilationError
+from dvt.tests.util import run_dbt, write_file
 from tests.functional.semantic_models.fixtures import (
     models_people_metrics_yml,
     models_people_sql,

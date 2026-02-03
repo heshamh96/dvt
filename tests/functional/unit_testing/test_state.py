@@ -14,7 +14,7 @@ from fixtures import (
 from fixtures import test_my_model_b_fixture_csv as test_my_model_fixture_csv_modified
 from fixtures import test_my_model_fixture_csv, test_my_model_simple_fixture_yml
 
-from dbt.tests.util import run_dbt, write_config_file, write_file
+from dvt.tests.util import run_dbt, write_config_file, write_file
 
 
 class UnitTestState:

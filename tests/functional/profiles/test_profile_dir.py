@@ -6,8 +6,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-import dbt.flags as flags
-from dbt.tests.util import rm_file, run_dbt, run_dbt_and_capture, write_file
+import dvt.flags as flags
+from dvt.tests.util import rm_file, run_dbt, run_dbt_and_capture, write_file
 
 
 @pytest.fixture(scope="class")
@@ -18,13 +18,13 @@ def profiles_yml(profiles_root, dbt_profile_data):
 
 @pytest.fixture(scope="class")
 def profiles_home_root():
-    return os.path.join(os.path.expanduser("~"), ".dbt")
+    return os.path.join(os.path.expanduser("~"), ".dvt")
 
 
 @pytest.fixture(scope="class")
 def profiles_env_root(tmpdir_factory):
     path = tmpdir_factory.mktemp("profile_env")
-    # environment variables are lowercased for some reason in _get_flag_value_from_env within dbt.flags
+    # environment variables are lowercased for some reason in _get_flag_value_from_env within dvt.flags
     return str(path).lower()
 
 

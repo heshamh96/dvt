@@ -5,10 +5,10 @@ SELECT
 a+b as c,
 concat(string_a, string_b) as string_c,
 not_testing, date_a,
-{{ dbt.string_literal(type_numeric()) }} as macro_call,
-{{ dbt.string_literal(var('my_test')) }} as var_call,
-{{ dbt.string_literal(env_var('MY_TEST', 'default')) }} as env_var_call,
-{{ dbt.string_literal(invocation_id) }} as invocation_id
+{{ dvt.string_literal(type_numeric()) }} as macro_call,
+{{ dvt.string_literal(var('my_test')) }} as var_call,
+{{ dvt.string_literal(env_var('MY_TEST', 'default')) }} as env_var_call,
+{{ dvt.string_literal(invocation_id) }} as invocation_id
 FROM {{ ref('my_model_a')}} my_model_a
 JOIN {{ ref('my_model_b' )}} my_model_b
 ON my_model_a.id = my_model_b.id
@@ -1131,7 +1131,7 @@ analysis-paths: ["analyses"] # path with analysis files which are compiled, but 
 target-path: "target"      # path for compiled code
 clean-targets: ["target"]  # directories removed by the clean task
 test-paths: ["tests"]       # where to store test results
-seed-paths: ["seeds"]       # load CSVs from this directory with `dbt seed`
+seed-paths: ["seeds"]       # load CSVs from this directory with `dvt seed`
 macro-paths: ["macros"]    # where to find macros
 
 profile: user

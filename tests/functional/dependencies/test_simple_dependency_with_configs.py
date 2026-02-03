@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from dbt.tests.util import check_relations_equal, run_dbt
+from dvt.tests.util import check_relations_equal, run_dbt
 
 models__view_summary = """
 {{
@@ -43,7 +43,7 @@ class TestSimpleDependencyWithConfigs(BaseTestSimpleDependencyWithConfigs):
         return {
             "packages": [
                 {
-                    "git": "https://github.com/dbt-labs/dbt-integration-project",
+                    "git": "https://github.com/dvt-labs/dvt-integration-project",
                     "revision": "with-configs-1.0.0",
                 },
             ]
@@ -75,7 +75,7 @@ class TestSimpleDependencyWithOverriddenConfigs(BaseTestSimpleDependencyWithConf
         return {
             "packages": [
                 {
-                    "git": "https://github.com/dbt-labs/dbt-integration-project",
+                    "git": "https://github.com/dvt-labs/dvt-integration-project",
                     "revision": "with-configs-1.0.0",
                 },
             ]

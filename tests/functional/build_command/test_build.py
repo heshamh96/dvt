@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.util import run_dbt
+from dvt.tests.util import run_dbt
 from tests.functional.build_command.fixtures import (
     models__model_0_sql,
     models__model_1_sql,

@@ -4,9 +4,9 @@ import uuid
 from unittest import mock
 from unittest.mock import MagicMock, call, patch
 
-from dbt.constants import MANIFEST_FILE_NAME, RUN_RESULTS_FILE_NAME
-from dbt.exceptions import DbtProjectError
-from dbt.utils.artifact_upload import (
+from dvt.constants import MANIFEST_FILE_NAME, RUN_RESULTS_FILE_NAME
+from dvt.exceptions import DbtProjectError
+from dvt.utils.artifact_upload import (
     ArtifactUploadConfig,
     _retry_with_backoff,
     add_artifact_produced,
@@ -18,7 +18,7 @@ from dbt_common.exceptions import DbtBaseException
 class TestArtifactUploadConfig(unittest.TestCase):
     def setUp(self):
         self.config = ArtifactUploadConfig(
-            tenant_hostname="test-tenant.dbt.com",
+            tenant_hostname="test-tenant.dvt.com",
             DBT_CLOUD_TOKEN="test-token",
             DBT_CLOUD_ACCOUNT_ID="1234",
             DBT_CLOUD_ENVIRONMENT_ID="5678",
@@ -27,14 +27,14 @@ class TestArtifactUploadConfig(unittest.TestCase):
 
     def test_get_ingest_url(self):
         expected_url = (
-            "https://test-tenant.dbt.com/api/private/accounts/1234/environments/5678/ingests/"
+            "https://test-tenant.dvt.com/api/private/accounts/1234/environments/5678/ingests/"
         )
         self.assertEqual(self.config.get_ingest_url(), expected_url)
 
     def test_get_complete_url(self):
         ingest_id = "9012"
         expected_url = (
-            "https://test-tenant.dbt.com/api/private/accounts/1234/environments/5678/ingests/9012/"
+            "https://test-tenant.dvt.com/api/private/accounts/1234/environments/5678/ingests/9012/"
         )
         self.assertEqual(self.config.get_complete_url(ingest_id), expected_url)
 
@@ -62,7 +62,7 @@ class TestArtifactUploadConfig(unittest.TestCase):
 
 class TestRetryWithBackoff(unittest.TestCase):
     def setUp(self):
-        self.time_sleep_patcher = patch("dbt.utils.artifact_upload.time.sleep")
+        self.time_sleep_patcher = patch("dvt.utils.artifact_upload.time.sleep")
         self.mock_sleep = self.time_sleep_patcher.start()
 
     def tearDown(self):
@@ -153,15 +153,15 @@ class TestUploadArtifacts(unittest.TestCase):
         self.command = "run"
 
         # Create patchers
-        self.load_project_patcher = patch("dbt.utils.artifact_upload.load_project")
-        self.zipfile_patcher = patch("dbt.utils.artifact_upload.zipfile.ZipFile")
-        self.requests_post_patcher = patch("dbt.utils.artifact_upload.requests.post")
-        self.requests_put_patcher = patch("dbt.utils.artifact_upload.requests.put")
-        self.requests_patch_patcher = patch("dbt.utils.artifact_upload.requests.patch")
+        self.load_project_patcher = patch("dvt.utils.artifact_upload.load_project")
+        self.zipfile_patcher = patch("dvt.utils.artifact_upload.zipfile.ZipFile")
+        self.requests_post_patcher = patch("dvt.utils.artifact_upload.requests.post")
+        self.requests_put_patcher = patch("dvt.utils.artifact_upload.requests.put")
+        self.requests_patch_patcher = patch("dvt.utils.artifact_upload.requests.patch")
         self.open_patcher = patch("builtins.open", mock.mock_open(read_data=b"test data"))
-        self.fire_event_patcher = patch("dbt.utils.artifact_upload.fire_event")
-        self.retry_patcher = patch("dbt.utils.artifact_upload._retry_with_backoff")
-        self.time_sleep_patcher = patch("dbt.utils.artifact_upload.time.sleep")
+        self.fire_event_patcher = patch("dvt.utils.artifact_upload.fire_event")
+        self.retry_patcher = patch("dvt.utils.artifact_upload._retry_with_backoff")
+        self.time_sleep_patcher = patch("dvt.utils.artifact_upload.time.sleep")
 
         # Start patchers
         self.mock_load_project = self.load_project_patcher.start()

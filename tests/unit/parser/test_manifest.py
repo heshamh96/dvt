@@ -5,24 +5,24 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pytest_mock import MockerFixture
 
-from dbt.adapters.postgres import PostgresAdapter
-from dbt.artifacts.resources.base import FileHash
-from dbt.config import RuntimeConfig
-from dbt.contracts.graph.manifest import Manifest, ManifestStateCheck
-from dbt.events.types import InvalidConcurrentBatchesConfig, UnusedResourceConfigPath
-from dbt.flags import set_from_args
-from dbt.parser.manifest import ManifestLoader, _warn_for_unused_resource_config_paths
-from dbt.parser.read_files import FileDiff
-from dbt.tracking import User
+from dvt.adapters.postgres import PostgresAdapter
+from dvt.artifacts.resources.base import FileHash
+from dvt.config import RuntimeConfig
+from dvt.contracts.graph.manifest import Manifest, ManifestStateCheck
+from dvt.events.types import InvalidConcurrentBatchesConfig, UnusedResourceConfigPath
+from dvt.flags import set_from_args
+from dvt.parser.manifest import ManifestLoader, _warn_for_unused_resource_config_paths
+from dvt.parser.read_files import FileDiff
+from dvt.tracking import User
 from dbt_common.events.event_catcher import EventCatcher
 from dbt_common.events.event_manager_client import add_callback_to_manager
 from tests.unit.fixtures import model_node
 
 
 class TestPartialParse:
-    @patch("dbt.parser.manifest.ManifestLoader.build_manifest_state_check")
-    @patch("dbt.parser.manifest.os.path.exists")
-    @patch("dbt.parser.manifest.open")
+    @patch("dvt.parser.manifest.ManifestLoader.build_manifest_state_check")
+    @patch("dvt.parser.manifest.os.path.exists")
+    @patch("dvt.parser.manifest.open")
     def test_partial_parse_file_path(self, patched_open, patched_os_exist, patched_state_check):
         mock_project = MagicMock(RuntimeConfig)
         mock_project.project_target_path = "mock_target_path"
@@ -45,9 +45,9 @@ class TestPartialParse:
         manifest = ManifestLoader(mock_project, {})
         assert manifest.manifest.state_check.profile_hash.checksum != profile_hash
 
-    @patch("dbt.parser.manifest.ManifestLoader.build_manifest_state_check")
-    @patch("dbt.parser.manifest.os.path.exists")
-    @patch("dbt.parser.manifest.open")
+    @patch("dvt.parser.manifest.ManifestLoader.build_manifest_state_check")
+    @patch("dvt.parser.manifest.os.path.exists")
+    @patch("dvt.parser.manifest.open")
     def test_partial_parse_by_version(
         self,
         patched_open,
@@ -80,11 +80,11 @@ class TestPartialParse:
 
 
 class TestFailedPartialParse:
-    @patch("dbt.tracking.track_partial_parser")
-    @patch("dbt.tracking.active_user")
-    @patch("dbt.parser.manifest.PartialParsing")
-    @patch("dbt.parser.manifest.ManifestLoader.read_manifest_for_partial_parse")
-    @patch("dbt.parser.manifest.ManifestLoader.build_manifest_state_check")
+    @patch("dvt.tracking.track_partial_parser")
+    @patch("dvt.tracking.active_user")
+    @patch("dvt.parser.manifest.PartialParsing")
+    @patch("dvt.parser.manifest.ManifestLoader.read_manifest_for_partial_parse")
+    @patch("dvt.parser.manifest.ManifestLoader.build_manifest_state_check")
     def test_partial_parse_safe_update_project_parser_files_partially(
         self,
         patched_state_check,
@@ -124,13 +124,13 @@ class TestGetFullManifest:
     def set_required_mocks(
         self, mocker: MockerFixture, manifest: Manifest, mock_adapter: MagicMock
     ):
-        mocker.patch("dbt.parser.manifest.get_adapter").return_value = mock_adapter
-        mocker.patch("dbt.parser.manifest.ManifestLoader.load").return_value = manifest
-        mocker.patch("dbt.parser.manifest._check_manifest").return_value = None
-        mocker.patch("dbt.parser.manifest.ManifestLoader.save_macros_to_adapter").return_value = (
+        mocker.patch("dvt.parser.manifest.get_adapter").return_value = mock_adapter
+        mocker.patch("dvt.parser.manifest.ManifestLoader.load").return_value = manifest
+        mocker.patch("dvt.parser.manifest._check_manifest").return_value = None
+        mocker.patch("dvt.parser.manifest.ManifestLoader.save_macros_to_adapter").return_value = (
             None
         )
-        mocker.patch("dbt.tracking.active_user").return_value = User(None)
+        mocker.patch("dvt.tracking.active_user").return_value = User(None)
 
     def test_write_perf_info(
         self,
@@ -138,7 +138,7 @@ class TestGetFullManifest:
         mocker: MockerFixture,
         set_required_mocks,
     ) -> None:
-        write_perf_info = mocker.patch("dbt.parser.manifest.ManifestLoader.write_perf_info")
+        write_perf_info = mocker.patch("dvt.parser.manifest.ManifestLoader.write_perf_info")
 
         ManifestLoader.get_full_manifest(
             config=mock_project,
@@ -184,7 +184,7 @@ class TestGetFullManifest:
         # FileDiff.from_dict is only called if PARTIAL_PARSE_FILE_DIFF == False
         # So we can track this function call to check if setting PARTIAL_PARSE_FILE_DIFF
         # works appropriately
-        mock_file_diff = mocker.patch("dbt.parser.read_files.FileDiff.from_dict")
+        mock_file_diff = mocker.patch("dvt.parser.read_files.FileDiff.from_dict")
         mock_file_diff.return_value = FileDiff([], [], [])
 
         ManifestLoader.get_full_manifest(config=mock_project)
@@ -245,9 +245,9 @@ class TestWarnUnusedConfigs:
 
 class TestCheckForcingConcurrentBatches:
     @pytest.fixture
-    @patch("dbt.parser.manifest.ManifestLoader.build_manifest_state_check")
-    @patch("dbt.parser.manifest.os.path.exists")
-    @patch("dbt.parser.manifest.open")
+    @patch("dvt.parser.manifest.ManifestLoader.build_manifest_state_check")
+    @patch("dvt.parser.manifest.os.path.exists")
+    @patch("dvt.parser.manifest.open")
     def manifest_loader(
         self, patched_open, patched_os_exist, patched_state_check
     ) -> ManifestLoader:
@@ -285,7 +285,7 @@ class TestCheckForcingConcurrentBatches:
         model = model_node()
         model.config.concurrent_batches = concurrent_batches_config
         mocker.patch.object(postgres_adapter, "supports").return_value = adapter_support
-        mocker.patch("dbt.parser.manifest.get_adapter").return_value = postgres_adapter
+        mocker.patch("dvt.parser.manifest.get_adapter").return_value = postgres_adapter
         mocker.patch.object(manifest_loader.manifest, "use_microbatch_batches").return_value = True
 
         manifest_loader.manifest.add_node_nofile(model)

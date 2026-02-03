@@ -1,6 +1,6 @@
 import unittest
 
-from dbt.parser.schema_renderer import SchemaYamlRenderer
+from dvt.parser.schema_renderer import SchemaYamlRenderer
 
 
 class TestYamlRendering(unittest.TestCase):

@@ -2,8 +2,8 @@ import hashlib
 import os
 from unittest.mock import ANY
 
-import dbt
-from dbt.tests.util import AnyStringWith
+import dvt
+from dvt.tests.util import AnyStringWith
 
 # This produces an "expected manifest", with a number of the fields
 # modified to avoid ephemeral changes.
@@ -274,8 +274,8 @@ def expected_seeded_manifest(project, model_database=None, quote_model=False):
     model_raw_code = read_file_replace_returns(model_sql_path).rstrip("\r\n")
 
     return {
-        "dbt_schema_version": "https://schemas.getdbt.com/dbt/manifest/v7.json",
-        "dbt_version": dbt.version.__version__,
+        "dbt_schema_version": "https://schemas.getdbt.com/dvt/manifest/v7.json",
+        "dbt_version": dvt.version.__version__,
         "nodes": {
             "model.test.model": {
                 "compiled_path": os.path.join(compiled_model_path, "model.sql"),
@@ -604,7 +604,7 @@ def expected_seeded_manifest(project, model_database=None, quote_model=False):
                 "functions": [],
                 "group": None,
                 "depends_on": {
-                    "macros": ["macro.dbt.test_not_null", "macro.dbt.get_where_subquery"],
+                    "macros": ["macro.dvt.test_not_null", "macro.dvt.get_where_subquery"],
                     "nodes": ["model.test.model"],
                 },
                 "description": "",
@@ -708,7 +708,7 @@ def expected_seeded_manifest(project, model_database=None, quote_model=False):
                 "sources": [],
                 "functions": [],
                 "depends_on": {
-                    "macros": ["macro.test.test_nothing", "macro.dbt.get_where_subquery"],
+                    "macros": ["macro.test.test_nothing", "macro.dvt.get_where_subquery"],
                     "nodes": ["model.test.model"],
                 },
                 "description": "",
@@ -762,7 +762,7 @@ def expected_seeded_manifest(project, model_database=None, quote_model=False):
                 "sources": [],
                 "functions": [],
                 "depends_on": {
-                    "macros": ["macro.dbt.test_unique", "macro.dbt.get_where_subquery"],
+                    "macros": ["macro.dvt.test_unique", "macro.dvt.get_where_subquery"],
                     "nodes": ["model.test.model"],
                 },
                 "description": "",
@@ -990,7 +990,7 @@ def expected_seeded_manifest(project, model_database=None, quote_model=False):
         },
         "group_map": {},
         "docs": {
-            "doc.dbt.__overview__": ANY,
+            "doc.dvt.__overview__": ANY,
             "doc.test.macro_info": ANY,
             "doc.test.macro_arg_info": ANY,
         },
@@ -1020,8 +1020,8 @@ def expected_references_manifest(project):
     alternate_schema = project.test_schema + "_test"
 
     return {
-        "dbt_schema_version": "https://schemas.getdbt.com/dbt/manifest/v7.json",
-        "dbt_version": dbt.version.__version__,
+        "dbt_schema_version": "https://schemas.getdbt.com/dvt/manifest/v7.json",
+        "dbt_version": dvt.version.__version__,
         "nodes": {
             "model.test.ephemeral_copy": {
                 "alias": "ephemeral_copy",
@@ -1481,7 +1481,7 @@ def expected_references_manifest(project):
         },
         "selectors": {},
         "docs": {
-            "doc.dbt.__overview__": ANY,
+            "doc.dvt.__overview__": ANY,
             "doc.test.column_info": {
                 "block_contents": "An ID field",
                 "resource_type": "doc",
@@ -1647,8 +1647,8 @@ def expected_versions_manifest(project):
     model_schema_yml_path = os.path.join("models", "schema.yml")
 
     return {
-        "dbt_schema_version": "https://schemas.getdbt.com/dbt/manifest/v7.json",
-        "dbt_version": dbt.version.__version__,
+        "dbt_schema_version": "https://schemas.getdbt.com/dvt/manifest/v7.json",
+        "dbt_version": dvt.version.__version__,
         "nodes": {
             "model.test.versioned_model.v1": {
                 "alias": "versioned_model_v1",
@@ -1896,7 +1896,7 @@ def expected_versions_manifest(project):
                 "sources": [],
                 "functions": [],
                 "depends_on": {
-                    "macros": ["macro.dbt.test_unique", "macro.dbt.get_where_subquery"],
+                    "macros": ["macro.dvt.test_unique", "macro.dvt.get_where_subquery"],
                     "nodes": ["model.test.versioned_model.v1"],
                 },
                 "description": "",
@@ -1951,7 +1951,7 @@ def expected_versions_manifest(project):
                 "sources": [],
                 "functions": [],
                 "depends_on": {
-                    "macros": ["macro.dbt.test_unique", "macro.dbt.get_where_subquery"],
+                    "macros": ["macro.dvt.test_unique", "macro.dvt.get_where_subquery"],
                     "nodes": ["model.test.versioned_model.v1"],
                 },
                 "description": "",
@@ -2006,7 +2006,7 @@ def expected_versions_manifest(project):
                 "sources": [],
                 "functions": [],
                 "depends_on": {
-                    "macros": ["macro.dbt.test_unique", "macro.dbt.get_where_subquery"],
+                    "macros": ["macro.dvt.test_unique", "macro.dvt.get_where_subquery"],
                     "nodes": ["model.test.versioned_model.v2"],
                 },
                 "description": "",

@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from dbt.tests.util import run_dbt
+from dvt.tests.util import run_dbt
 
 model_one_sql = """
 select 1 as fun
@@ -41,7 +41,7 @@ exposures:
     depends_on:
       - ref('model_one')
     owner:
-      name: dbt Labs
+      name: dvt Labs
       email: data@jaffleshop.com
 """
 

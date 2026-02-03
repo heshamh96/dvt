@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.util import run_dbt
+from dvt.tests.util import run_dbt
 from tests.functional.defer_state.fixtures import model_with_var_in_config_sql
 from tests.functional.defer_state.test_modified_state import BaseModifiedState
 

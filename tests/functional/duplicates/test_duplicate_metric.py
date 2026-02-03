@@ -1,7 +1,7 @@
 import pytest
 
-from dbt.exceptions import CompilationError
-from dbt.tests.util import run_dbt
+from dvt.exceptions import CompilationError
+from dvt.tests.util import run_dbt
 
 metric_dupes_schema_yml = """
 version: 2
@@ -34,7 +34,7 @@ class TestDuplicateMetric:
         return {"schema.yml": metric_dupes_schema_yml}
 
     def test_duplicate_metric(self, project):
-        message = "dbt found two metrics with the name"
+        message = "dvt found two metrics with the name"
         with pytest.raises(CompilationError) as exc:
             run_dbt(["compile"])
         assert message in str(exc.value)

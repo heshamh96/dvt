@@ -1,7 +1,7 @@
 import pytest
 
-from dbt.exceptions import ConfigUpdateError
-from dbt.tests.util import get_manifest, run_dbt
+from dvt.exceptions import ConfigUpdateError
+from dvt.tests.util import get_manifest, run_dbt
 from dbt_common.dataclass_schema import ValidationError
 
 CUSTOM_NODE_COLOR_MODEL_LEVEL = "red"

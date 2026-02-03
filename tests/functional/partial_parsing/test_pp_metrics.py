@@ -1,9 +1,9 @@
 import pytest
 
-from dbt.cli.main import dbtRunner
-from dbt.contracts.graph.manifest import Manifest
-from dbt.exceptions import CompilationError
-from dbt.tests.util import get_manifest, rm_file, run_dbt, write_file
+from dvt.cli.main import dbtRunner
+from dvt.contracts.graph.manifest import Manifest
+from dvt.exceptions import CompilationError
+from dvt.tests.util import get_manifest, rm_file, run_dbt, write_file
 from tests.functional.partial_parsing.fixtures import (
     metric_model_a_sql,
     metricflow_time_spine_sql,

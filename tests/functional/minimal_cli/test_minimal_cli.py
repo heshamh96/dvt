@@ -1,4 +1,4 @@
-from dbt.cli.main import cli
+from dvt.cli.main import cli
 from tests.functional.minimal_cli.fixtures import BaseConfigProject
 from tests.functional.utils import up_one
 
@@ -25,7 +25,7 @@ class TestCleanUpLevel(BaseConfigProject):
 class TestDeps(BaseConfigProject):
     def test_deps(self, runner, project):
         result = runner.invoke(cli, ["deps"])
-        assert "dbt-labs/dbt_utils" in result.output
+        assert "dvt-labs/dbt_utils" in result.output
         assert "1.0.0" in result.output
 
 

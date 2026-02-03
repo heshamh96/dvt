@@ -7,16 +7,16 @@ from unittest import mock
 import pytest
 from pytest_mock import MockerFixture
 
-import dbt.config
-import dbt.exceptions
-from dbt import tracking
-from dbt.config.profile import Profile
-from dbt.config.project import Project
-from dbt.config.runtime import RuntimeConfig
-from dbt.contracts.project import PackageConfig
-from dbt.events.types import UnusedResourceConfigPath
-from dbt.flags import set_from_args
-from dbt.tests.util import safe_set_invocation_context
+import dvt.config
+import dvt.exceptions
+from dvt import tracking
+from dvt.config.profile import Profile
+from dvt.config.project import Project
+from dvt.config.runtime import RuntimeConfig
+from dvt.contracts.project import PackageConfig
+from dvt.events.types import UnusedResourceConfigPath
+from dvt.flags import set_from_args
+from dvt.tests.util import safe_set_invocation_context
 from dbt_common.events.event_catcher import EventCatcher
 from dbt_common.events.event_manager_client import add_callback_to_manager
 from tests.unit.config import BaseConfigTest, temp_cd
@@ -36,13 +36,13 @@ class TestRuntimeConfig:
         )
 
     def test_str(self, profile: Profile, project: Project) -> None:
-        config = dbt.config.RuntimeConfig.from_parts(project, profile, {})
+        config = dvt.config.RuntimeConfig.from_parts(project, profile, {})
 
         # to make sure nothing terrible happens
         str(config)
 
     def test_from_parts(self, args: Namespace, profile: Profile, project: Project):
-        config = dbt.config.RuntimeConfig.from_parts(project, profile, args)
+        config = dvt.config.RuntimeConfig.from_parts(project, profile, args)
 
         assert config.cli_vars == {}
         assert config.to_profile_info() == profile.to_profile_info()
@@ -118,7 +118,7 @@ class TestRuntimeConfig:
 class TestRuntimeConfigFiles(BaseConfigTest):
     def test_from_args(self):
         with temp_cd(self.project_dir):
-            config = dbt.config.RuntimeConfig.from_args(self.args)
+            config = dvt.config.RuntimeConfig.from_args(self.args)
         self.assertEqual(config.version, "0.0.1")
         self.assertEqual(config.profile_name, "default")
         # on osx, for example, these are not necessarily equal due to /private
@@ -186,7 +186,7 @@ class TestVariableRuntimeConfigFiles(BaseConfigTest):
         set_from_args(self.args, None)
         with mock.patch.dict(os.environ, self.env_override):
             safe_set_invocation_context()  # reset invocation context with new env
-            config = dbt.config.RuntimeConfig.from_args(self.args)
+            config = dvt.config.RuntimeConfig.from_args(self.args)
 
         self.assertEqual(config.version, "0.1.2")
         self.assertEqual(config.project_name, "blah")

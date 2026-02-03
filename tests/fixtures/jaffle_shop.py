@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from dbt.tests.util import read_file
+from dvt.tests.util import read_file
 
 # models/customers.sql
 customers_sql = """
@@ -163,7 +163,7 @@ overview_md = """
 
 `jaffle_shop` is a fictional ecommerce store.
 
-This [dbt](https://www.getdbt.com/) project is for testing out code.
+This [dvt](https://www.getdbt.com/) project is for testing out code.
 
 The source code can be found [here](https://github.com/clrcrl/jaffle_shop).
 

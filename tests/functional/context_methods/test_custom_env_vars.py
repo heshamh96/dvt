@@ -3,7 +3,7 @@ import os
 
 import pytest
 
-from dbt.tests.util import run_dbt_and_capture
+from dvt.tests.util import run_dbt_and_capture
 
 
 def parse_json_logs(json_log_output):

@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from dbt.tests.util import (
+from dvt.tests.util import (
     check_relations_equal,
     get_manifest,
     run_dbt,

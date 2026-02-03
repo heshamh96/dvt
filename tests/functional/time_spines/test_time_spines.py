@@ -2,11 +2,11 @@ from typing import Set
 
 import pytest
 
-from dbt.cli.main import dbtRunner
-from dbt.contracts.graph.manifest import Manifest
-from dbt.contracts.graph.semantic_manifest import SemanticManifest
-from dbt.exceptions import ParsingError
-from dbt.tests.util import get_manifest
+from dvt.cli.main import dbtRunner
+from dvt.contracts.graph.manifest import Manifest
+from dvt.contracts.graph.semantic_manifest import SemanticManifest
+from dvt.exceptions import ParsingError
+from dvt.tests.util import get_manifest
 from dbt_semantic_interfaces.type_enums import TimeGranularity
 from tests.functional.time_spines.fixtures import (
     metricflow_time_spine_second_sql,

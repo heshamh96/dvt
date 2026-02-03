@@ -2,11 +2,11 @@ import os
 from copy import deepcopy
 from unittest import mock
 
-import dbt.config
-import dbt.exceptions
-from dbt.adapters.postgres import PostgresCredentials
-from dbt.flags import set_from_args
-from dbt.tests.util import safe_set_invocation_context
+import dvt.config
+import dvt.exceptions
+from dvt.adapters.postgres import PostgresCredentials
+from dvt.flags import set_from_args
+from dvt.tests.util import safe_set_invocation_context
 from tests.unit.config import (
     BaseConfigTest,
     empty_profile_renderer,
@@ -17,7 +17,7 @@ from tests.unit.config import (
 class TestProfile(BaseConfigTest):
     def from_raw_profiles(self):
         renderer = empty_profile_renderer()
-        return dbt.config.Profile.from_raw_profiles(self.default_profile_data, "default", renderer)
+        return dvt.config.Profile.from_raw_profiles(self.default_profile_data, "default", renderer)
 
     def test_from_raw_profiles(self):
         profile = self.from_raw_profiles()
@@ -35,7 +35,7 @@ class TestProfile(BaseConfigTest):
 
     def test_missing_type(self):
         del self.default_profile_data["default"]["outputs"]["postgres"]["type"]
-        with self.assertRaises(dbt.exceptions.DbtProfileError) as exc:
+        with self.assertRaises(dvt.exceptions.DbtProfileError) as exc:
             self.from_raw_profiles()
         self.assertIn("type", str(exc.exception))
         self.assertIn("postgres", str(exc.exception))
@@ -43,7 +43,7 @@ class TestProfile(BaseConfigTest):
 
     def test_bad_type(self):
         self.default_profile_data["default"]["outputs"]["postgres"]["type"] = "invalid"
-        with self.assertRaises(dbt.exceptions.DbtProfileError) as exc:
+        with self.assertRaises(dvt.exceptions.DbtProfileError) as exc:
             self.from_raw_profiles()
         self.assertIn("Credentials", str(exc.exception))
         self.assertIn("postgres", str(exc.exception))
@@ -51,7 +51,7 @@ class TestProfile(BaseConfigTest):
 
     def test_invalid_credentials(self):
         del self.default_profile_data["default"]["outputs"]["postgres"]["host"]
-        with self.assertRaises(dbt.exceptions.DbtProfileError) as exc:
+        with self.assertRaises(dvt.exceptions.DbtProfileError) as exc:
             self.from_raw_profiles()
         self.assertIn("Credentials", str(exc.exception))
         self.assertIn("postgres", str(exc.exception))
@@ -73,7 +73,7 @@ class TestProfile(BaseConfigTest):
                 "source-paths": ["other-models"],
             }
         )
-        with self.assertRaises(dbt.exceptions.DbtProjectError) as exc:
+        with self.assertRaises(dvt.exceptions.DbtProjectError) as exc:
             project_from_config_norender(self.default_project_data, project_root=self.project_dir)
 
         self.assertIn("source-paths and model-paths", str(exc.exception))
@@ -81,8 +81,8 @@ class TestProfile(BaseConfigTest):
 
     def test_profile_invalid_project(self):
         renderer = empty_profile_renderer()
-        with self.assertRaises(dbt.exceptions.DbtProjectError) as exc:
-            dbt.config.Profile.from_raw_profiles(
+        with self.assertRaises(dvt.exceptions.DbtProjectError) as exc:
+            dvt.config.Profile.from_raw_profiles(
                 self.default_profile_data, "invalid-profile", renderer
             )
 
@@ -92,8 +92,8 @@ class TestProfile(BaseConfigTest):
 
     def test_profile_invalid_target(self):
         renderer = empty_profile_renderer()
-        with self.assertRaises(dbt.exceptions.DbtProfileError) as exc:
-            dbt.config.Profile.from_raw_profiles(
+        with self.assertRaises(dvt.exceptions.DbtProfileError) as exc:
+            dvt.config.Profile.from_raw_profiles(
                 self.default_profile_data, "default", renderer, target_override="nope"
             )
 
@@ -104,8 +104,8 @@ class TestProfile(BaseConfigTest):
     def test_no_outputs(self):
         renderer = empty_profile_renderer()
 
-        with self.assertRaises(dbt.exceptions.DbtProfileError) as exc:
-            dbt.config.Profile.from_raw_profiles(
+        with self.assertRaises(dvt.exceptions.DbtProfileError) as exc:
+            dvt.config.Profile.from_raw_profiles(
                 {"some-profile": {"target": "blah"}}, "some-profile", renderer
             )
         self.assertIn("outputs not specified", str(exc.exception))
@@ -117,11 +117,11 @@ class TestProfile(BaseConfigTest):
 
     def test_eq(self):
         renderer = empty_profile_renderer()
-        profile = dbt.config.Profile.from_raw_profiles(
+        profile = dvt.config.Profile.from_raw_profiles(
             deepcopy(self.default_profile_data), "default", renderer
         )
 
-        other = dbt.config.Profile.from_raw_profiles(
+        other = dvt.config.Profile.from_raw_profiles(
             deepcopy(self.default_profile_data), "default", renderer
         )
         self.assertEqual(profile, other)
@@ -129,10 +129,10 @@ class TestProfile(BaseConfigTest):
     def test_invalid_env_vars(self):
         self.env_override["env_value_port"] = "hello"
         with mock.patch.dict(os.environ, self.env_override):
-            with self.assertRaises(dbt.exceptions.DbtProfileError) as exc:
+            with self.assertRaises(dvt.exceptions.DbtProfileError) as exc:
                 safe_set_invocation_context()
                 renderer = empty_profile_renderer()
-                dbt.config.Profile.from_raw_profile_info(
+                dvt.config.Profile.from_raw_profile_info(
                     self.default_profile_data["default"],
                     "default",
                     renderer,
@@ -152,7 +152,7 @@ class TestProfileFile(BaseConfigTest):
             "renderer": renderer,
         }
         kw.update(kwargs)
-        return dbt.config.Profile.from_raw_profile_info(**kw)
+        return dvt.config.Profile.from_raw_profile_info(**kw)
 
     def from_args(self, project_profile_name="default", **kwargs):
         kw = {
@@ -163,7 +163,7 @@ class TestProfileFile(BaseConfigTest):
             "profile_name_override": self.args.profile,
         }
         kw.update(kwargs)
-        return dbt.config.Profile.render(**kw)
+        return dvt.config.Profile.render(**kw)
 
     def test_profile_simple(self):
         profile = self.from_args()
@@ -246,7 +246,7 @@ class TestProfileFile(BaseConfigTest):
         self.env_override["env_value_port"] = "hello"
         self.args.target = "with-vars"
         with mock.patch.dict(os.environ, self.env_override):
-            with self.assertRaises(dbt.exceptions.DbtProfileError) as exc:
+            with self.assertRaises(dvt.exceptions.DbtProfileError) as exc:
                 safe_set_invocation_context()  # reset invocation context with new env
                 self.from_args()
 
@@ -255,7 +255,7 @@ class TestProfileFile(BaseConfigTest):
     def test_cli_and_env_vars(self):
         self.args.target = "cli-and-env-vars"
         self.args.vars = {"cli_value_host": "cli-postgres-host"}
-        renderer = dbt.config.renderer.ProfileRenderer({"cli_value_host": "cli-postgres-host"})
+        renderer = dvt.config.renderer.ProfileRenderer({"cli_value_host": "cli-postgres-host"})
         with mock.patch.dict(os.environ, self.env_override):
             safe_set_invocation_context()  # reset invocation context with new env
             profile = self.from_args(renderer=renderer)
@@ -275,20 +275,20 @@ class TestProfileFile(BaseConfigTest):
         self.assertEqual(profile, from_raw)
 
     def test_no_profile(self):
-        with self.assertRaises(dbt.exceptions.DbtProjectError) as exc:
+        with self.assertRaises(dvt.exceptions.DbtProjectError) as exc:
             self.from_args(project_profile_name=None)
         self.assertIn("no profile was specified", str(exc.exception))
 
     def test_empty_profile(self):
         self.write_empty_profile()
-        with self.assertRaises(dbt.exceptions.DbtProfileError) as exc:
+        with self.assertRaises(dvt.exceptions.DbtProfileError) as exc:
             self.from_args()
         self.assertIn("profiles.yml is empty", str(exc.exception))
 
     def test_profile_with_empty_profile_data(self):
         renderer = empty_profile_renderer()
-        with self.assertRaises(dbt.exceptions.DbtProfileError) as exc:
-            dbt.config.Profile.from_raw_profiles(
+        with self.assertRaises(dvt.exceptions.DbtProfileError) as exc:
+            dvt.config.Profile.from_raw_profiles(
                 self.default_profile_data, "empty_profile_data", renderer
             )
         self.assertIn("Profile empty_profile_data in profiles.yml is empty", str(exc.exception))

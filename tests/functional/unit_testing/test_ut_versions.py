@@ -1,7 +1,7 @@
 import pytest
 
-from dbt.exceptions import ParsingError, YamlParseDictError
-from dbt.tests.util import get_unique_ids_in_results, run_dbt, write_file
+from dvt.exceptions import ParsingError, YamlParseDictError
+from dvt.tests.util import get_unique_ids_in_results, run_dbt, write_file
 from tests.functional.unit_testing.fixtures import (
     my_model_a_sql,
     my_model_b_sql,

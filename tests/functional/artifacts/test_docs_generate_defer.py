@@ -3,7 +3,7 @@ import shutil
 
 import pytest
 
-from dbt.tests.util import run_dbt
+from dvt.tests.util import run_dbt
 
 model_sql = """
 select 1 as id

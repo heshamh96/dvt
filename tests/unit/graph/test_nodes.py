@@ -5,7 +5,7 @@ from typing import List
 import pytest
 from freezegun import freeze_time
 
-from dbt.artifacts.resources import (
+from dvt.artifacts.resources import (
     Defaults,
     Dimension,
     Entity,
@@ -16,10 +16,10 @@ from dbt.artifacts.resources import (
     MetricTypeParams,
     TestMetadata,
 )
-from dbt.artifacts.resources.v1.semantic_model import NodeRelation
-from dbt.contracts.graph.model_config import TestConfig
-from dbt.contracts.graph.nodes import ColumnInfo, ModelNode, ParsedNode, SemanticModel
-from dbt.node_types import NodeType
+from dvt.artifacts.resources.v1.semantic_model import NodeRelation
+from dvt.contracts.graph.model_config import TestConfig
+from dvt.contracts.graph.nodes import ColumnInfo, ModelNode, ParsedNode, SemanticModel
+from dvt.node_types import NodeType
 from dbt_common.contracts.constraints import (
     ColumnLevelConstraint,
     ConstraintType,

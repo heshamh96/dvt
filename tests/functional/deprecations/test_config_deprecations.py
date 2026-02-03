@@ -5,10 +5,10 @@ from typing import Dict
 import pytest
 from pytest_mock import MockerFixture
 
-from dbt import deprecations
-from dbt.exceptions import CompilationError, ProjectContractError, YamlParseDictError
-from dbt.tests.fixtures.project import write_project_files
-from dbt.tests.util import run_dbt, update_config_file
+from dvt import deprecations
+from dvt.exceptions import CompilationError, ProjectContractError, YamlParseDictError
+from dvt.tests.fixtures.project import write_project_files
+from dvt.tests.util import run_dbt, update_config_file
 from tests.functional.deprecations.fixtures import (
     data_tests_yaml,
     local_dependency__dbt_project_yml,
@@ -197,7 +197,7 @@ class TestValidateModelConfigOnlyCalledOncePerModel:
     def test_validate_model_config_only_called_once_per_model(
         self, project, models: Dict[str, str], mocker: MockerFixture
     ):
-        mocked_vmc = mocker.patch("dbt.parser.base.validate_model_config")
+        mocked_vmc = mocker.patch("dvt.parser.base.validate_model_config")
         run_dbt(
             ["parse", "--no-partial-parse"],
         )

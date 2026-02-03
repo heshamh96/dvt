@@ -152,7 +152,7 @@ sources:
       - name: table
 """
 
-models_view_model_sql = """{# See here: https://github.com/dbt-labs/dbt-core/pull/1729 #}
+models_view_model_sql = """{# See here: https://github.com/dvt-labs/dvt-core/pull/1729 #}
 
 select * from {{ ref('ephemeral_model') }}
 """

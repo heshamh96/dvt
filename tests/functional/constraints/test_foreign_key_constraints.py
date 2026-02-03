@@ -3,9 +3,9 @@ import shutil
 
 import pytest
 
-from dbt.artifacts.resources import RefArgs
-from dbt.exceptions import CompilationError, ParsingError
-from dbt.tests.util import get_artifact, run_dbt
+from dvt.artifacts.resources import RefArgs
+from dvt.exceptions import CompilationError, ParsingError
+from dvt.tests.util import get_artifact, run_dbt
 from dbt_common.contracts.constraints import (
     ColumnLevelConstraint,
     ConstraintType,
@@ -56,7 +56,7 @@ class TestModelLevelForeignKeyConstraintToRef:
         assert len(manifest["nodes"]["model.test.my_model"]["constraints"]) == 1
 
         compiled_constraint = manifest["nodes"]["model.test.my_model"]["constraints"][0]
-        assert compiled_constraint["to"] == f'"dbt"."{unique_schema}"."my_model_to"'
+        assert compiled_constraint["to"] == f'"dvt"."{unique_schema}"."my_model_to"'
         # Other constraint fields should remain as parsed
         assert compiled_constraint["to_columns"] == parsed_constraint.to_columns
         assert compiled_constraint["columns"] == parsed_constraint.columns
@@ -95,7 +95,7 @@ class TestModelLevelForeignKeyConstraintToSource:
         assert len(manifest["nodes"]["model.test.my_model"]["constraints"]) == 1
 
         compiled_constraint = manifest["nodes"]["model.test.my_model"]["constraints"][0]
-        assert compiled_constraint["to"] == '"dbt"."test_source"."test_table"'
+        assert compiled_constraint["to"] == '"dvt"."test_source"."test_table"'
         # Other constraint fields should remain as parsed
         assert compiled_constraint["to_columns"] == parsed_constraint.to_columns
         assert compiled_constraint["columns"] == parsed_constraint.columns
@@ -167,7 +167,7 @@ class TestColumnLevelForeignKeyConstraintToRef:
         compiled_constraint = manifest["nodes"]["model.test.my_model"]["columns"]["id"][
             "constraints"
         ][0]
-        assert compiled_constraint["to"] == f'"dbt"."{unique_schema}"."my_model_to"'
+        assert compiled_constraint["to"] == f'"dvt"."{unique_schema}"."my_model_to"'
         # Other constraint fields should remain as parsed
         assert compiled_constraint["to_columns"] == parsed_constraint.to_columns
         assert compiled_constraint["type"] == parsed_constraint.type
@@ -206,7 +206,7 @@ class TestColumnLevelForeignKeyConstraintToSource:
         compiled_constraint = manifest["nodes"]["model.test.my_model"]["columns"]["id"][
             "constraints"
         ][0]
-        assert compiled_constraint["to"] == '"dbt"."test_source"."test_table"'
+        assert compiled_constraint["to"] == '"dvt"."test_source"."test_table"'
         # # Other constraint fields should remain as parsed
         assert compiled_constraint["to_columns"] == parsed_constraint.to_columns
         assert compiled_constraint["type"] == parsed_constraint.type

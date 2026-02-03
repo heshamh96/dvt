@@ -2,11 +2,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from dbt.adapters.contracts.connection import DEFAULT_QUERY_COMMENT, QueryComment
-from dbt.config import RuntimeConfig
-from dbt.config.project import Project, RenderComponents, VarProvider
-from dbt.config.selectors import SelectorConfig
-from dbt.contracts.project import PackageConfig
+from dvt.adapters.contracts.connection import DEFAULT_QUERY_COMMENT, QueryComment
+from dvt.config import RuntimeConfig
+from dvt.config.project import Project, RenderComponents, VarProvider
+from dvt.config.selectors import SelectorConfig
+from dvt.contracts.project import PackageConfig
 from dbt_common.semver import VersionSpecifier
 
 

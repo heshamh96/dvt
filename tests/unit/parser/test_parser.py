@@ -7,17 +7,17 @@ from unittest import mock
 import yaml
 
 import dbt_common.events.functions
-from dbt import tracking
-from dbt.artifacts.resources import ModelConfig, RefArgs
-from dbt.artifacts.resources.v1.model import (
+from dvt import tracking
+from dvt.artifacts.resources import ModelConfig, RefArgs
+from dvt.artifacts.resources.v1.model import (
     ModelBuildAfter,
     ModelFreshnessUpdatesOnOptions,
 )
-from dbt.context.context_config import ContextConfig
-from dbt.contracts.files import FileHash, FilePath, SchemaSourceFile, SourceFile
-from dbt.contracts.graph.manifest import Manifest
-from dbt.contracts.graph.model_config import NodeConfig, SnapshotConfig, TestConfig
-from dbt.contracts.graph.nodes import (
+from dvt.context.context_config import ContextConfig
+from dvt.contracts.files import FileHash, FilePath, SchemaSourceFile, SourceFile
+from dvt.contracts.graph.manifest import Manifest
+from dvt.contracts.graph.model_config import NodeConfig, SnapshotConfig, TestConfig
+from dvt.contracts.graph.nodes import (
     AnalysisNode,
     DependsOn,
     Macro,
@@ -26,10 +26,10 @@ from dbt.contracts.graph.nodes import (
     SnapshotNode,
     UnpatchedSourceDefinition,
 )
-from dbt.exceptions import CompilationError, ParsingError, SchemaConfigError
-from dbt.flags import set_from_args
-from dbt.node_types import NodeType
-from dbt.parser import (
+from dvt.exceptions import CompilationError, ParsingError, SchemaConfigError
+from dvt.flags import set_from_args
+from dvt.node_types import NodeType
+from dvt.parser import (
     AnalysisParser,
     GenericTestParser,
     MacroParser,
@@ -38,15 +38,15 @@ from dbt.parser import (
     SingularTestParser,
     SnapshotParser,
 )
-from dbt.parser.common import YamlBlock
-from dbt.parser.models import (
+from dvt.parser.common import YamlBlock
+from dvt.parser.models import (
     _get_config_call_dict,
     _get_exp_sample_result,
     _get_sample_result,
     _get_stable_sample_result,
     _shift_sources,
 )
-from dbt.parser.schemas import (
+from dvt.parser.schemas import (
     AnalysisPatchParser,
     MacroPatchParser,
     ModelPatchParser,
@@ -54,9 +54,9 @@ from dbt.parser.schemas import (
     TestablePatchParser,
     yaml_from_file,
 )
-from dbt.parser.search import FileBlock
-from dbt.parser.sources import SourcePatcher
-from dbt.tests.util import safe_set_invocation_context
+from dvt.parser.search import FileBlock
+from dvt.parser.sources import SourcePatcher
+from dvt.tests.util import safe_set_invocation_context
 from tests.unit.utils import (
     MockNode,
     config_from_parts_or_dicts,
@@ -168,10 +168,10 @@ class BaseParserTest(unittest.TestCase):
 
         self.root_project_config.dependencies = self.all_projects
         self.snowplow_project_config.dependencies = self.all_projects
-        self.patcher = mock.patch("dbt.context.providers.get_adapter")
+        self.patcher = mock.patch("dvt.context.providers.get_adapter")
         self.factory = self.patcher.start()
 
-        self.parser_patcher = mock.patch("dbt.parser.base.get_adapter")
+        self.parser_patcher = mock.patch("dvt.parser.base.get_adapter")
         self.factory_parser = self.parser_patcher.start()
 
         self.manifest = Manifest(
@@ -562,7 +562,7 @@ class SchemaParserSourceTest(SchemaParserTest):
         self.assertEqual(source_values[0].table.description, "")
         self.assertEqual(len(source_values[0].table.columns), 0)
 
-    @mock.patch("dbt.parser.sources.get_adapter")
+    @mock.patch("dvt.parser.sources.get_adapter")
     def test_parse_source_custom_freshness_at_source(self, _):
         block = self.file_block_for(SOURCE_CUSTOM_FRESHNESS_AT_SOURCE, "test_one.yml")
         dct = yaml_from_file(block.file, validate=True)
@@ -571,7 +571,7 @@ class SchemaParserSourceTest(SchemaParserTest):
         src_default = self.source_patcher.parse_source(unpatched_src_default)
         assert src_default.loaded_at_query == "select 1 as id"
 
-    @mock.patch("dbt.parser.sources.get_adapter")
+    @mock.patch("dvt.parser.sources.get_adapter")
     def test_parse_source_custom_freshness_at_source_field_at_table(self, _):
         block = self.file_block_for(
             SOURCE_CUSTOM_FRESHNESS_AT_SOURCE_FIELD_AT_TABLE, "test_one.yml"
@@ -583,7 +583,7 @@ class SchemaParserSourceTest(SchemaParserTest):
         # source loaded_at_query not propagate to table since there's loaded_at_field defined
         assert src_default.loaded_at_query is None
 
-    @mock.patch("dbt.parser.sources.get_adapter")
+    @mock.patch("dvt.parser.sources.get_adapter")
     def test_parse_source_field_at_source_custom_freshness_at_table(self, _):
         block = self.file_block_for(
             SOURCE_FIELD_AT_SOURCE_CUSTOM_FRESHNESS_AT_TABLE, "test_one.yml"
@@ -594,7 +594,7 @@ class SchemaParserSourceTest(SchemaParserTest):
         src_default = self.source_patcher.parse_source(unpatched_src_default)
         assert src_default.loaded_at_query == "select 1 as id"
 
-    @mock.patch("dbt.parser.sources.get_adapter")
+    @mock.patch("dvt.parser.sources.get_adapter")
     def test_parse_source_field_at_custom_freshness_both_at_table_fails(self, _):
         block = self.file_block_for(SOURCE_FIELD_AT_CUSTOM_FRESHNESS_BOTH_AT_TABLE, "test_one.yml")
         dct = yaml_from_file(block.file, validate=True)
@@ -603,7 +603,7 @@ class SchemaParserSourceTest(SchemaParserTest):
         with self.assertRaises(ParsingError):
             self.source_patcher.parse_source(unpatched_src_default)
 
-    @mock.patch("dbt.parser.sources.get_adapter")
+    @mock.patch("dvt.parser.sources.get_adapter")
     def test_parse_source_resulting_node_freshness_matches_config_freshness(self, _):
         block = self.file_block_for(SOURCE_FRESHNESS_AT_TABLE_AND_CONFIG, "test_one.yml")
         dct = yaml_from_file(block.file, validate=True)
@@ -616,7 +616,7 @@ class SchemaParserSourceTest(SchemaParserTest):
         assert src_default.freshness.error_after.count == 2
         assert src_default.freshness.error_after.period == "day"
 
-    @mock.patch("dbt.parser.sources.get_adapter")
+    @mock.patch("dvt.parser.sources.get_adapter")
     def test_parse_source_field_at_custom_freshness_both_at_source_fails(self, _):
         block = self.file_block_for(
             SOURCE_FIELD_AT_CUSTOM_FRESHNESS_BOTH_AT_SOURCE, "test_one.yml"
@@ -640,7 +640,7 @@ class SchemaParserSourceTest(SchemaParserTest):
         assert src.resource_type == NodeType.Source
         assert src.fqn == ["snowplow", "my_source", "my_table"]
 
-    @mock.patch("dbt.parser.sources.get_adapter")
+    @mock.patch("dvt.parser.sources.get_adapter")
     def test__parse_basic_source_meta(self, mock_get_adapter):
         block = self.file_block_for(MULTIPLE_TABLE_SOURCE_META, "test_one.yml")
         dct = yaml_from_file(block.file, validate=True)
@@ -1102,46 +1102,46 @@ from torch import b
 import textblob.text
 import sklearn
 
-def model(dbt, session):
-    dbt.config(
+def model(dvt, session):
+    dvt.config(
         materialized='table',
         packages=['sklearn==0.1.0']
     )
-    df0 = dbt.ref("a_model").to_pandas()
-    df1 = dbt.ref("my_sql_model").task.limit(2)
-    df2 = dbt.ref("my_sql_model_1")
-    df3 = dbt.ref("my_sql_model_2")
-    df4 = dbt.source("test", 'table1').limit(max=[max(dbt.ref('something'))])
-    df5 = [dbt.ref('test1')]
+    df0 = dvt.ref("a_model").to_pandas()
+    df1 = dvt.ref("my_sql_model").task.limit(2)
+    df2 = dvt.ref("my_sql_model_1")
+    df3 = dvt.ref("my_sql_model_2")
+    df4 = dvt.source("test", 'table1').limit(max=[max(dvt.ref('something'))])
+    df5 = [dvt.ref('test1')]
 
-    a_dict = {'test2': dbt.ref('test2')}
-    df5 = {'test2': dbt.ref('test3')}
-    df6 = [dbt.ref("test4")]
-    f"{dbt.ref('test5')}"
+    a_dict = {'test2': dvt.ref('test2')}
+    df5 = {'test2': dvt.ref('test3')}
+    df6 = [dvt.ref("test4")]
+    f"{dvt.ref('test5')}"
 
     df = df0.limit(2)
     return df
 """
 
 python_model_config = """
-def model(dbt, session):
-    dbt.config.get("param_1")
-    dbt.config.get("param_2")
-    return dbt.ref("some_model")
+def model(dvt, session):
+    dvt.config.get("param_1")
+    dvt.config.get("param_2")
+    return dvt.ref("some_model")
 """
 
 python_model_config_with_defaults = """
-def model(dbt, session):
-    dbt.config.get("param_None", None)
-    dbt.config.get("param_Str", "default")
-    dbt.config.get("param_List", [1, 2])
-    return dbt.ref("some_model")
+def model(dvt, session):
+    dvt.config.get("param_None", None)
+    dvt.config.get("param_Str", "default")
+    dvt.config.get("param_List", [1, 2])
+    return dvt.ref("some_model")
 """
 
 python_model_single_argument = """
-def model(dbt):
-     dbt.config(materialized="table")
-     return dbt.ref("some_model")
+def model(dvt):
+     dvt.config(materialized="table")
+     return dvt.ref("some_model")
 """
 
 python_model_no_argument = """
@@ -1158,60 +1158,60 @@ def model(tbd, session):
 """
 
 python_model_multiple_models = """
-def model(dbt, session):
-    dbt.config(materialized='table')
-    return dbt.ref("some_model")
+def model(dvt, session):
+    dvt.config(materialized='table')
+    return dvt.ref("some_model")
 
-def model(dbt, session):
-    dbt.config(materialized='table')
-    return dbt.ref("some_model")
+def model(dvt, session):
+    dvt.config(materialized='table')
+    return dvt.ref("some_model")
 """
 
 python_model_incorrect_function_name = """
-def model1(dbt, session):
-    dbt.config(materialized='table')
-    return dbt.ref("some_model")
+def model1(dvt, session):
+    dvt.config(materialized='table')
+    return dvt.ref("some_model")
 """
 
 python_model_empty_file = """    """
 
 python_model_multiple_returns = """
-def model(dbt, session):
-    dbt.config(materialized='table')
-    return dbt.ref("some_model"), dbt.ref("some_other_model")
+def model(dvt, session):
+    dvt.config(materialized='table')
+    return dvt.ref("some_model"), dvt.ref("some_other_model")
 """
 
 python_model_f_string = """
 # my_python_model.py
 import pandas as pd
 
-def model(dbt, fal):
-    dbt.config(materialized="table")
-    print(f"my var: {dbt.config.get('my_var')}") # Prints "my var: None"
-    df: pd.DataFrame = dbt.ref("some_model")
+def model(dvt, fal):
+    dvt.config(materialized="table")
+    print(f"my var: {dvt.config.get('my_var')}") # Prints "my var: None"
+    df: pd.DataFrame = dvt.ref("some_model")
     return df
 """
 
 python_model_no_return = """
-def model(dbt, session):
-    dbt.config(materialized='table')
+def model(dvt, session):
+    dvt.config(materialized='table')
 """
 
 python_model_single_return = """
 import pandas as pd
 
-def model(dbt, session):
-    dbt.config(materialized='table')
+def model(dvt, session):
+    dvt.config(materialized='table')
     return pd.dataframe([1, 2])
 """
 
 python_model_incorrect_ref = """
-def model(dbt, session):
+def model(dvt, session):
     model_names = ["orders", "customers"]
     models = []
 
     for model_name in model_names:
-        models.extend(dbt.ref(model_name))
+        models.extend(dvt.ref(model_name))
 
     return models[0]
 """
@@ -1219,15 +1219,15 @@ def model(dbt, session):
 python_model_default_materialization = """
 import pandas as pd
 
-def model(dbt, session):
+def model(dvt, session):
     return pd.dataframe([1, 2])
 """
 
 python_model_custom_materialization = """
 import pandas as pd
 
-def model(dbt, session):
-    dbt.config(materialized="incremental")
+def model(dvt, session):
+    dvt.config(materialized="incremental")
     return pd.dataframe([1, 2])
 """
 
@@ -1656,7 +1656,7 @@ class SnapshotParserTest(BaseParserTest):
     def test_single_block(self):
         raw_code = """{{
                 config(unique_key="id", target_schema="analytics",
-                       target_database="dbt", strategy="timestamp",
+                       target_database="dvt", strategy="timestamp",
                        updated_at="last_update")
             }}
             select 1 as id, now() as last_update"""
@@ -1674,7 +1674,7 @@ class SnapshotParserTest(BaseParserTest):
             alias="foo",
             name="foo",
             # the `database` entry is overrridden by the target_database config
-            database="dbt",
+            database="dvt",
             schema="analytics",
             resource_type=NodeType.Snapshot,
             unique_id="snapshot.snowplow.foo",
@@ -1684,7 +1684,7 @@ class SnapshotParserTest(BaseParserTest):
             config=SnapshotConfig(
                 strategy="timestamp",
                 updated_at="last_update",
-                target_database="dbt",
+                target_database="dvt",
                 target_schema="analytics",
                 unique_key="id",
                 materialized="snapshot",
@@ -1696,13 +1696,13 @@ class SnapshotParserTest(BaseParserTest):
             unrendered_config={
                 "unique_key": "id",
                 "target_schema": "analytics",
-                "target_database": "dbt",
+                "target_database": "dvt",
                 "strategy": "timestamp",
                 "updated_at": "last_update",
             },
             config_call_dict={
                 "strategy": "timestamp",
-                "target_database": "dbt",
+                "target_database": "dvt",
                 "target_schema": "analytics",
                 "unique_key": "id",
                 "updated_at": "last_update",
@@ -1718,7 +1718,7 @@ class SnapshotParserTest(BaseParserTest):
         raw_1 = """
             {{
                 config(unique_key="id", target_schema="analytics",
-                       target_database="dbt", strategy="timestamp",
+                       target_database="dvt", strategy="timestamp",
                        updated_at="last_update")
             }}
             select 1 as id, now() as last_update
@@ -1726,7 +1726,7 @@ class SnapshotParserTest(BaseParserTest):
         raw_2 = """
             {{
                 config(unique_key="id", target_schema="analytics",
-                       target_database="dbt", strategy="timestamp",
+                       target_database="dvt", strategy="timestamp",
                        updated_at="last_update")
             }}
             select 2 as id, now() as last_update
@@ -1745,7 +1745,7 @@ class SnapshotParserTest(BaseParserTest):
         expect_foo = SnapshotNode(
             alias="foo",
             name="foo",
-            database="dbt",
+            database="dvt",
             schema="analytics",
             resource_type=NodeType.Snapshot,
             unique_id="snapshot.snowplow.foo",
@@ -1755,7 +1755,7 @@ class SnapshotParserTest(BaseParserTest):
             config=SnapshotConfig(
                 strategy="timestamp",
                 updated_at="last_update",
-                target_database="dbt",
+                target_database="dvt",
                 target_schema="analytics",
                 unique_key="id",
                 materialized="snapshot",
@@ -1767,13 +1767,13 @@ class SnapshotParserTest(BaseParserTest):
             unrendered_config={
                 "unique_key": "id",
                 "target_schema": "analytics",
-                "target_database": "dbt",
+                "target_database": "dvt",
                 "strategy": "timestamp",
                 "updated_at": "last_update",
             },
             config_call_dict={
                 "strategy": "timestamp",
-                "target_database": "dbt",
+                "target_database": "dvt",
                 "target_schema": "analytics",
                 "unique_key": "id",
                 "updated_at": "last_update",
@@ -1784,7 +1784,7 @@ class SnapshotParserTest(BaseParserTest):
         expect_bar = SnapshotNode(
             alias="bar",
             name="bar",
-            database="dbt",
+            database="dvt",
             schema="analytics",
             resource_type=NodeType.Snapshot,
             unique_id="snapshot.snowplow.bar",
@@ -1794,7 +1794,7 @@ class SnapshotParserTest(BaseParserTest):
             config=SnapshotConfig(
                 strategy="timestamp",
                 updated_at="last_update",
-                target_database="dbt",
+                target_database="dvt",
                 target_schema="analytics",
                 unique_key="id",
                 materialized="snapshot",
@@ -1806,13 +1806,13 @@ class SnapshotParserTest(BaseParserTest):
             unrendered_config={
                 "unique_key": "id",
                 "target_schema": "analytics",
-                "target_database": "dbt",
+                "target_database": "dvt",
                 "strategy": "timestamp",
                 "updated_at": "last_update",
             },
             config_call_dict={
                 "strategy": "timestamp",
-                "target_database": "dbt",
+                "target_database": "dvt",
                 "target_schema": "analytics",
                 "unique_key": "id",
                 "updated_at": "last_update",

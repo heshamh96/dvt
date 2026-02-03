@@ -2,8 +2,8 @@ import os
 
 import pytest
 
-from dbt.exceptions import ParsingError
-from dbt.tests.util import copy_file, run_dbt, write_file
+from dvt.exceptions import ParsingError
+from dvt.tests.util import copy_file, run_dbt, write_file
 from tests.functional.defer_state.fixtures import (
     group_modified_fail_schema_yml,
     group_modified_schema_yml,

@@ -2,9 +2,9 @@ from typing import List
 
 import pytest
 
-from dbt.artifacts.resources.v1.semantic_model import MetricType
-from dbt.contracts.graph.manifest import Manifest
-from dbt.tests.util import run_dbt, write_file
+from dvt.artifacts.resources.v1.semantic_model import MetricType
+from dvt.contracts.graph.manifest import Manifest
+from dvt.tests.util import run_dbt, write_file
 from dbt_common.events.base_types import BaseEvent
 from dbt_semantic_interfaces.type_enums.conversion_calculation_type import (
     ConversionCalculationType,
@@ -44,7 +44,7 @@ class TestSemanticModelParsingWorks:
         assert semantic_model.node_relation.alias == "fct_revenue"
         assert (
             semantic_model.node_relation.relation_name
-            == f'"dbt"."{project.test_schema}"."fct_revenue"'
+            == f'"dvt"."{project.test_schema}"."fct_revenue"'
         )
         assert len(semantic_model.measures) == 9
         # manifest should have two metrics created from measures

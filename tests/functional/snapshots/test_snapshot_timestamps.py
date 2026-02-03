@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.util import run_dbt, run_dbt_and_capture
+from dvt.tests.util import run_dbt, run_dbt_and_capture
 
 create_source_sql = """
 create table {database}.{schema}.source_users (

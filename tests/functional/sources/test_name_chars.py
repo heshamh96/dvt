@@ -1,4 +1,4 @@
-from dbt.tests.util import get_manifest, run_dbt, write_file
+from dvt.tests.util import get_manifest, run_dbt, write_file
 from tests.fixtures.jaffle_shop import JaffleShopProject
 
 # Note: in an actual file (as opposed to a string that we write into a files)

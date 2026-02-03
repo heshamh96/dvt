@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.util import run_dbt, write_file
+from dvt.tests.util import run_dbt, write_file
 
 models_get__any_model_sql = """
 -- models/any_model.sql

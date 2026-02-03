@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.util import run_dbt
+from dvt.tests.util import run_dbt
 
 my_input_model = """
 SELECT 1 as id, 'some string' as status

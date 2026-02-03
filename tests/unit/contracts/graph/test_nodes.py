@@ -5,17 +5,17 @@ from dataclasses import replace
 
 import pytest
 
-from dbt.artifacts.resources import ColumnInfo, TestConfig, TestMetadata
-from dbt.compilation import inject_ctes_into_sql
-from dbt.contracts.files import FileHash
-from dbt.contracts.graph.nodes import (
+from dvt.artifacts.resources import ColumnInfo, TestConfig, TestMetadata
+from dvt.compilation import inject_ctes_into_sql
+from dvt.contracts.files import FileHash
+from dvt.contracts.graph.nodes import (
     DependsOn,
     GenericTestNode,
     InjectedCTE,
     ModelConfig,
     ModelNode,
 )
-from dbt.node_types import NodeType
+from dvt.node_types import NodeType
 from tests.unit.fixtures import generic_test_node, model_node
 from tests.unit.utils import (
     assert_fails_validation,
@@ -656,11 +656,11 @@ def test_inject_ctes_simple2():
     ctes = [
         InjectedCTE(
             id="model.test.ephemeral_level_two",
-            sql=' __dbt__cte__ephemeral_level_two as (\n\nselect * from "dbt"."test16873757769710148165_test_ephemeral"."source_table"\n)',
+            sql=' __dbt__cte__ephemeral_level_two as (\n\nselect * from "dvt"."test16873757769710148165_test_ephemeral"."source_table"\n)',
         )
     ]
     expected_sql = """with __dbt__cte__ephemeral_level_two as (
-        select * from "dbt"."test16873757769710148165_test_ephemeral"."source_table"
+        select * from "dvt"."test16873757769710148165_test_ephemeral"."source_table"
         ) select * from __dbt__cte__ephemeral_level_two"""
 
     generated_sql = inject_ctes_into_sql(starting_sql, ctes)
@@ -673,7 +673,7 @@ def test_inject_ctes_multiple_ctes():
     ctes = [
         InjectedCTE(
             id="model.test.ephemeral_level_two",
-            sql=' __dbt__cte__ephemeral_level_two as (\n\nselect * from "dbt"."test16873735573223965828_test_ephemeral"."source_table"\n)',
+            sql=' __dbt__cte__ephemeral_level_two as (\n\nselect * from "dvt"."test16873735573223965828_test_ephemeral"."source_table"\n)',
         ),
         InjectedCTE(
             id="model.test.ephemeral",
@@ -681,7 +681,7 @@ def test_inject_ctes_multiple_ctes():
         ),
     ]
     expected_sql = """with __dbt__cte__ephemeral_level_two as (
-            select * from "dbt"."test16873735573223965828_test_ephemeral"."source_table"
+            select * from "dvt"."test16873735573223965828_test_ephemeral"."source_table"
         ),  __dbt__cte__ephemeral as (
             select * from __dbt__cte__ephemeral_level_two
         ) select * from __dbt__cte__ephemeral"""
@@ -693,7 +693,7 @@ def test_inject_ctes_multiple_ctes():
 def test_inject_ctes_multiple_ctes_more_complex():
     starting_sql = """select * from __dbt__cte__female_only
         union all
-        select * from "dbt"."test16873757723266827902_test_ephemeral"."double_dependent" where gender = 'Male'"""
+        select * from "dvt"."test16873757723266827902_test_ephemeral"."double_dependent" where gender = 'Male'"""
     ctes = [
         InjectedCTE(
             id="model.test.base",
@@ -716,7 +716,7 @@ def test_inject_ctes_multiple_ctes_more_complex():
             select * from __dbt__cte__base_copy where gender = 'Female'
         ) select * from __dbt__cte__female_only
         union all
-        select * from "dbt"."test16873757723266827902_test_ephemeral"."double_dependent" where gender = 'Male'"""
+        select * from "dvt"."test16873757723266827902_test_ephemeral"."double_dependent" where gender = 'Male'"""
 
     generated_sql = inject_ctes_into_sql(starting_sql, ctes)
     assert norm_whitespace(generated_sql) == norm_whitespace(expected_sql)
@@ -755,12 +755,12 @@ def test_inject_ctes_starting_with2():
     ctes = [
         InjectedCTE(
             id="model.singular_tests_ephemeral.ephemeral",
-            sql=' __dbt__cte__ephemeral as (\n\n\nwith my_cool_cte as (\n  select name, id from "dbt"."test16873917221900185954_test_singular_tests_ephemeral"."base"\n)\nselect id, name from my_cool_cte where id is not null\n)',
+            sql=' __dbt__cte__ephemeral as (\n\n\nwith my_cool_cte as (\n  select name, id from "dvt"."test16873917221900185954_test_singular_tests_ephemeral"."base"\n)\nselect id, name from my_cool_cte where id is not null\n)',
         )
     ]
     expected_sql = """with  __dbt__cte__ephemeral as (
         with my_cool_cte as (
-          select name, id from "dbt"."test16873917221900185954_test_singular_tests_ephemeral"."base"
+          select name, id from "dvt"."test16873917221900185954_test_singular_tests_ephemeral"."base"
         )
         select id, name from my_cool_cte where id is not null
         ), my_other_cool_cte as (

@@ -7,12 +7,12 @@ import click
 import pytest
 import yaml
 
-from dbt.exceptions import DbtRuntimeError
-from dbt.tests.util import run_dbt
+from dvt.exceptions import DbtRuntimeError
+from dvt.tests.util import run_dbt
 
 
 class TestInitProjectWithExistingProfilesYml:
-    @mock.patch("dbt.task.init._get_adapter_plugin_names")
+    @mock.patch("dvt.task.init._get_adapter_plugin_names")
     @mock.patch("click.confirm")
     @mock.patch("click.prompt")
     def test_init_task_in_project_with_existing_profiles_yml(
@@ -52,13 +52,13 @@ class TestInitProjectWithExistingProfilesYml:
                 call.prompt("user (dev username)", default=None, hide_input=False, type=None),
                 call.prompt("pass (dev password)", default=None, hide_input=True, type=None),
                 call.prompt(
-                    "dbname (default database that dbt will build objects in)",
+                    "dbname (default database that dvt will build objects in)",
                     default=None,
                     hide_input=False,
                     type=None,
                 ),
                 call.prompt(
-                    "schema (default schema that dbt will build objects in)",
+                    "schema (default schema that dvt will build objects in)",
                     default=None,
                     hide_input=False,
                     type=None,
@@ -92,7 +92,7 @@ class TestInitProjectWithExistingProfilesYml:
 
 
 class TestInitProjectWithoutExistingProfilesYml:
-    @mock.patch("dbt.task.init._get_adapter_plugin_names")
+    @mock.patch("dvt.task.init._get_adapter_plugin_names")
     @mock.patch("click.prompt")
     @mock.patch.object(Path, "exists", autospec=True)
     def test_init_task_in_project_without_existing_profiles_yml(
@@ -132,13 +132,13 @@ class TestInitProjectWithoutExistingProfilesYml:
                 call.prompt("user (dev username)", default=None, hide_input=False, type=None),
                 call.prompt("pass (dev password)", default=None, hide_input=True, type=None),
                 call.prompt(
-                    "dbname (default database that dbt will build objects in)",
+                    "dbname (default database that dvt will build objects in)",
                     default=None,
                     hide_input=False,
                     type=None,
                 ),
                 call.prompt(
-                    "schema (default schema that dbt will build objects in)",
+                    "schema (default schema that dvt will build objects in)",
                     default=None,
                     hide_input=False,
                     type=None,
@@ -181,7 +181,7 @@ class TestInitProjectWithoutExistingProfilesYml:
 
 
 class TestInitProjectWithoutExistingProfilesYmlOrTemplate:
-    @mock.patch("dbt.task.init._get_adapter_plugin_names")
+    @mock.patch("dvt.task.init._get_adapter_plugin_names")
     @mock.patch("click.confirm")
     @mock.patch("click.prompt")
     @mock.patch.object(Path, "exists", autospec=True)
@@ -245,7 +245,7 @@ class TestInitProjectWithoutExistingProfilesYmlOrTemplate:
 
 
 class TestInitProjectWithProfileTemplateWithoutExistingProfilesYml:
-    @mock.patch("dbt.task.init._get_adapter_plugin_names")
+    @mock.patch("dvt.task.init._get_adapter_plugin_names")
     @mock.patch("click.confirm")
     @mock.patch("click.prompt")
     @mock.patch.object(Path, "exists", autospec=True)
@@ -326,7 +326,7 @@ prompts:
 
 
 class TestInitInvalidProfileTemplate:
-    @mock.patch("dbt.task.init._get_adapter_plugin_names")
+    @mock.patch("dvt.task.init._get_adapter_plugin_names")
     @mock.patch("click.confirm")
     @mock.patch("click.prompt")
     def test_init_task_in_project_with_invalid_profile_template(
@@ -371,13 +371,13 @@ class TestInitInvalidProfileTemplate:
                 call.prompt("user (dev username)", default=None, hide_input=False, type=None),
                 call.prompt("pass (dev password)", default=None, hide_input=True, type=None),
                 call.prompt(
-                    "dbname (default database that dbt will build objects in)",
+                    "dbname (default database that dvt will build objects in)",
                     default=None,
                     hide_input=False,
                     type=None,
                 ),
                 call.prompt(
-                    "schema (default schema that dbt will build objects in)",
+                    "schema (default schema that dvt will build objects in)",
                     default=None,
                     hide_input=False,
                     type=None,
@@ -435,7 +435,7 @@ class TestInitOutsideOfProject(TestInitOutsideOfProjectBase):
                         "port": int(os.getenv("POSTGRES_TEST_PORT", 5432)),
                         "user": os.getenv("POSTGRES_TEST_USER", "root"),
                         "pass": os.getenv("POSTGRES_TEST_PASS", "password"),
-                        "dbname": os.getenv("POSTGRES_TEST_DATABASE", "dbt"),
+                        "dbname": os.getenv("POSTGRES_TEST_DATABASE", "dvt"),
                         "schema": unique_schema,
                     },
                     "noaccess": {
@@ -445,7 +445,7 @@ class TestInitOutsideOfProject(TestInitOutsideOfProjectBase):
                         "port": int(os.getenv("POSTGRES_TEST_PORT", 5432)),
                         "user": "noaccess",
                         "pass": "password",
-                        "dbname": os.getenv("POSTGRES_TEST_DATABASE", "dbt"),
+                        "dbname": os.getenv("POSTGRES_TEST_DATABASE", "dvt"),
                         "schema": unique_schema,
                     },
                 },
@@ -453,7 +453,7 @@ class TestInitOutsideOfProject(TestInitOutsideOfProjectBase):
             },
         }
 
-    @mock.patch("dbt.task.init._get_adapter_plugin_names")
+    @mock.patch("dvt.task.init._get_adapter_plugin_names")
     @mock.patch("click.confirm")
     @mock.patch("click.prompt")
     def test_init_task_outside_of_project(
@@ -490,13 +490,13 @@ class TestInitOutsideOfProject(TestInitOutsideOfProjectBase):
                 call.prompt("user (dev username)", default=None, hide_input=False, type=None),
                 call.prompt("pass (dev password)", default=None, hide_input=True, type=None),
                 call.prompt(
-                    "dbname (default database that dbt will build objects in)",
+                    "dbname (default database that dvt will build objects in)",
                     default=None,
                     hide_input=False,
                     type=None,
                 ),
                 call.prompt(
-                    "schema (default schema that dbt will build objects in)",
+                    "schema (default schema that dvt will build objects in)",
                     default=None,
                     hide_input=False,
                     type=None,
@@ -523,7 +523,7 @@ class TestInitOutsideOfProject(TestInitOutsideOfProjectBase):
 test:
   outputs:
     default2:
-      dbname: dbt
+      dbname: dvt
       host: localhost
       pass: password
       port: 5432
@@ -532,7 +532,7 @@ test:
       type: postgres
       user: root
     noaccess:
-      dbname: dbt
+      dbname: dvt
       host: localhost
       pass: password
       port: 5432
@@ -567,7 +567,7 @@ seed-paths: ["seeds"]
 macro-paths: ["macros"]
 snapshot-paths: ["snapshots"]
 
-clean-targets:         # directories to be removed by `dbt clean`
+clean-targets:         # directories to be removed by `dvt clean`
   - "target"
   - "dbt_packages"
 
@@ -588,7 +588,7 @@ models:
 
 
 class TestInitInvalidProjectNameCLI(TestInitOutsideOfProjectBase):
-    @mock.patch("dbt.task.init._get_adapter_plugin_names")
+    @mock.patch("dvt.task.init._get_adapter_plugin_names")
     @mock.patch("click.confirm")
     @mock.patch("click.prompt")
     def test_init_invalid_project_name_cli(
@@ -612,7 +612,7 @@ class TestInitInvalidProjectNameCLI(TestInitOutsideOfProjectBase):
 
 
 class TestInitInvalidProjectNamePrompt(TestInitOutsideOfProjectBase):
-    @mock.patch("dbt.task.init._get_adapter_plugin_names")
+    @mock.patch("dvt.task.init._get_adapter_plugin_names")
     @mock.patch("click.confirm")
     @mock.patch("click.prompt")
     def test_init_invalid_project_name_prompt(
@@ -637,7 +637,7 @@ class TestInitInvalidProjectNamePrompt(TestInitOutsideOfProjectBase):
 
 
 class TestInitProvidedProjectNameAndSkipProfileSetup(TestInitOutsideOfProjectBase):
-    @mock.patch("dbt.task.init._get_adapter_plugin_names")
+    @mock.patch("dvt.task.init._get_adapter_plugin_names")
     @mock.patch("click.confirm")
     @mock.patch("click.prompt")
     def test_init_provided_project_name_and_skip_profile_setup(
@@ -685,7 +685,7 @@ seed-paths: ["seeds"]
 macro-paths: ["macros"]
 snapshot-paths: ["snapshots"]
 
-clean-targets:         # directories to be removed by `dbt clean`
+clean-targets:         # directories to be removed by `dvt clean`
   - "target"
   - "dbt_packages"
 
@@ -706,7 +706,7 @@ models:
 
 
 class TestInitInsideProjectAndSkipProfileSetup(TestInitInsideOfProjectBase):
-    @mock.patch("dbt.task.init._get_adapter_plugin_names")
+    @mock.patch("dvt.task.init._get_adapter_plugin_names")
     @mock.patch("click.confirm")
     @mock.patch("click.prompt")
     def test_init_inside_project_and_skip_profile_setup(
@@ -724,7 +724,7 @@ class TestInitInsideProjectAndSkipProfileSetup(TestInitInsideOfProjectBase):
 
 
 class TestInitOutsideOfProjectWithSpecifiedProfile(TestInitOutsideOfProjectBase):
-    @mock.patch("dbt.task.init._get_adapter_plugin_names")
+    @mock.patch("dvt.task.init._get_adapter_plugin_names")
     @mock.patch("click.prompt")
     def test_init_task_outside_of_project_with_specified_profile(
         self, mock_prompt, mock_get_adapter, project, project_name, unique_schema, dbt_profile_data
@@ -771,7 +771,7 @@ seed-paths: ["seeds"]
 macro-paths: ["macros"]
 snapshot-paths: ["snapshots"]
 
-clean-targets:         # directories to be removed by `dbt clean`
+clean-targets:         # directories to be removed by `dvt clean`
   - "target"
   - "dbt_packages"
 
@@ -792,7 +792,7 @@ models:
 
 
 class TestInitOutsideOfProjectSpecifyingInvalidProfile(TestInitOutsideOfProjectBase):
-    @mock.patch("dbt.task.init._get_adapter_plugin_names")
+    @mock.patch("dvt.task.init._get_adapter_plugin_names")
     @mock.patch("click.prompt")
     def test_init_task_outside_project_specifying_invalid_profile_errors(
         self, mock_prompt, mock_get_adapter, project, project_name
@@ -816,7 +816,7 @@ class TestInitOutsideOfProjectSpecifyingInvalidProfile(TestInitOutsideOfProjectB
 
 
 class TestInitOutsideOfProjectSpecifyingProfileNoProfilesYml(TestInitOutsideOfProjectBase):
-    @mock.patch("dbt.task.init._get_adapter_plugin_names")
+    @mock.patch("dvt.task.init._get_adapter_plugin_names")
     @mock.patch("click.prompt")
     def test_init_task_outside_project_specifying_profile_no_profiles_yml_errors(
         self, mock_prompt, mock_get_adapter, project, project_name

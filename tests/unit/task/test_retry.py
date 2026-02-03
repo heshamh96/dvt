@@ -1,5 +1,5 @@
-from dbt.cli.types import Command
-from dbt.task.retry import CMD_DICT, TASK_DICT
+from dvt.cli.types import Command
+from dvt.task.retry import CMD_DICT, TASK_DICT
 
 EXCLUDED_COMMANDS = {
     "clean",

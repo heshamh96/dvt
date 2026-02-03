@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.util import run_dbt
+from dvt.tests.util import run_dbt
 
 wizards_csv = """id,w_name,email,email_tld,phone,world
 1,Albus Dumbledore,a.dumbledore@gmail.com,gmail.com,813-456-9087,1
@@ -22,7 +22,7 @@ hotmail.com
 worlds_csv = """id,name
 1,The Wizarding World
 2,Middle-earth
-3,dbt Labs
+3,dvt Labs
 4,Oz
 5,Halloweentown
 6,Salem

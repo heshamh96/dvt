@@ -1,8 +1,8 @@
 import pytest
 from dateutil.tz import tzutc
 
-from dbt.contracts.results import RunExecutionResult
-from dbt.tests.util import run_dbt, write_file
+from dvt.contracts.results import RunExecutionResult
+from dvt.tests.util import run_dbt, write_file
 
 sample_model_sql = """
 select 1 as id

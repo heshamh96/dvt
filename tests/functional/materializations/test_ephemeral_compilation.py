@@ -1,8 +1,8 @@
 import pytest
 
-from dbt.contracts.graph.nodes import ModelNode
-from dbt.contracts.results import RunExecutionResult, RunResult
-from dbt.tests.util import run_dbt
+from dvt.contracts.graph.nodes import ModelNode
+from dvt.contracts.results import RunExecutionResult, RunResult
+from dvt.tests.util import run_dbt
 from tests.functional.materializations.fixtures import (
     bar1_sql,
     bar2_sql,

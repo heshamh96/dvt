@@ -904,7 +904,7 @@ metrics:
 
   - name: average_tenure_filter_str
     label: Average tenure of people who love dbt1
-    description: Average tenure of people who love dbt
+    description: Average tenure of people who love dvt
     type: derived
     type_params:
       expr: "average_tenure"
@@ -914,7 +914,7 @@ metrics:
 
   - name: average_tenure_filter_list
     label: Average tenure of people who love dbt2
-    description: Average tenure of people who love dbt
+    description: Average tenure of people who love dvt
     type: derived
     type_params:
       expr: "average_tenure"

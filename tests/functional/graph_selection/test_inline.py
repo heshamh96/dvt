@@ -1,7 +1,7 @@
 import pytest
 
-from dbt.cli.exceptions import DbtUsageException
-from dbt.tests.util import run_dbt, run_dbt_and_capture, write_file
+from dvt.cli.exceptions import DbtUsageException
+from dvt.tests.util import run_dbt, run_dbt_and_capture, write_file
 
 selectors_yml = """
     selectors:

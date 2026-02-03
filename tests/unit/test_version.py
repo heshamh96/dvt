@@ -1,4 +1,4 @@
-import dbt.version
+import dvt.version
 from dbt_common.ui import green, yellow
 
 
@@ -13,7 +13,7 @@ class TestGetVersionInformation:
             },
         )
 
-        actual = dbt.version.get_version_information()
+        actual = dvt.version.get_version_information()
         expected = "\n".join(
             [
                 "Core:",
@@ -39,7 +39,7 @@ class TestGetVersionInformation:
             },
         )
 
-        actual = dbt.version.get_version_information()
+        actual = dvt.version.get_version_information()
         expected = "\n".join(
             [
                 "Core:",
@@ -65,14 +65,14 @@ class TestGetVersionInformation:
             },
         )
 
-        actual = dbt.version.get_version_information()
+        actual = dvt.version.get_version_information()
         expected = "\n".join(
             [
                 "Core:",
                 "  - installed: 1.0.0",
                 f"  - latest:    1.0.1 - {yellow('Update available!')}",
                 "",
-                "  Your version of dbt-core is out of date!",
+                "  Your version of dvt-core is out of date!",
                 "  You can find instructions for upgrading here:",
                 "  https://docs.getdbt.com/docs/installation",
                 "",
@@ -94,15 +94,15 @@ class TestGetVersionInformation:
             },
         )
 
-        actual = dbt.version.get_version_information()
+        actual = dvt.version.get_version_information()
         expected = "\n".join(
             [
                 "Core:",
                 "  - installed: 1.0.0",
                 "",
-                "  The latest version of dbt-core could not be determined!",
+                "  The latest version of dvt-core could not be determined!",
                 "  Make sure that the following URL is accessible:",
-                "  https://pypi.org/pypi/dbt-core/json",
+                "  https://pypi.org/pypi/dvt-core/json",
                 "",
                 "Plugins:",
                 f"  - foobar: 1.0.0 - {green('Up to date!')}",
@@ -120,7 +120,7 @@ class TestGetVersionInformation:
             latest="1.0.0",
         )
 
-        actual = dbt.version.get_version_information()
+        actual = dvt.version.get_version_information()
         expected = "\n".join(
             [
                 "Core:",
@@ -148,7 +148,7 @@ class TestGetVersionInformation:
             },
         )
 
-        actual = dbt.version.get_version_information()
+        actual = dvt.version.get_version_information()
         expected = "\n".join(
             [
                 "Core:",
@@ -177,7 +177,7 @@ class TestGetVersionInformation:
             },
         )
 
-        actual = dbt.version.get_version_information()
+        actual = dvt.version.get_version_information()
         expected = "\n".join(
             [
                 "Core:",
@@ -203,7 +203,7 @@ class TestGetVersionInformation:
             },
         )
 
-        actual = dbt.version.get_version_information()
+        actual = dvt.version.get_version_information()
         expected = "\n".join(
             [
                 "Core:",
@@ -229,7 +229,7 @@ class TestGetVersionInformation:
             },
         )
 
-        actual = dbt.version.get_version_information()
+        actual = dvt.version.get_version_information()
         expected = "\n".join(
             [
                 "Core:",
@@ -239,7 +239,7 @@ class TestGetVersionInformation:
                 "Plugins:",
                 f"  - foobar: 1.0.0 - {yellow('Update available!')}",
                 "",
-                "  At least one plugin is out of date with dbt-core.",
+                "  At least one plugin is out of date with dvt-core.",
                 "  You can find instructions for upgrading here:",
                 "  https://docs.getdbt.com/docs/installation",
                 "",
@@ -259,7 +259,7 @@ class TestGetVersionInformation:
             },
         )
 
-        actual = dbt.version.get_version_information()
+        actual = dvt.version.get_version_information()
         expected = "\n".join(
             [
                 "Core:",
@@ -269,7 +269,7 @@ class TestGetVersionInformation:
                 "Plugins:",
                 f"  - foobar: 1.0.0 - {yellow('Update available!')}",
                 "",
-                "  At least one plugin is out of date with dbt-core.",
+                "  At least one plugin is out of date with dvt-core.",
                 "  You can find instructions for upgrading here:",
                 "  https://docs.getdbt.com/docs/installation",
                 "",
@@ -289,7 +289,7 @@ class TestGetVersionInformation:
             },
         )
 
-        actual = dbt.version.get_version_information()
+        actual = dvt.version.get_version_information()
         expected = "\n".join(
             [
                 "Core:",
@@ -315,7 +315,7 @@ class TestGetVersionInformation:
             },
         )
 
-        actual = dbt.version.get_version_information()
+        actual = dvt.version.get_version_information()
         expected = "\n".join(
             [
                 "Core:",
@@ -341,7 +341,7 @@ class TestGetVersionInformation:
             },
         )
 
-        actual = dbt.version.get_version_information()
+        actual = dvt.version.get_version_information()
         expected = "\n".join(
             [
                 "Core:",
@@ -372,7 +372,7 @@ class TestGetVersionInformation:
             },
         )
 
-        actual = dbt.version.get_version_information()
+        actual = dvt.version.get_version_information()
         expected = "\n".join(
             [
                 "Core:",
@@ -403,7 +403,7 @@ class TestGetVersionInformation:
             },
         )
 
-        actual = dbt.version.get_version_information()
+        actual = dvt.version.get_version_information()
         expected = "\n".join(
             [
                 "Core:",
@@ -434,7 +434,7 @@ class TestGetVersionInformation:
             },
         )
 
-        actual = dbt.version.get_version_information()
+        actual = dvt.version.get_version_information()
         expected = "\n".join(
             [
                 "Core:",
@@ -465,7 +465,7 @@ class TestGetVersionInformation:
             },
         )
 
-        actual = dbt.version.get_version_information()
+        actual = dvt.version.get_version_information()
         expected = "\n".join(
             [
                 "Core:",
@@ -491,7 +491,7 @@ class TestGetVersionInformation:
             },
         )
 
-        actual = dbt.version.get_version_information()
+        actual = dvt.version.get_version_information()
         expected = "\n".join(
             [
                 "Core:",
@@ -501,7 +501,7 @@ class TestGetVersionInformation:
                 "Plugins:",
                 f"  - foobar: 1.0.0 - {yellow('Update available!')}",
                 "",
-                "  At least one plugin is out of date with dbt-core.",
+                "  At least one plugin is out of date with dvt-core.",
                 "  You can find instructions for upgrading here:",
                 "  https://docs.getdbt.com/docs/installation",
                 "",
@@ -525,7 +525,7 @@ class TestGetVersionInformation:
             },
         )
 
-        actual = dbt.version.get_version_information()
+        actual = dvt.version.get_version_information()
         expected = "\n".join(
             [
                 "Core:",
@@ -539,7 +539,7 @@ class TestGetVersionInformation:
                 f"  - grault: 2.1.0    - {yellow('Update available!')}",
                 f"  - garply: 2.1.0-b1 - {yellow('Could not determine latest version')}",
                 "",
-                "  At least one plugin is out of date with dbt-core.",
+                "  At least one plugin is out of date with dvt-core.",
                 "  You can find instructions for upgrading here:",
                 "  https://docs.getdbt.com/docs/installation",
                 "",
@@ -561,7 +561,7 @@ class TestGetVersionInformation:
             },
         )
 
-        actual = dbt.version.get_version_information()
+        actual = dvt.version.get_version_information()
         expected = "\n".join(
             [
                 "Core:",
@@ -580,7 +580,7 @@ class TestGetVersionInformation:
         assert expected == actual
 
     def test_file_globbing(self, mocker):
-        mocker.patch("dbt.version.__version__", "1.0.0")
+        mocker.patch("dvt.version.__version__", "1.0.0")
         mock_latest_versions(mocker, core_latest="1.0.0")
 
         mocked_spec = mocker.Mock()
@@ -639,7 +639,7 @@ class TestGetVersionInformation:
 
         mocker.patch("importlib.import_module").side_effect = mock_import
 
-        actual = dbt.version.get_version_information()
+        actual = dvt.version.get_version_information()
         expected = "\n".join(
             [
                 "Core:",
@@ -662,7 +662,7 @@ class TestGetVersionInformation:
 
 
 def mock_versions(mocker, installed="1.0.0", latest=None, plugins={}):
-    mocker.patch("dbt.version.__version__", installed)
+    mocker.patch("dvt.version.__version__", installed)
     mock_latest_versions(mocker, latest, plugins)
     # mock_plugins must be called last to avoid erronously raising an ImportError.
     mock_plugins(mocker, plugins)
@@ -675,7 +675,7 @@ def mock_versions(mocker, installed="1.0.0", latest=None, plugins={}):
 # implementation in subsequent mock.patch calls. Issue: https://github.com/python/cpython/issues/98771
 def mock_plugins(mocker, plugins):
     mock_find_spec = mocker.patch("importlib.util.find_spec")
-    path = "/tmp/dbt/adapters"
+    path = "/tmp/dvt/adapters"
     mock_find_spec.return_value.submodule_search_locations = [path]
 
     mocker.patch("glob.glob").return_value = [f"{path}/{name}/__version__.py" for name in plugins]
@@ -704,7 +704,7 @@ def mock_latest_versions(mocker, core_latest=None, plugins={}):
 
         version_url = args[0]
 
-        if version_url is dbt.version.PYPI_VERSION_URL:
+        if version_url is dvt.version.PYPI_VERSION_URL:
             if core_latest:
                 mocked_response.json.return_value = {"info": {"version": core_latest}}
 

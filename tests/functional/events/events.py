@@ -1,6 +1,6 @@
 import os
 
-from dbt.cli.main import dbtRunner
+from dvt.cli.main import dbtRunner
 from dbt_common.events.base_types import EventLevel
 
 

@@ -3,7 +3,7 @@ import os
 import pytest
 import yaml
 
-from dbt.tests.util import run_dbt, run_dbt_and_capture
+from dvt.tests.util import run_dbt, run_dbt_and_capture
 from tests.functional.sources.fixtures import (
     models_descendant_model_sql,
     models_ephemeral_model_sql,

@@ -5,9 +5,9 @@ import pytest
 import pytz
 from freezegun import freeze_time
 
-from dbt.artifacts.resources import NodeConfig
-from dbt.artifacts.resources.types import BatchSize
-from dbt.materializations.incremental.microbatch import MicrobatchBuilder
+from dvt.artifacts.resources import NodeConfig
+from dvt.artifacts.resources.types import BatchSize
+from dvt.materializations.incremental.microbatch import MicrobatchBuilder
 
 MODEL_CONFIG_BEGIN = datetime(2024, 1, 1, 0, 0, 0, 0, pytz.UTC)
 

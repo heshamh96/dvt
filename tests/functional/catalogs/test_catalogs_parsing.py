@@ -2,8 +2,8 @@ from unittest import mock
 
 import pytest
 
-from dbt.adapters.catalogs import CatalogIntegration, CatalogIntegrationConfig
-from dbt.tests.util import run_dbt, write_config_file
+from dvt.adapters.catalogs import CatalogIntegration, CatalogIntegrationConfig
+from dvt.tests.util import run_dbt, write_config_file
 from dbt_common.exceptions import DbtValidationError
 
 write_integration_1 = {
