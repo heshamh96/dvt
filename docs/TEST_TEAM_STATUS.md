@@ -17,6 +17,8 @@
 
 5. **Trial structure**: Do not remove or overwrite test runs. Each run goes in a folder: `trial_<what_we_are_testing>_<number>` (e.g. `trial_dvt_init_1`). **Each trial is a self-contained uv project**: the trial has its own uv (pyproject.toml), its own .venv, and dvt-core installed inside it. You cd into the trial and run `uv run dvt ...` there. **Findings** are written under that folder in `findings/`. All agents follow this; see `.cursor/rules/test-team-*.mdc`.
 
+6. **Trial 3 – Integration**: `trial_integration_3` is used to test **all implemented features together** (init, parse, debug) in one flow. Test team agents (data-engineer, technical-qa, negative-tester) each have a **Trial 3** section in their rules; they should run trial_integration_3 to ensure features work together without breaking one another. See `.cursor/rules/test-team-*.mdc` for the trial_integration_3 checklist and scenarios.
+
 ## What Test Team Should Do
 
 ### Each trial is a uv-contained project (how to test)

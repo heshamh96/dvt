@@ -78,6 +78,27 @@ This agent handles:
 3. **Reference init behaviour** - Use `core/dvt/task/init.py` for create_profiles_dir, create_dvt_user_config, create_new_project, setup_profile to know what should exist and when.
 4. **Report discrepancies** - Note any path, name, or file content that does not match the design or feature spec.
 
+## Trial 3: Integration test (all features together)
+
+**Trial folder**: `Testing_Playground/trial_integration_3`
+
+**Purpose**: After implementation changes, run one full flow that touches every feature and confirm paths, names, and files remain correct and consistent. No feature should break another.
+
+**Checklist for trial_integration_3**:
+- [ ] Trial is a uv project with dvt-core and dbt-postgres; `uv sync` succeeds.
+- [ ] `uv run dvt init Coke_DB --skip-profile-setup`: Coke_DB/ created; dvt_project.yml has name, profile, paths; user-level ~/.dvt/ has computes.yml, data/, mdm.duckdb per user_config.
+- [ ] profiles.yml (in ~/.dvt or PROFILES_DIR) has Coke_DB profile with at least one target so parse/debug can run.
+- [ ] `uv run dvt parse --project-dir Coke_DB` (or from Coke_DB): completes without missing global_project or dbt_project.yml errors; target/manifest.json produced.
+- [ ] From trial root, use `--project-dir Coke_DB` for all debug commands so dvt finds Coke_DB/dvt_project.yml.
+- [ ] `uv run dvt debug --project-dir Coke_DB --config`: shows project name, profile, DVT dir, computes path, MDM path.
+- [ ] `uv run dvt debug --project-dir Coke_DB --targets`: lists only the **current project's profile** (Coke_DB) and its targets with connection status.
+- [ ] `uv run dvt debug --project-dir Coke_DB --computes`: shows only the **current project's default compute** (vars.dvt_default_compute or "default").
+- [ ] `uv run dvt debug --project-dir Coke_DB --manifest`: shows manifest path and node counts.
+- [ ] `uv run dvt debug --project-dir Coke_DB --connection <target>`: tests that target; success or clear failure.
+- [ ] `uv run dvt debug --project-dir Coke_DB` (no section flags): full flow passes (version, profile, project, deps, connection).
+
+**Findings**: Write results under `trial_integration_3/findings/` (e.g. integration_checklist.md). Note any path, name, or behaviour that does not match the design or that regressed.
+
 ## When to Use This Agent
 
 Use test-team-technical-qa when:
@@ -85,3 +106,4 @@ Use test-team-technical-qa when:
 - Checking dvt init output (user-level and project-level) against the checklist above
 - Ensuring Rule 10 and feature specs are satisfied in implementation
 - Validating YAML structure and schema for profiles.yml and computes.yml
+- Running **trial_integration_3** to confirm all features work together and nothing regressed

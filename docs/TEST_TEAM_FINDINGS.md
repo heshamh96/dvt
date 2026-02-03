@@ -4,6 +4,17 @@ Summary of what the test team has verified: dvt init, dvt debug (Feature 02), an
 
 ---
 
+## Trial 3: Integration (all features together)
+
+**Trial**: `Testing_Playground/trial_integration_3`  
+**Date**: 2026-02-03
+
+**Flow run**: init → parse → debug (full + sections). From trial root, use `--project-dir Coke_DB` for parse and all debug commands so dvt finds `Coke_DB/dvt_project.yml`.
+
+**Result**: All features work together. Init created Coke_DB/; parse completed with dbt-postgres; full debug and --config, --targets, --computes, --manifest, --connection dev all succeeded. No regressions. See `trial_integration_3/findings/integration_findings.md`.
+
+---
+
 ## Feature 02: dvt debug (tested 2026-02-03)
 
 **Trial**: `Testing_Playground/trial_dvt_debug_1` (findings in that folder). Commands run from trial_dvt_init_2/Coke_DB (project with Coke_DB profile, dev target).

@@ -101,6 +101,19 @@ This agent handles:
 3. **Add automated tests over time** - Prefer adding tests in `tests/unit/` or `tests/integration/` for each scenario; no requirement to implement all tests in the first pass.
 4. **Report regressions** - If a bad input leads to a crash or silent failure, report and suggest a fix or test.
 
+## Trial 3: Integration test (all features together)
+
+**Trial folder**: `Testing_Playground/trial_integration_3`
+
+**Purpose**: After running the positive integration flow (init → parse → debug), run negative and edge-case scenarios **within the same trial** to ensure no feature breaks another and errors remain clear.
+
+**Negative / edge scenarios to run in trial_integration_3** (where applicable):
+- **init**: Invalid project name (e.g. `dvt init 123`), existing dir (`dvt init Coke_DB` when Coke_DB exists), in-project with `--profile` (expect error about editing dvt_project.yml).
+- **parse**: Missing or invalid profile for project; missing target in profile; corrupt dvt_project.yml. Expect clear compilation/runtime errors, no silent failure.
+- **debug**: `dvt debug --targets` with no project or missing profile; `dvt debug --computes` when project default compute not in computes.yml; `dvt debug --connection nonexistent_target`. Expect clear messages (e.g. profile not found, target not found, compute not found).
+
+Document in `trial_integration_3/findings/` (e.g. negative_findings.md): commands run, expected vs actual exit code and message, and any regression (e.g. a previously clear error becoming a traceback).
+
 ## When to Use This Agent
 
 Use test-team-negative-tester when:
@@ -108,3 +121,4 @@ Use test-team-negative-tester when:
 - Ensuring dvt init (and later commands) are immune to user errors and bad state
 - Adding or extending negative test cases in the test suite
 - Reviewing error messages and exit behaviour for clarity and safety
+- Running **trial_integration_3** negative scenarios to confirm errors stay clear and no feature breaks another

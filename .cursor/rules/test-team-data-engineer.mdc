@@ -84,6 +84,23 @@ dvt-core is a **Python package**. Each trial must be a **self-contained uv proje
 3. **Contribute fixtures** - When pulling from the reference project, add minimal copies under `tests/fixtures/` or `tests/integration/` so other test agents and CI do not depend on the reference path.
 4. **Cross-check specs** - Validate against `dvt_implementation_plan.md` and the relevant `dvt-core-features/*/FEATURE.md` for each feature under test.
 
+## Trial 3: Integration test (all features together)
+
+**Trial folder**: `Testing_Playground/trial_integration_3`
+
+**Purpose**: Verify all implemented features work together without breaking one another. Use this trial to run a single end-to-end flow that exercises every feature implemented so far.
+
+**Features to test in trial_integration_3** (in order):
+
+1. **dvt init** – From inside the trial folder: `uv run dvt init Coke_DB --skip-profile-setup`. Verify project `Coke_DB/` is created with `dvt_project.yml`, profile name, and standard dirs; user-level `~/.dvt/` has computes.yml, data/mdm.duckdb (profiles.yml if profile setup was run).
+2. **dvt parse** – From `Coke_DB/`: ensure profile exists in `~/.dvt/profiles.yml` for Coke_DB (or set PROFILES_DIR). Run `uv run dvt parse --project-dir Coke_DB` (or `cd Coke_DB && uv run dvt parse`). Verify parse completes; adapter packages (e.g. dbt-postgres) load; no missing dvt_project.yml or macro namespace errors.
+3. **dvt debug** – From trial root use `--project-dir Coke_DB` so dvt finds Coke_DB/dvt_project.yml. Run `uv run dvt debug --project-dir Coke_DB`, then `--config`, `--targets`, `--computes`, `--manifest`, and `--connection <target>` (e.g. dev). Verify: config shows project and paths; targets show **current project profile only**; computes show **current project default compute only**; manifest shows model/test counts if present; connection test passes for the given target.
+
+**Setup for trial_integration_3**:
+- Create `trial_integration_3` as a uv project with dvt-core (path dep) and dbt-postgres; run `uv sync`.
+- Optionally copy or link a minimal profiles.yml (Coke_DB profile with one target, e.g. dev) into `~/.dvt/` so parse and debug can run.
+- Run the sequence above and document in `trial_integration_3/findings/` that all features work together.
+
 ## When to Use This Agent
 
 Use test-team-data-engineer when:
@@ -91,3 +108,4 @@ Use test-team-data-engineer when:
 - Verifying that DVT output (dvt_project.yml, profiles.yml, directory layout) matches dbt mindset and the reference project
 - Adding or updating test fixtures derived from Cocacola_DWH_on_DBT
 - Validating profile and target semantics for postgres (or other adapters) against a known-good dbt project
+- Running **trial_integration_3** to confirm all implemented features work together
