@@ -1,6 +1,6 @@
 # DVT Team Agents
 
-This document provides an index of all **dev-team-*** sub-agents used in DVT development. Each agent has a specific scope and set of responsibilities.
+This document provides an index of all **dev-team-*** and **test-team-*** sub-agents used in DVT development. Each agent has a specific scope and set of responsibilities.
 
 ## Overview
 
@@ -22,6 +22,9 @@ All sub-agents follow these principles:
 | **dev-team-qa** | `.cursor/rules/dev-team-qa.mdc` | Testing, test infrastructure, CI test jobs | When writing tests, setting up test infrastructure, or working on CI test workflows |
 | **dev-team-deploy** | `.cursor/rules/dev-team-deploy.mdc` | Build, CI/CD, release management, branch strategy | When setting up CI/CD workflows, managing releases, or enforcing branch strategy |
 | **dev-team-docs** | `.cursor/rules/dev-team-docs.mdc` | Documentation, `dvt docs` command | When writing documentation, implementing `dvt docs`, or maintaining contributor guides |
+| **test-team-data-engineer** | `.cursor/rules/test-team-data-engineer.mdc` | dbt-aligned testing, reference project (Cocacola_DWH_on_DBT), Coke_DB scenario | When testing features with a real dbt reference, verifying dvt init/output matches dbt mindset |
+| **test-team-technical-qa** | `.cursor/rules/test-team-technical-qa.mdc` | Paths, names, files, design compliance | When verifying paths, names, and file structure match feature specs and Rule 10 |
+| **test-team-negative-tester** | `.cursor/rules/test-team-negative-tester.mdc` | Bad inputs, user errors, robustness | When testing edge cases, invalid inputs, and immunity to user errors |
 
 ## How to Use Agents
 
@@ -31,6 +34,9 @@ When working on a specific area, reference the appropriate agent's Cursor rule f
 - Working on federation engine? Use `dev-team-federation` rules
 - Writing tests? Use `dev-team-qa` rules
 - Implementing CLI commands? Use `dev-team-backend` rules
+- Testing with a real dbt project (e.g. dvt init Coke_DB)? Use `test-team-data-engineer` rules
+- Verifying paths and file layout? Use `test-team-technical-qa` rules
+- Testing bad inputs and edge cases? Use `test-team-negative-tester` rules
 
 ### For Human Developers
 
@@ -88,6 +94,21 @@ When working on a specific area, reference the appropriate agent's Cursor rule f
 - Implements `dvt docs` command
 - Maintains contributor guides
 - Documents features and APIs
+
+### Test team
+
+#### test-team-data-engineer
+- Uses Cocacola_DWH_on_DBT as reference dbt project (postgres flavour)
+- Creates and verifies DVT projects (e.g. Coke_DB) for dvt init and related features
+- Ensures dbt mindset and profile/layout compatibility; pulls needed files into test fixtures
+
+#### test-team-technical-qa
+- Verifies paths (~/.dvt/, project dirs), names, and file contents match design
+- Checks idempotency and overwrite behaviour; validates against Rule 10 and feature specs
+
+#### test-team-negative-tester
+- Challenges features with invalid project names, paths, CLI usage, and bad state
+- Ensures clear, actionable errors and no silent failures; encourages automated negative tests
 
 ## Important Reminders
 

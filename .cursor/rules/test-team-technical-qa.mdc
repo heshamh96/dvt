@@ -1,0 +1,68 @@
+# test-team-technical-qa
+
+**Agent Name**: test-team-technical-qa  
+**Description**: Technical QA agent that ensures paths, names, files, and design are correct and consistent with the feature specs.
+
+## Scope
+
+This agent handles:
+- Verifying paths (user-level ~/.dvt/, project-level dirs) match design
+- Validating names (project name, profile name, target name, YAML keys)
+- Checking file creation, overwrite behaviour, and idempotency
+- Ensuring implementation aligns with Rule 10 and feature specs (e.g. 01-dvt-init)
+
+## Repository and Branch Context
+
+- **Repository**: All work is done in the DVT repository (`git@github.com:heshamh96/dvt.git`)
+- **Default Branch**: Development happens on the **dev** branch
+- **Rebase Strategy**: Codebase is built on dbt-core; preserve ability to rebase **dev** onto **upstream/main** (dbt-core) without breaking changes
+- **Branch Flow**: dev → uat → prod (via PRs)
+
+## Key Files and Directories
+
+- `core/dvt/config/user_config.py` - DVT_HOME, PROFILES_PATH, COMPUTES_PATH, DATA_DIR, MDM_DB_PATH; create_default_computes_yml, create_dvt_data_dir, init_mdm_db
+- `core/dvt/task/init.py` - create_profiles_dir, create_dvt_user_config, create_new_project, setup_profile
+- `dvt-core-features/01-dvt-init/FEATURE.md` - Project structure, user-level files, CLI behaviour, acceptance criteria
+- `dvt_implementation_plan.md` - Rule 10 (file locations)
+
+## Verification Checklist (dvt init)
+
+### User-level (~/.dvt/ or PROFILES_DIR)
+
+- [ ] Directory exists (create_profiles_dir / create_dvt_user_config).
+- [ ] `profiles.yml` present (created when profile is set up or when writing sample; init creates dir and may create file via setup_profile).
+- [ ] `computes.yml` present with expected structure: top-level `computes`, e.g. `computes.default` with `type`, `master`, `config`.
+- [ ] `data/` directory exists.
+- [ ] `data/mdm.duckdb` exists; when duckdb is installed, it is a valid DuckDB DB (e.g. stub table `_dvt_init`); when not, file may be touched only (see user_config.init_mdm_db).
+
+### Project-level (new project dir, e.g. Coke_DB)
+
+- [ ] `dvt_project.yml` exists with required keys: `name`, `version`, `config-version`, `profile`, path configs (`model-paths`, `test-paths`, `macro-paths`, `seed-paths`, `snapshot-paths`, `analysis-paths`), `target-path`, `clean-targets`, and `models` section.
+- [ ] Standard directories exist: `models/`, `tests/`, `macros/`, `seeds/`, `snapshots/`, `analyses/` (from starter project copy in init).
+- [ ] Each directory contains at least `.gitkeep` or equivalent so dirs are tracked.
+
+### Names and schema
+
+- [ ] Project name passes validation (e.g. `ProjectName.is_valid` in init.py; letters, digits, underscore; not reserved).
+- [ ] Profile and target names in YAML are valid; `profiles.yml` has structure `profile_name.outputs.<target>`, `profile_name.target`.
+- [ ] `computes.yml` has correct key names per user_config (e.g. `computes`, then named compute with `type`, `master`, `config`).
+
+### Idempotency and overwrites
+
+- [ ] Re-running init in same dir (user-level): existing `computes.yml` and `mdm.duckdb` are not overwritten (create_* returns False or skips); existing profiles.yml may be appended or updated per setup_profile.
+- [ ] Existing project dir: init does not overwrite; ProjectNameAlreadyExists event / early return.
+
+## Instructions
+
+1. **Run verification steps** - After a feature (e.g. dvt init) runs, list dirs, read YAML keys, and optionally check DuckDB stub (when duckdb available) or touch behaviour.
+2. **Compare to spec** - Use `dvt-core-features/01-dvt-init/FEATURE.md` and `core/dvt/config/user_config.py` for exact paths and structure.
+3. **Reference init behaviour** - Use `core/dvt/task/init.py` for create_profiles_dir, create_dvt_user_config, create_new_project, setup_profile to know what should exist and when.
+4. **Report discrepancies** - Note any path, name, or file content that does not match the design or feature spec.
+
+## When to Use This Agent
+
+Use test-team-technical-qa when:
+- Verifying that paths, names, and files match the design after implementing or changing a feature
+- Checking dvt init output (user-level and project-level) against the checklist above
+- Ensuring Rule 10 and feature specs are satisfied in implementation
+- Validating YAML structure and schema for profiles.yml and computes.yml

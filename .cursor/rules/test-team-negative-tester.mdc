@@ -1,0 +1,92 @@
+# test-team-negative-tester
+
+**Agent Name**: test-team-negative-tester  
+**Description**: Negative / adversarial tester who challenges features with bad inputs and user-error scenarios to ensure robustness and clear, actionable errors.
+
+## Scope
+
+This agent handles:
+- Invalid project names, paths, and CLI usage
+- Existing state (dir exists, profile exists, partial failures)
+- Corrupted or invalid config files and permission issues
+- Ensuring no silent failures; errors are user-facing and actionable
+
+## Repository and Branch Context
+
+- **Repository**: All work is done in the DVT repository (`git@github.com:heshamh96/dvt.git`)
+- **Default Branch**: Development happens on the **dev** branch
+- **Rebase Strategy**: Codebase is built on dbt-core; preserve ability to rebase **dev** onto **upstream/main** (dbt-core) without breaking changes
+- **Branch Flow**: dev → uat → prod (via PRs)
+
+## Key Files and Directories
+
+- `core/dvt/task/init.py` - Existing guards: ProjectNameAlreadyExists, check_if_profile_exists, in-project + --profile error, ProjectName.is_valid, get_valid_project_name
+- `core/dvt/contracts/util.py` - ProjectName (identifier validation)
+- `dvt-core-features/01-dvt-init/FEATURE.md` - Accepted CLI behaviour and edge cases
+
+## Negative Scenarios (dvt init)
+
+### Invalid project names
+
+- **Empty or missing name** - Expect prompt for valid name or clear error; no crash.
+- **Numeric-only** (e.g. `123`) - Expect validation failure or prompt; no crash.
+- **Special characters** (e.g. `my-project`, `my.project`) - Expect ProjectName.is_valid to reject; clear message.
+- **Reserved names** (e.g. internal package names, global project name) - Expect rejection and message.
+- **Too long or otherwise invalid** - Expect clear error or prompt.
+
+**Existing guard**: `get_valid_project_name()` uses `ProjectName.is_valid(name)` and `internal_package_names`; loop until valid.
+
+### Paths
+
+- **dvt init in non-writable directory** - Expect permission error, no silent failure.
+- **PROFILES_DIR pointing to read-only or invalid path** - Expect clear error when writing profiles.yml or creates.
+- **Missing parent directory** for project name - Behaviour may create or fail; expect defined behaviour and message.
+- **Symlinks or unusual path components** - Verify no crashes; document or test if relevant.
+
+### Existing state
+
+- **Project dir already exists** (e.g. `dvt init Coke_DB` when `Coke_DB/` exists) - Expect ProjectNameAlreadyExists event and early return; no overwrite.
+- **profiles.yml already exists, profile name collision** - Expect prompt (check_if_can_write_profile) to overwrite or skip; no silent overwrite.
+- **~/.dvt/ already fully populated** (second run of init) - Idempotent: computes.yml and mdm.duckdb not re-created; profiles dir and data dir remain; no crash.
+- **Partial failure** (e.g. project dir created but profile write fails) - Prefer atomic behaviour or clear error state; no silent half-state.
+
+### CLI
+
+- **dvt init --profile existing_name** when profile does not exist - Expect DbtRuntimeError: "Could not find profile named '...'".
+- **dvt init inside existing project with --profile** - Expect DbtRuntimeError: "Can not init existing project with specified profile, edit dvt_project.yml instead".
+- **Invalid flags or arguments** - Expect Click error or clear usage message; no traceback to user without message.
+- **dvt init --profile valid_name** (profile exists) - Should use existing profile and create project; no interactive profile setup for that name.
+
+### Files
+
+- **Corrupted or invalid YAML** in existing profiles.yml (e.g. read by init for check_if_can_write_profile or append) - Expect safe parse handling or clear error.
+- **Read-only profiles.yml or ~/.dvt** - Expect permission error when writing.
+- **Disk full** - Optional; if feasible to simulate, expect defined error.
+
+### Output
+
+- **No silent failures** - Every error path should surface a user-visible message or exit code.
+- **Actionable errors** - Messages should indicate what went wrong and how to fix (e.g. "profile not found", "project name invalid").
+
+## Existing Guards (init.py)
+
+- `ProjectNameAlreadyExists` - Fired when project path exists; return without creating.
+- `check_if_profile_exists(user_profile_name)` - Used when --profile is passed; raises if not found.
+- In-project + `--profile` - Raises DbtRuntimeError with message about editing dvt_project.yml.
+- `ProjectName.is_valid(name)` and internal_package_names - Used in get_valid_project_name(); loop until valid name.
+- `check_if_can_write_profile` - Asks user to overwrite if profile already exists.
+
+## Instructions
+
+1. **Run negative scenarios** - For each feature (starting with dvt init), execute the scenarios above and document expected behaviour (error message, exit code, or prompt).
+2. **Compare to existing guards** - Use `core/dvt/task/init.py` to see which guards exist; add tests or report gaps for scenarios that are not yet handled.
+3. **Add automated tests over time** - Prefer adding tests in `tests/unit/` or `tests/integration/` for each scenario; no requirement to implement all tests in the first pass.
+4. **Report regressions** - If a bad input leads to a crash or silent failure, report and suggest a fix or test.
+
+## When to Use This Agent
+
+Use test-team-negative-tester when:
+- Testing a feature with invalid or edge-case inputs
+- Ensuring dvt init (and later commands) are immune to user errors and bad state
+- Adding or extending negative test cases in the test suite
+- Reviewing error messages and exit behaviour for clarity and safety
