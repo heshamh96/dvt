@@ -33,11 +33,11 @@ class TestMissingVarGenerateNameMacro:
         assert "Required var 'somevar' not found in config" in str(excinfo.value)
 
         # globally scoped -- var is set at top-level
-        update_config_file({"vars": {"somevar": 1}}, project.project_root, "dbt_project.yml")
+        update_config_file({"vars": {"somevar": 1}}, project.project_root, "dvt_project.yml")
         run_dbt(["compile"])
 
         # locally scoped -- var is set in 'test' scope
         update_config_file(
-            {"vars": {"test": {"somevar": 1}}}, project.project_root, "dbt_project.yml"
+            {"vars": {"test": {"somevar": 1}}}, project.project_root, "dvt_project.yml"
         )
         run_dbt(["compile"])

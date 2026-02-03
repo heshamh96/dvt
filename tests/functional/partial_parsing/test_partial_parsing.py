@@ -455,7 +455,7 @@ class TestPartialParsingDependency:
     @pytest.fixture(scope="class", autouse=True)
     def setUp(self, project_root):
         local_dependency_files = {
-            "dbt_project.yml": local_dependency__dbt_project_yml,
+            "dvt_project.yml": local_dependency__dbt_project_yml,
             "models": {
                 "schema.yml": local_dependency__models__schema_yml,
                 "model_to_import.sql": local_dependency__models__model_to_import_sql,
@@ -909,7 +909,7 @@ class TestPortablePartialParsing:
     @pytest.fixture(scope="class")
     def local_dependency_files(self):
         return {
-            "dbt_project.yml": local_dependency__dbt_project_yml,
+            "dvt_project.yml": local_dependency__dbt_project_yml,
             "models": {
                 "schema.yml": local_dependency__models__schema_yml,
                 "model_to_import.sql": local_dependency__models__model_to_import_sql,

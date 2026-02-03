@@ -153,11 +153,11 @@ class TestCustomDataTestConfig(BaseDataTestsConfig):
         not_null_test_node = _select_test_node(manifest, not_null_pattern)
         assert not_null_test_node.config.get("not_null_key") == "abc"
 
-        # set dbt_project.yml config and ensure that schema configs override project configs
+        # set dvt_project.yml config and ensure that schema configs override project configs
         config_patch = {
             "data_tests": {"test_color": "blue", "some_key": "strange", "not_null_key": "def"}
         }
-        update_config_file(config_patch, project.project_root, "dbt_project.yml")
+        update_config_file(config_patch, project.project_root, "dvt_project.yml")
         manifest = run_dbt(["parse"])
         custom_color_test_node = _select_test_node(manifest, custom_color_pattern)
         assert custom_color_test_node.config.get("test_color") == "orange"

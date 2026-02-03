@@ -418,8 +418,8 @@ class TestInitOutsideOfProjectBase:
 
     @pytest.fixture(scope="class", autouse=True)
     def setup(self, project):
-        # Start by removing the dbt_project.yml so that we're not in an existing project
-        os.remove(os.path.join(project.project_root, "dbt_project.yml"))
+        # Start by removing the dvt_project.yml so that we're not in an existing project
+        os.remove(os.path.join(project.project_root, "dvt_project.yml"))
 
 
 class TestInitOutsideOfProject(TestInitOutsideOfProjectBase):
@@ -544,7 +544,7 @@ test:
 """
             )
 
-        with open(os.path.join(project.project_root, project_name, "dbt_project.yml"), "r") as f:
+        with open(os.path.join(project.project_root, project_name, "dvt_project.yml"), "r") as f:
             assert (
                 f.read()
                 == f"""
@@ -662,7 +662,7 @@ class TestInitProvidedProjectNameAndSkipProfileSetup(TestInitOutsideOfProjectBas
         run_dbt(["init", project_name, "--skip-profile-setup"])
         assert len(manager.mock_calls) == 0
 
-        with open(os.path.join(project.project_root, project_name, "dbt_project.yml"), "r") as f:
+        with open(os.path.join(project.project_root, project_name, "dvt_project.yml"), "r") as f:
             assert (
                 f.read()
                 == f"""
@@ -716,7 +716,7 @@ class TestInitInsideProjectAndSkipProfileSetup(TestInitInsideOfProjectBase):
         manager.attach_mock(mock_prompt, "prompt")
         manager.attach_mock(mock_confirm, "confirm")
 
-        assert Path("dbt_project.yml").exists()
+        assert Path("dvt_project.yml").exists()
 
         # skip interactive profile setup
         run_dbt(["init", "--skip-profile-setup"])
@@ -748,7 +748,7 @@ class TestInitOutsideOfProjectWithSpecifiedProfile(TestInitOutsideOfProjectBase)
         with open(os.path.join(project.profiles_dir, "profiles.yml"), "r") as f:
             assert f.read() == yaml.safe_dump(dbt_profile_data)
 
-        with open(os.path.join(project.project_root, project_name, "dbt_project.yml"), "r") as f:
+        with open(os.path.join(project.project_root, project_name, "dvt_project.yml"), "r") as f:
             assert (
                 f.read()
                 == f"""

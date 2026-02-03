@@ -394,7 +394,7 @@ class TestRestrictedPackageAccess:
             dbt_integration_project__dbt_project_yml_restrited_access,
             project_root,
             "dbt_integration_project",
-            "dbt_project.yml",
+            "dvt_project.yml",
         )
 
     @pytest.fixture(scope="class")

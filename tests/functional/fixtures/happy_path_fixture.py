@@ -24,7 +24,7 @@ def happy_path_project_files(project_root):
     )
 
 
-# We do project_setup first because it will write out a dbt_project.yml.
+# We do project_setup first because it will write out a dvt_project.yml.
 # This file will be overwritten by the files in happy_path_project later on.
 @pytest.fixture(scope="class")
 def happy_path_project(project_setup, happy_path_project_files):

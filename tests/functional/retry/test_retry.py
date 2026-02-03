@@ -484,7 +484,7 @@ class TestFixRetryHook:
             ],
         }
 
-        update_config_file(new_dbt_project_yml, project.project_root, "dbt_project.yml")
+        update_config_file(new_dbt_project_yml, project.project_root, "dvt_project.yml")
         res = run_dbt(["retry"])
         assert {r.node.unique_id: r.status for r in res.results} == {
             "operation.test.test-on-run-start-0": RunStatus.Success,

@@ -19,7 +19,7 @@ class TestCleanUpLevel(BaseConfigProject):
             result = runner.invoke(cli, ["clean"])
             assert result.exit_code == 2
             assert "Runtime Error" in result.output
-            assert "No dbt_project.yml" in result.output
+            assert "No dvt_project.yml" in result.output
 
 
 class TestDeps(BaseConfigProject):

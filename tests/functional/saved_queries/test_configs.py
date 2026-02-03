@@ -68,7 +68,7 @@ class TestSavedQueryConfigs(BaseConfigProject):
 
         # disable the saved_query via project config and rerun
         config_patch = {"saved-queries": {"test": {"test_saved_query": {"+enabled": False}}}}
-        update_config_file(config_patch, project.project_root, "dbt_project.yml")
+        update_config_file(config_patch, project.project_root, "dvt_project.yml")
         result = runner.invoke(["parse"])
         assert result.success
         assert len(result.result.saved_queries) == 0
@@ -240,7 +240,7 @@ class TestInheritingExportConfigsFromProject(BaseConfigProject):
                 "test": {"test_saved_query": {"+export_as": ExportDestinationType.TABLE.value}}
             }
         }
-        update_config_file(config_patch, project.project_root, "dbt_project.yml")
+        update_config_file(config_patch, project.project_root, "dvt_project.yml")
         result = runner.invoke(["parse"])
         assert result.success
         assert isinstance(result.result, Manifest)
@@ -319,7 +319,7 @@ class TestSavedQueryCacheConfigsOverride(BaseConfigProject):
         config_patch = {
             "saved-queries": {"test": {"test_saved_query": {"+cache": {"enabled": False}}}}
         }
-        update_config_file(config_patch, project.project_root, "dbt_project.yml")
+        update_config_file(config_patch, project.project_root, "dvt_project.yml")
         result = runner.invoke(["parse"])
         assert result.success
         assert saved_query.config.cache.enabled is True

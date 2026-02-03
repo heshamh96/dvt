@@ -101,7 +101,7 @@ class TestDuplicateNamesRequireUniqueResourceNamesTrueDifferentPackages(BaseTest
     @pytest.fixture(scope="class", autouse=True)
     def setUp(self, project_root):
         local_dependency_files = {
-            "dbt_project.yml": local_dependency__dbt_project_yml,
+            "dvt_project.yml": local_dependency__dbt_project_yml,
             "seeds": {"same_name.csv": seed_csv},
         }
         write_project_files(project_root, "local_dependency", local_dependency_files)

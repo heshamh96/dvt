@@ -344,7 +344,7 @@ custom_materialization_sql = """
 @pytest.fixture(scope="class")
 def override_view_adapter_pass_dep(project_root):
     files = {
-        "dbt_project.yml": override_view_adapter_pass_dep__dbt_project_yml,
+        "dvt_project.yml": override_view_adapter_pass_dep__dbt_project_yml,
         "macros": {"override_view.sql": override_view_adapter_pass_dep__macros__override_view_sql},
     }
     write_project_files(project_root, "override-view-adapter-pass-dep", files)
@@ -359,7 +359,7 @@ def override_view_adapter_macros(project_root):
 @pytest.fixture(scope="class")
 def override_view_adapter_dep(project_root):
     files = {
-        "dbt_project.yml": override_view_adapter_dep__dbt_project_yml,
+        "dvt_project.yml": override_view_adapter_dep__dbt_project_yml,
         "macros": {"override_view.sql": override_view_adapter_dep__macros__override_view_sql},
     }
     write_project_files(project_root, "override-view-adapter-dep", files)
@@ -368,7 +368,7 @@ def override_view_adapter_dep(project_root):
 @pytest.fixture(scope="class")
 def override_view_default_dep(project_root):
     files = {
-        "dbt_project.yml": override_view_default_dep__dbt_project_yml,
+        "dvt_project.yml": override_view_default_dep__dbt_project_yml,
         "macros": {"default_view.sql": override_view_default_dep__macros__default_view_sql},
     }
     write_project_files(project_root, "override-view-default-dep", files)
@@ -377,7 +377,7 @@ def override_view_default_dep(project_root):
 @pytest.fixture(scope="class")
 def override_view_return_no_relation(project_root):
     files = {
-        "dbt_project.yml": override_view_return_no_relation__dbt_project_yml,
+        "dvt_project.yml": override_view_return_no_relation__dbt_project_yml,
         "macros": {
             "override_view.sql": override_view_return_no_relation__macros__override_view_sql
         },
@@ -388,7 +388,7 @@ def override_view_return_no_relation(project_root):
 @pytest.fixture(scope="class")
 def custom_materialization_dep(project_root):
     files = {
-        "dbt_project.yml": custom_materialization_dep__dbt_project_yml,
+        "dvt_project.yml": custom_materialization_dep__dbt_project_yml,
         "macros": {"custom_materialization.sql": custom_materialization_sql},
     }
     write_project_files(project_root, "custom-materialization-dep", files)

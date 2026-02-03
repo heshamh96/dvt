@@ -1,4 +1,4 @@
-"""Test that dvt deps works when vars are used in dbt_project.yml without defaults.
+"""Test that dvt deps works when vars are used in dvt_project.yml without defaults.
 
 The key behavior being tested:
 - dvt deps uses lenient mode (require_vars=False) and succeeds even with missing vars
@@ -83,7 +83,7 @@ class TestRunFailsWithMissingVar(VarTestingBase):
         update_config_file(
             {"models": {"test_project": {"+materialized": "{{ var('materialized_var') }}"}}},
             project.project_root,
-            "dbt_project.yml",
+            "dvt_project.yml",
         )
 
         # run: dbt run
@@ -114,7 +114,7 @@ class TestCompileFailsWithMissingVar(VarTestingBase):
         update_config_file(
             {"models": {"test_project": {"+materialized": "{{ var('compile_var_no_default') }}"}}},
             project.project_root,
-            "dbt_project.yml",
+            "dvt_project.yml",
         )
 
         # run: dbt compile
@@ -141,7 +141,7 @@ class TestDepsSucceedsEvenWhenVarMissing(VarTestingBase):
         update_config_file(
             {"models": {"test_project": {"+materialized": "{{ var('materialized_var') }}"}}},
             project.project_root,
-            "dbt_project.yml",
+            "dvt_project.yml",
         )
 
         # run: dbt deps again (still succeeds - lenient mode)
@@ -172,7 +172,7 @@ class TestBuildFailsWithMissingVar(VarTestingBase):
         update_config_file(
             {"models": {"test_project": {"+materialized": "{{ var('build_var_no_default') }}"}}},
             project.project_root,
-            "dbt_project.yml",
+            "dvt_project.yml",
         )
 
         # run: dbt build
@@ -208,7 +208,7 @@ class TestDebugFailsWithMissingVar(VarTestingBase):
         update_config_file(
             {"models": {"test_project": {"+materialized": "{{ var('materialized_var') }}"}}},
             project.project_root,
-            "dbt_project.yml",
+            "dvt_project.yml",
         )
 
         # run: dbt debug

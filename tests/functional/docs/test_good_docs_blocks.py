@@ -156,7 +156,7 @@ class TestGoodDocsBlocksAltPath:
         write_file(good_doc_blocks_alt_docs_md, project.project_root, "alt-docs", "docs.md")
 
         update_config_file(
-            {"docs-paths": [str(docs_path)]}, project.project_root, "dbt_project.yml"
+            {"docs-paths": [str(docs_path)]}, project.project_root, "dvt_project.yml"
         )
 
         result = run_dbt()

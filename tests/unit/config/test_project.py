@@ -295,12 +295,12 @@ class TestProjectInitialization(BaseConfigTest):
         self.assertIn("invalid-project-name", str(exc.exception))
 
     def test_no_project(self):
-        os.remove(os.path.join(self.project_dir, "dbt_project.yml"))
+        os.remove(os.path.join(self.project_dir, "dvt_project.yml"))
         renderer = empty_project_renderer()
         with self.assertRaises(dvt.exceptions.DbtProjectError) as exc:
             dvt.config.Project.from_project_root(self.project_dir, renderer)
 
-        self.assertIn("No dbt_project.yml", str(exc.exception))
+        self.assertIn("No dvt_project.yml", str(exc.exception))
 
     def test_invalid_version(self):
         self.default_project_data["require-dvt-version"] = "hello!"
@@ -633,7 +633,7 @@ class TestDeprecations:
         get_event_manager().add_callback(note_catcher.catch)
 
         jsonschema_validate(
-            schema=project_schema(), json=project_dict, file_path="dbt_project.yml"
+            schema=project_schema(), json=project_dict, file_path="dvt_project.yml"
         )
 
         if GenericJSONSchemaValidationDeprecationCore()._is_preview:

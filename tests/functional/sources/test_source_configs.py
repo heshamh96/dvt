@@ -32,7 +32,7 @@ class SourceConfigTests:
         )
 
 
-# Test enabled config in dbt_project.yml
+# Test enabled config in dvt_project.yml
 # expect pass, already implemented
 class TestSourceEnabledConfigProjectLevel(SourceConfigTests):
     @pytest.fixture(scope="class")
@@ -67,7 +67,7 @@ class TestSourceEnabledConfigProjectLevel(SourceConfigTests):
                 }
             }
         }
-        update_config_file(new_enabled_config, project.project_root, "dbt_project.yml")
+        update_config_file(new_enabled_config, project.project_root, "dvt_project.yml")
         run_dbt(["parse"])
         manifest = get_manifest(project.project_root)
 

@@ -370,7 +370,7 @@ seeds__my_real_seed_csv = """id,color
 @pytest.fixture(scope="class")
 def local_dependency():
     return {
-        "dbt_project.yml": local_dependency__dbt_project_yml,
+        "dvt_project.yml": local_dependency__dbt_project_yml,
         "models": {
             "schema.yml": local_dependency__models__schema_yml,
             "my_model.sql": local_dependency__models__my_model_sql,

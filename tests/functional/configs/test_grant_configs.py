@@ -130,7 +130,7 @@ class TestGrantConfigs:
             "profile": "test",
             "log-path": logs_dir,
         }
-        write_config_file(config, project.project_root, "dbt_project.yml")
+        write_config_file(config, project.project_root, "dvt_project.yml")
         run_dbt(["parse"])
 
         manifest = get_manifest(project.project_root)

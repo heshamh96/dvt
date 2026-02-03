@@ -210,7 +210,7 @@ class TestMissingDependency(object):
 
 class TestSimpleDependencyWithSchema(BaseDependencyTest):
     def dbt_vargs(self, schema):
-        # we can't add this to the config because Sources don't respect dbt_project.yml
+        # we can't add this to the config because Sources don't respect dvt_project.yml
         vars_arg = yaml.safe_dump({"schema_override": "dbt_test_{}_macro".format(schema)})
         return ["--vars", vars_arg]
 
@@ -268,7 +268,7 @@ class TestSimpleDependencyNoVersionCheckConfig(BaseDependencyTest):
 
     @mock.patch("dvt.config.project.get_installed_version")
     def test_local_dependency_out_of_date_no_check(self, mock_get, project):
-        # we can't add this to the config because Sources don't respect dbt_project.yml
+        # we can't add this to the config because Sources don't respect dvt_project.yml
         base_schema = "dbt_test_{}_macro".format(project.test_schema)
         vars_arg = yaml.safe_dump(
             {

@@ -81,7 +81,7 @@ class TestModelNodeWithJinjaConfigInProjectYml(BaseTestStateSelectionJinjaInConf
     def update_jinja_expression_in_config(self, project):
         config = get_project_config(project)
         config["models"]["test"]["+materialized"] = "{{ ('view' if execute else 'table') }}"
-        update_config_file(config, "dbt_project.yml")
+        update_config_file(config, "dvt_project.yml")
 
     @pytest.fixture(scope="class")
     def models(self):

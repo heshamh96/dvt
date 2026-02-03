@@ -117,7 +117,7 @@ class BaseCustomNodeColorModelvsProject:
         }
 
 
-# validation that model level node_color configs supercede dbt_project.yml
+# validation that model level node_color configs supercede dvt_project.yml
 class TestModelLevelProjectColorConfigs(BaseCustomNodeColorModelvsProject):
     @pytest.fixture(scope="class")
     def models(self):
@@ -172,7 +172,7 @@ class TestModelLevelSchemaColorConfigs(BaseCustomNodeColorModelvsProject):
         assert not show_actual_docs
 
 
-# validation that node_color configured on subdirectories in dbt_project.yml supercedes project root
+# validation that node_color configured on subdirectories in dvt_project.yml supercedes project root
 class TestSubdirectoryColorConfigs(BaseCustomNodeColorModelvsProject):
     @pytest.fixture(scope="class")
     def models(self):
@@ -197,12 +197,12 @@ class TestSubdirectoryColorConfigs(BaseCustomNodeColorModelvsProject):
         # check node_color config is in the right spots for each model
         assert node_color_actual_config == CUSTOM_NODE_COLOR_PROJECT_LEVEL_FOLDER
         assert node_color_actual_docs == CUSTOM_NODE_COLOR_PROJECT_LEVEL_FOLDER
-        # in this case show should be True since the dbt_project.yml overrides the root setting for /subdirectory
+        # in this case show should be True since the dvt_project.yml overrides the root setting for /subdirectory
         assert show_actual_config
         assert show_actual_docs
 
 
-# validation that node_color configured in schema.yml supercedes dbt_project.yml
+# validation that node_color configured in schema.yml supercedes dvt_project.yml
 class TestSchemaOverProjectColorConfigs(BaseCustomNodeColorModelvsProject):
     @pytest.fixture(scope="class")
     def models(self):
@@ -231,12 +231,12 @@ class TestSchemaOverProjectColorConfigs(BaseCustomNodeColorModelvsProject):
         # check node_color config is in the right spots for each model
         assert node_color_actual_config == CUSTOM_NODE_COLOR_SCHEMA_LEVEL
         assert node_color_actual_docs == CUSTOM_NODE_COLOR_SCHEMA_LEVEL
-        # in this case show should be True since the schema.yml overrides the dbt_project.yml
+        # in this case show should be True since the schema.yml overrides the dvt_project.yml
         assert show_actual_config
         assert show_actual_docs
 
 
-# validation that docs: show configured in model file supercedes dbt_project.yml
+# validation that docs: show configured in model file supercedes dvt_project.yml
 class TestModelOverProjectColorConfigs(BaseCustomNodeColorModelvsProject):
     @pytest.fixture(scope="class")
     def models(self):
@@ -262,12 +262,12 @@ class TestModelOverProjectColorConfigs(BaseCustomNodeColorModelvsProject):
         # check node_color config is in the right spots for each model
         assert node_color_actual_config == CUSTOM_NODE_COLOR_PROJECT_LEVEL_ROOT
         assert node_color_actual_docs == CUSTOM_NODE_COLOR_PROJECT_LEVEL_ROOT
-        # in this case show should be True since the schema.yml overrides the dbt_project.yml
+        # in this case show should be True since the schema.yml overrides the dvt_project.yml
         assert show_actual_config
         assert show_actual_docs
 
 
-# validation that an incorrect color in dbt_project.yml raises an exception
+# validation that an incorrect color in dvt_project.yml raises an exception
 class TestCustomNodeColorIncorrectColorProject:
     @pytest.fixture(scope="class")
     def models(self):  # noqa: F811

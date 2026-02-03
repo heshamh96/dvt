@@ -425,7 +425,7 @@ class TestYamlSnapshotPartialParsing(BasicYaml):
         snapshot = manifest.nodes[snapshot_id]
         assert snapshot.meta["owner"] == "b_owner"
 
-        # modify dbt_project.yml and re-parse
+        # modify dvt_project.yml and re-parse
         config_updates = {
             "snapshots": {
                 "test": {
@@ -436,7 +436,7 @@ class TestYamlSnapshotPartialParsing(BasicYaml):
                 }
             }
         }
-        update_config_file(config_updates, "dbt_project.yml")
+        update_config_file(config_updates, "dvt_project.yml")
         manifest = run_dbt(["parse"])
         snapshot = manifest.nodes[snapshot_id]
         assert snapshot.config.snapshot_meta_column_names.dbt_valid_to == "test_valid_to"

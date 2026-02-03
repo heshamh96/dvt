@@ -78,7 +78,7 @@ class TestTargetConfigs(BaseConfigProject):
 class TestInvalidTestsMaterializationProj(object):
     def test_tests_materialization_proj_config(self, project):
         config_patch = {"data_tests": {"materialized": "table"}}
-        update_config_file(config_patch, project.project_root, "dbt_project.yml")
+        update_config_file(config_patch, project.project_root, "dvt_project.yml")
         tests_dir = os.path.join(project.project_root, "tests")
         write_file("select * from foo", tests_dir, "test.sql")
 
@@ -89,7 +89,7 @@ class TestInvalidTestsMaterializationProj(object):
 class TestInvalidSeedsMaterializationProj(object):
     def test_seeds_materialization_proj_config(self, project):
         config_patch = {"seeds": {"materialized": "table"}}
-        update_config_file(config_patch, project.project_root, "dbt_project.yml")
+        update_config_file(config_patch, project.project_root, "dvt_project.yml")
 
         seeds_dir = os.path.join(project.project_root, "seeds")
         write_file("id1, id2\n1, 2", seeds_dir, "seed.csv")
@@ -115,7 +115,7 @@ class TestInvalidSeedsMaterializationSchema(object):
 class TestInvalidSnapshotsMaterializationProj(object):
     def test_snapshots_materialization_proj_config(self, project):
         config_patch = {"snapshots": {"materialized": "table"}}
-        update_config_file(config_patch, project.project_root, "dbt_project.yml")
+        update_config_file(config_patch, project.project_root, "dvt_project.yml")
 
         snapshots_dir = os.path.join(project.project_root, "snapshots")
         write_file(simple_snapshot, snapshots_dir, "mysnapshot.sql")

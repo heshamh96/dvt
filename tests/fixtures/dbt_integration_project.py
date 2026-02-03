@@ -90,7 +90,7 @@ models:
 @pytest.fixture(scope="class")
 def dbt_integration_project():
     return {
-        "dbt_project.yml": dbt_integration_project__dbt_project_yml,
+        "dvt_project.yml": dbt_integration_project__dbt_project_yml,
         "macros": {"my_macros.sql": dbt_integration_project__my_macros_sql},
         "models": {
             "incremental.sql": dbt_integration_project__incremental_sql,

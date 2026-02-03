@@ -226,7 +226,7 @@ class TestSnapshotInvalidColumnNames:
                 }
             }
         }
-        update_config_file(different_columns, "dbt_project.yml")
+        update_config_file(different_columns, "dvt_project.yml")
 
         results, log_output = run_dbt_and_capture(["snapshot"], expect_pass=False)
         assert len(results) == 1
