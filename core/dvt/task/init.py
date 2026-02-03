@@ -25,6 +25,11 @@ from dvt.events.types import (
     SettingUpProfile,
     StarterProjectPath,
 )
+from dvt.config.user_config import (
+    create_default_computes_yml,
+    create_dvt_data_dir,
+    init_mdm_db,
+)
 from dvt.flags import get_flags
 from dvt.task.base import BaseTask, move_to_nearest_project_dir
 from dvt.version import _get_adapter_plugin_names
@@ -69,6 +74,18 @@ class InitTask(BaseTask):
             dbt_common.clients.system.make_directory(profiles_dir)
             return True
         return False
+
+    def create_dvt_user_config(self, profiles_dir: str) -> None:
+        """Create DVT user-level config: computes.yml, data/, and mdm.duckdb in the profiles dir."""
+        profiles_path = Path(str(profiles_dir))
+        if not profiles_path.exists():
+            return
+        dvt_home = profiles_path.resolve()
+        computes_path = dvt_home / "computes.yml"
+        if create_default_computes_yml(computes_path):
+            fire_event(ConfigFolderDirectory(dir=str(computes_path.parent)))
+        create_dvt_data_dir(str(dvt_home))
+        init_mdm_db(str(dvt_home))
 
     def create_profile_from_sample(self, adapter: str, profile_name: str):
         """Create a profile entry using the adapter's sample_profiles.yml
@@ -298,6 +315,7 @@ class InitTask(BaseTask):
         """Entry point for the init task."""
         profiles_dir = get_flags().PROFILES_DIR
         self.create_profiles_dir(profiles_dir)
+        self.create_dvt_user_config(profiles_dir)
 
         try:
             move_to_nearest_project_dir(self.args.project_dir)
@@ -313,13 +331,13 @@ class InitTask(BaseTask):
                     msg="Can not init existing project with specified profile, edit dvt_project.yml instead"
                 )
 
-            # When dbt init is run inside an existing project,
+            # When dvt init is run inside an existing project,
             # just setup the user's profile.
             if not self.args.skip_profile_setup:
                 profile_name = self.get_profile_name_from_current_project()
                 self.setup_profile(profile_name)
         else:
-            # When dbt init is run outside of an existing project,
+            # When dvt init is run outside of an existing project,
             # create a new project and set up the user's profile.
             project_name = self.get_valid_project_name()
             project_path = Path(project_name)

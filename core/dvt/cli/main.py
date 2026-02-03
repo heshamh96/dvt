@@ -476,7 +476,7 @@ def deps(ctx, **kwargs):
 @requires.postflight
 @requires.preflight
 def init(ctx, **kwargs):
-    """Initialize a new dvt project."""
+    """Initialize a new DVT project (creates dvt_project.yml, ~/.dvt/, computes.yml, mdm.duckdb)."""
     from dvt.task.init import InitTask
 
     with InitTask(ctx.obj["flags"]) as task:
