@@ -1,39 +1,39 @@
 [version]
-path = "dbt/__version__.py"
+path = "dvt/__version__.py"
 
 [build.targets.wheel]
-packages = ["dbt"]
+packages = ["dvt"]
 only-packages = true
 exclude = [
     "**/*.md",
 ]
 artifacts = [
-    "dbt/include/**/*.py",
-    "dbt/include/**/*.sql",
-    "dbt/include/**/*.yml",
-    "dbt/include/**/*.html",
-    "dbt/include/**/*.md",
-    "dbt/include/**/.gitkeep",
-    "dbt/include/**/.gitignore",
-    "dbt/task/docs/**/*.html",
-    "dbt/jsonschemas/**/*.json",
-    "dbt/py.typed",
+    "dvt/include/**/*.py",
+    "dvt/include/**/*.sql",
+    "dvt/include/**/*.yml",
+    "dvt/include/**/*.html",
+    "dvt/include/**/*.md",
+    "dvt/include/**/.gitkeep",
+    "dvt/include/**/.gitignore",
+    "dvt/task/docs/**/*.html",
+    "dvt/jsonschemas/**/*.json",
+    "dvt/py.typed",
     # Directories without __init__.py (namespace packages)
-    "dbt/artifacts/resources/v1/**/*.py",
-    "dbt/artifacts/utils/**/*.py",
-    "dbt/event_time/**/*.py",
-    "dbt/docs/source/**/*.py",
-    "dbt/tests/util.py",
+    "dvt/artifacts/resources/v1/**/*.py",
+    "dvt/artifacts/utils/**/*.py",
+    "dvt/event_time/**/*.py",
+    "dvt/docs/source/**/*.py",
+    "dvt/tests/util.py",
 ]
 
 [build.targets.sdist]
 include = [
-    "/dbt",
+    "/dvt",
     "/README.md",
 ]
 
 [build.targets.sdist.force-include]
-"dbt/task/docs/index.html" = "dbt/task/docs/index.html"
+"dvt/task/docs/index.html" = "dvt/task/docs/index.html"
 
 [envs.default]
 # Python 3.10-3.11 required locally due to flake8==4.0.1 compatibility
@@ -127,8 +127,8 @@ clean = [
     "rm -f .coverage.*",
     "rm -rf .eggs/",
     "rm -rf build/",
-    "rm -rf dbt.egg-info/",
-    "rm -f dbt_project.yml",
+    "rm -rf dvt.egg-info/",
+    "rm -f dvt_project.yml",
     "rm -rf dist/",
     "find . -type f -name '*.pyc' -delete",
     "find . -type d -name __pycache__ -exec rm -rf {} +",
@@ -151,15 +151,15 @@ check-all = [
 ]
 check-wheel = [
     "twine check dist/*",
-    "find ./dist/dbt_core-*.whl -maxdepth 1 -type f | xargs python -m pip install --force-reinstall --find-links=dist/",
-    "pip freeze | grep dbt-core",
-    "dbt --version",
+    "find ./dist/dvt_core-*.whl -maxdepth 1 -type f | xargs python -m pip install --force-reinstall --find-links=dist/",
+    "pip freeze | grep dvt-core",
+    "dvt --version",
 ]
 check-sdist = [
     "check-wheel-contents dist/*.whl --ignore W007,W008",
-    "find ./dist/dbt_core-*.gz -maxdepth 1 -type f | xargs python -m pip install --force-reinstall --find-links=dist/",
-    "pip freeze | grep dbt-core",
-    "dbt --version",
+    "find ./dist/dvt_core-*.gz -maxdepth 1 -type f | xargs python -m pip install --force-reinstall --find-links=dist/",
+    "pip freeze | grep dvt-core",
+    "dvt --version",
 ]
 
 # CI environment - isolated environment with test dependencies
@@ -194,11 +194,11 @@ DBT_TEST_USER_2 = "dbt_test_user_2"
 DBT_TEST_USER_3 = "dbt_test_user_3"
 
 [envs.ci.scripts]
-unit-tests = "python -m pytest --cov=dbt --cov-report=xml {args} ../tests/unit"
+unit-tests = "python -m pytest --cov=dvt --cov-report=xml {args} ../tests/unit"
 # Run as single command to avoid pre-install-commands running twice
 integration-tests = """
-python -m pytest --cov=dbt --cov-append --cov-report=xml {args} ../tests/functional -k "not tests/functional/graph_selection" && \
-python -m pytest --cov=dbt --cov-append --cov-report=xml {args} ../tests/functional/graph_selection
+python -m pytest --cov=dvt --cov-append --cov-report=xml {args} ../tests/functional -k "not tests/functional/graph_selection" && \
+python -m pytest --cov=dvt --cov-append --cov-report=xml {args} ../tests/functional/graph_selection
 """
 
 # Note: Python version matrix is handled by GitHub Actions CI, not hatch.
