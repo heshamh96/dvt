@@ -88,3 +88,5 @@
 - `docs/RUNNING_DVT.md` - How to run dvt CLI
 - `docs/TEAM_AGENTS.md` - All agents overview
 - `dvt-core-features/01-dvt-init/FEATURE.md` - Feature spec and acceptance criteria
+- `dvt-core-features/02-dvt-debug/FEATURE.md` - Feature 02 dvt debug (targets = current profile only)
+- `Testing_Playground/trial_dvt_debug_1/findings/` - Feature 02 debug trial findings

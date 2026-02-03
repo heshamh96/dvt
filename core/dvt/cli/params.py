@@ -108,7 +108,34 @@ debug = _create_option_and_track_env_var(
 debug_connection = _create_option_and_track_env_var(
     "--connection",
     envvar=None,
-    help="Test the connection to the target database independent of dependency checks.",
+    help="Test the connection to the target database. Pass a target name to test that target only (e.g. --connection dev).",
+    default=None,
+    type=click.STRING,
+)
+
+# Feature 02: dvt debug section flags (show only these sections when set)
+debug_show_config = _create_option_and_track_env_var(
+    "--config",
+    envvar=None,
+    help="Show resolved configuration only.",
+    is_flag=True,
+)
+debug_show_manifest = _create_option_and_track_env_var(
+    "--manifest",
+    envvar=None,
+    help="Show manifest summary only.",
+    is_flag=True,
+)
+debug_show_targets = _create_option_and_track_env_var(
+    "--targets",
+    envvar=None,
+    help="List targets for the current project's profile with connection status.",
+    is_flag=True,
+)
+debug_show_computes = _create_option_and_track_env_var(
+    "--computes",
+    envvar=None,
+    help="List compute engines only.",
     is_flag=True,
 )
 

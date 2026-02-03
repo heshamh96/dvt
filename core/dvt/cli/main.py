@@ -398,11 +398,15 @@ def show(ctx, **kwargs):
     return results, success
 
 
-# dbt debug
+# dbt debug (Feature 02: --config, --manifest, --targets, --computes, --connection <target>)
 @cli.command("debug")
 @click.pass_context
 @global_flags
 @p.debug_connection
+@p.debug_show_config
+@p.debug_show_manifest
+@p.debug_show_targets
+@p.debug_show_computes
 @p.config_dir
 @p.profiles_dir_exists_false
 @p.project_dir
@@ -410,7 +414,7 @@ def show(ctx, **kwargs):
 @requires.postflight
 @requires.preflight
 def debug(ctx, **kwargs):
-    """Show information on the current dvt environment and check dependencies, then test the database connection. Not to be confused with the --debug option which increases verbosity."""
+    """Show DVT configuration, targets (current profile), computes, manifest, and test database connection. Use --config, --targets, --computes, or --manifest to show only that section. Use --connection <target> to test a specific target."""
     from dvt.task.debug import DebugTask
 
     task = DebugTask(

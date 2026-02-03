@@ -1,6 +1,41 @@
-# Test Team Findings (dvt init)
+# Test Team Findings
 
-Summary of what the test team (data-engineer, technical-qa, negative-tester) has verified and what remains blocked or unverified.
+Summary of what the test team has verified: dvt init, dvt debug (Feature 02), and what remains blocked or unverified.
+
+---
+
+## Feature 02: dvt debug (tested 2026-02-03)
+
+**Trial**: `Testing_Playground/trial_dvt_debug_1` (findings in that folder). Commands run from trial_dvt_init_2/Coke_DB (project with Coke_DB profile, dev target).
+
+### Verified
+
+- `dvt debug --config`: Shows DVT directory, profiles.yml, computes.yml, MDM path, project path; project name and profile from dvt_project.yml.
+- `dvt debug --targets`: Lists **targets for the current project's profile only** (not all profiles); shows each target with type, host/schema, and connection status (✓ Connected / ✗).
+- `dvt debug --computes`: Lists compute engines from computes.yml; PySpark availability.
+- `dvt debug --manifest`: Shows target/manifest.json existence, model/test/seed/source counts, generated_at.
+- `dvt debug --connection dev`: Tests the specified target (dev) for the current project's profile; prints connection info and success/failure.
+- `dvt debug` (no flags): Original full flow (version, profile, project, deps, connection) — All checks passed.
+
+### Spec alignment
+
+- Targets are shown for the **current project profile only** per updated Feature 02 spec (dvt-core-features/02-dvt-debug/FEATURE.md).
+
+---
+
+## 0. Dev-team fix (dvt init CLI)
+
+**Issue**: After `uv sync` in trial_dvt_init_2, `uv run dvt init Coke_DB --skip-profile-setup` failed with:
+
+`ModuleNotFoundError: No module named 'dvt.include.global_project'`
+
+**Fix**: Added missing package in dvt-core:
+
+- **`core/dvt/include/global_project/__init__.py`** with `PROJECT_NAME = "dvt"`.
+
+Used by `task/init.py` (reserved project name), `context/macro_resolver.py`, and `context/macros.py` for the internal macro namespace. Rebrand left references to this module but the package was not created.
+
+**Verification**: From `Testing_Playground/trial_dvt_init_2`: `uv sync --reinstall-package dvt-core` then `uv run dvt init Coke_DB --skip-profile-setup` — project `Coke_DB/` created successfully.
 
 ---
 
@@ -15,9 +50,13 @@ Summary of what the test team (data-engineer, technical-qa, negative-tester) has
   - `data/mdm.duckdb` (DuckDB stub with `_dvt_init` table when duckdb is available).
   So the user-level layout and content from `user_config.py` behave as specified.
 
+### Now verified (after dev-team fix)
+
+- **Full `dvt init Coke_DB` via installed package**: Run successfully from trial_dvt_init_2 after adding `dvt.include.global_project` and reinstalling dvt-core; project `Coke_DB/` created.
+
 ### Not verified (blocked by environment)
 
-- **Full `dvt init Coke_DB` via installed package**: Not run successfully. Requires `uv sync` in `core/` to complete and `dvt` to be run from that env; in this environment `uv sync` did not complete within the attempted window, and running the CLI via system-installed dvt hit an architecture mismatch (rpds: x86_64 vs arm64). So end-to-end “create Coke_DB from installed dvt CLI” is **not** verified.
+- **Full `dvt init Coke_DB` via installed package (legacy note)**: Previously not run successfully. Requires `uv sync` in `core/` to complete and `dvt` to be run from that env; in this environment `uv sync` did not complete within the attempted window, and running the CLI via system-installed dvt hit an architecture mismatch (rpds: x86_64 vs arm64). So end-to-end “create Coke_DB from installed dvt CLI” is **not** verified.
 - **Profile creation**: With `--skip-profile-setup`, `profiles.yml` is not created by init. Creation of a postgres profile (e.g. Coke_DB) in `~/.dvt/profiles.yml` and alignment with reference `Connections/profiles.yml` **not** verified via CLI.
 
 ---

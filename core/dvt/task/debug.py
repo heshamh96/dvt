@@ -1,9 +1,11 @@
 # coding=utf-8
 import importlib
+import json
 import os
 import platform
 import sys
 from collections import namedtuple
+from datetime import datetime
 from enum import Flag
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -17,6 +19,7 @@ from dvt.cli.flags import Flags
 from dvt.clients.yaml_helper import load_yaml_text
 from dvt.config import PartialProject, Profile, Project
 from dvt.config.renderer import DvtProjectYamlRenderer, ProfileRenderer
+from dvt.config.user_config import COMPUTES_PATH, DVT_HOME, MDM_DB_PATH
 from dvt.events.types import DebugCmdOut, DebugCmdResult, OpenCommand
 from dvt.links import ProfileConfigDocs
 from dvt.mp_context import get_mp_context
@@ -93,6 +96,15 @@ class DebugTask(BaseTask):
         self.raw_profile_data: Optional[Dict[str, Any]] = None
         self.profile_name: Optional[str] = None
 
+    def _show_debug_sections(self) -> bool:
+        """True if any of --config, --manifest, --targets, --computes are set (Feature 02)."""
+        return bool(
+            getattr(self.args, "config", False)
+            or getattr(self.args, "manifest", False)
+            or getattr(self.args, "targets", False)
+            or getattr(self.args, "computes", False)
+        )
+
     def run(self) -> bool:
         # WARN: this is a legacy workflow that is not compatible with other runtime flags
         if self.args.config_dir:
@@ -104,13 +116,42 @@ class DebugTask(BaseTask):
             )
             return DebugRunStatus.SUCCESS.value
 
+        show_config = getattr(self.args, "config", False)
+        show_manifest = getattr(self.args, "manifest", False)
+        show_targets = getattr(self.args, "targets", False)
+        show_computes = getattr(self.args, "computes", False)
+        connection_target = getattr(self.args, "connection", None)
+        show_all_sections = self._show_debug_sections()
+
+        if show_all_sections or connection_target:
+            # Feature 02: section-only or --connection <target> mode
+            fire_event(
+                DebugCmdOut(
+                    msg="=" * 60 + "\nDVT Debug Information\nGenerated at: "
+                    + datetime.now().isoformat()
+                    + "\n" + "=" * 60
+                )
+            )
+            if show_all_sections:
+                if show_config:
+                    self._debug_config()
+                if show_targets:
+                    self._debug_targets()
+                if show_computes:
+                    self._debug_computes()
+                if show_manifest:
+                    self._debug_manifest()
+            if connection_target:
+                return self._debug_connection_target(connection_target)
+            return DebugRunStatus.SUCCESS.value
+
+        # Original full debug flow (version, profile, project, deps, connection)
         version: str = get_installed_version().to_version_string(skip_matcher=True)
         fire_event(DebugCmdOut(msg="dvt version: {}".format(version)))
         fire_event(DebugCmdOut(msg="python version: {}".format(sys.version.split()[0])))
         fire_event(DebugCmdOut(msg="python path: {}".format(sys.executable)))
         fire_event(DebugCmdOut(msg="os info: {}".format(platform.platform())))
 
-        # Load profile if possible, then load adapter info (which requires the profile)
         load_profile_status: SubtaskStatus = self._load_profile()
         fire_event(DebugCmdOut(msg="Using profiles dir at {}".format(self.profiles_dir)))
         fire_event(DebugCmdOut(msg="Using profiles.yml file at {}".format(self.profile_path)))
@@ -129,21 +170,17 @@ class DebugTask(BaseTask):
             fire_event(DebugCmdOut(msg="adapter type: {}".format(adapter_type)))
             fire_event(DebugCmdOut(msg="adapter version: {}".format(adapter_version)))
 
-        # Get project loaded to do additional checks
         load_project_status: SubtaskStatus = self._load_project()
 
         dependencies_statuses: List[SubtaskStatus] = []
-        if self.args.connection:
+        if connection_target:
             fire_event(DebugCmdOut(msg="Skipping steps before connection verification"))
         else:
-            # this job's status not logged since already accounted for in _load_* commands
             self.test_configuration(load_profile_status.log_msg, load_project_status.log_msg)
             dependencies_statuses = self.test_dependencies()
 
-        # Test connection
         connection_status = self.test_connection()
 
-        # Log messages from any fails
         all_statuses: List[SubtaskStatus] = [
             load_profile_status,
             load_project_status,
@@ -379,6 +416,190 @@ class DebugTask(BaseTask):
             return red("ERROR not found")
         else:
             return green("OK found")
+
+    # ================
+    # Feature 02: debug sections (--config, --targets, --computes, --manifest, --connection)
+    # ================
+
+    def _debug_config(self) -> None:
+        """Display resolved configuration (paths and project info)."""
+        fire_event(DebugCmdOut(msg="\n--- Configuration ---"))
+        dvt_dir = Path(self.profiles_dir) if self.profiles_dir else DVT_HOME
+        fire_event(DebugCmdOut(msg=f"\nDVT Directory: {dvt_dir}"))
+        fire_event(DebugCmdOut(msg=f"  Exists: {'✓' if Path(dvt_dir).exists() else '✗'}"))
+        profiles_path = Path(dvt_dir) / "profiles.yml"
+        fire_event(DebugCmdOut(msg=f"\nProfiles: {profiles_path}"))
+        fire_event(DebugCmdOut(msg=f"  Exists: {'✓' if profiles_path.exists() else '✗'}"))
+        computes_path = Path(dvt_dir) / "computes.yml"
+        fire_event(DebugCmdOut(msg=f"\nComputes: {computes_path}"))
+        fire_event(DebugCmdOut(msg=f"  Exists: {'✓' if computes_path.exists() else '✗'}"))
+        mdm_path = Path(dvt_dir) / "data" / "mdm.duckdb"
+        fire_event(DebugCmdOut(msg=f"\nMDM Database: {mdm_path}"))
+        fire_event(DebugCmdOut(msg=f"  Exists: {'✓' if mdm_path.exists() else '✗'}"))
+        fire_event(DebugCmdOut(msg=f"\nProject Config: {self.project_path}"))
+        fire_event(DebugCmdOut(msg=f"  Exists: {'✓' if os.path.exists(self.project_path) else '✗'}"))
+        if os.path.exists(self.project_path):
+            try:
+                partial = PartialProject.from_project_root(
+                    str(self.project_dir), verify_version=False
+                )
+                renderer = DvtProjectYamlRenderer(None, self.cli_vars)
+                profile_name = partial.render_profile_name(renderer)
+                fire_event(DebugCmdOut(msg=f"\n  Project Name: {partial.project_name}"))
+                fire_event(DebugCmdOut(msg=f"  Profile: {profile_name}"))
+            except Exception as e:
+                fire_event(DebugCmdOut(msg=f"  Error loading: {e}"))
+
+    def _debug_targets(self) -> None:
+        """Display targets for the current project's profile only, with connection status."""
+        fire_event(DebugCmdOut(msg="\n--- Targets (current project profile only) ---"))
+        if not self.raw_profile_data:
+            load_status = self._load_profile()
+            if load_status.run_status != RunStatus.Success or not self.raw_profile_data:
+                fire_event(DebugCmdOut(msg="  No profiles.yml found or invalid."))
+                return
+        try:
+            partial = PartialProject.from_project_root(str(self.project_dir), verify_version=False)
+            renderer = DvtProjectYamlRenderer(None, self.cli_vars)
+            profile_name = partial.render_profile_name(renderer)
+        except Exception as e:
+            fire_event(DebugCmdOut(msg=f"  Could not load project profile name: {e}"))
+            return
+        if profile_name not in self.raw_profile_data or profile_name == "config":
+            fire_event(DebugCmdOut(msg=f"  Profile '{profile_name}' not found in profiles.yml."))
+            return
+        profile = self.raw_profile_data[profile_name]
+        outputs = profile.get("outputs") or {}
+        active_target = profile.get("target", "dev")
+        fire_event(DebugCmdOut(msg=f"\nProfile: {profile_name}"))
+        fire_event(DebugCmdOut(msg=f"  Active Target: {active_target}"))
+        renderer = ProfileRenderer(self.cli_vars)
+        for target_name, target_config in outputs.items():
+            if not isinstance(target_config, dict):
+                continue
+            is_active = target_name == active_target
+            marker = "→" if is_active else " "
+            fire_event(DebugCmdOut(msg=f"\n  {marker} {target_name}:"))
+            fire_event(DebugCmdOut(msg=f"      Type: {target_config.get('type', 'N/A')}"))
+            for key in ("host", "port", "database", "schema", "account"):
+                if key in target_config and target_config[key] is not None:
+                    v = target_config[key]
+                    if key == "host" and "port" in target_config:
+                        v = f"{v}:{target_config.get('port', '')}"
+                    fire_event(DebugCmdOut(msg=f"      {key.capitalize()}: {v}"))
+            try:
+                prof = Profile.from_raw_profile_info(
+                    profile,
+                    profile_name,
+                    renderer=renderer,
+                    target_override=target_name,
+                )
+                err = self.attempt_connection(prof)
+                status = green("✓ Connected") if err is None else red(f"✗ {err[:60]}")
+            except Exception as e:
+                status = red(f"✗ Error: {str(e)[:50]}")
+            fire_event(DebugCmdOut(msg=f"      Status: {status}"))
+
+    def _debug_computes(self) -> None:
+        """Display compute engines from computes.yml."""
+        fire_event(DebugCmdOut(msg="\n--- Compute Engines ---"))
+        computes_path = Path(self.profiles_dir) / "computes.yml" if self.profiles_dir else COMPUTES_PATH
+        if not computes_path.exists():
+            fire_event(DebugCmdOut(msg="  No computes.yml found. Using default local Spark."))
+            fire_event(DebugCmdOut(msg="  default: type=spark, master=local[*]"))
+            try:
+                from pyspark.sql import SparkSession  # noqa: F401
+                fire_event(DebugCmdOut(msg="  PySpark: ✓ available"))
+            except ImportError:
+                fire_event(DebugCmdOut(msg="  PySpark: ✗ not installed"))
+            return
+        try:
+            raw = load_yaml_text(dbt_common.clients.system.load_file_contents(str(computes_path)))
+            computes = (raw or {}).get("computes") or {}
+        except Exception as e:
+            fire_event(DebugCmdOut(msg=f"  Error reading computes.yml: {e}"))
+            return
+        for name, cfg in computes.items():
+            if not isinstance(cfg, dict):
+                continue
+            fire_event(DebugCmdOut(msg=f"\n  {name}:"))
+            fire_event(DebugCmdOut(msg=f"    Type: {cfg.get('type', 'spark')}"))
+            fire_event(DebugCmdOut(msg=f"    Master: {cfg.get('master', 'N/A')}"))
+            for k, v in list((cfg.get("config") or {}).items())[:5]:
+                fire_event(DebugCmdOut(msg=f"    {k}: {v}"))
+        try:
+            from pyspark.sql import SparkSession  # noqa: F401
+            fire_event(DebugCmdOut(msg="\n  PySpark: ✓ available"))
+        except ImportError:
+            fire_event(DebugCmdOut(msg="\n  PySpark: ✗ not installed"))
+
+    def _debug_manifest(self) -> None:
+        """Display manifest summary from target/manifest.json."""
+        fire_event(DebugCmdOut(msg="\n--- Manifest ---"))
+        manifest_path = Path(self.project_dir) / "target" / "manifest.json"
+        fire_event(DebugCmdOut(msg=f"\nManifest Path: {manifest_path}"))
+        fire_event(DebugCmdOut(msg=f"  Exists: {'✓' if manifest_path.exists() else '✗'}"))
+        if not manifest_path.exists():
+            fire_event(DebugCmdOut(msg="  Run 'dvt compile' or 'dvt parse' to generate manifest."))
+            return
+        try:
+            with open(manifest_path) as f:
+                data = json.load(f)
+            nodes = data.get("nodes") or {}
+            sources = data.get("sources") or {}
+            models = [n for n in nodes.values() if n.get("resource_type") == "model"]
+            tests = [n for n in nodes.values() if n.get("resource_type") == "test"]
+            seeds = [n for n in nodes.values() if n.get("resource_type") == "seed"]
+            fire_event(DebugCmdOut(msg=f"\n  Models: {len(models)}"))
+            fire_event(DebugCmdOut(msg=f"  Tests: {len(tests)}"))
+            fire_event(DebugCmdOut(msg=f"  Seeds: {len(seeds)}"))
+            fire_event(DebugCmdOut(msg=f"  Sources: {len(sources)}"))
+            meta = data.get("metadata") or {}
+            fire_event(DebugCmdOut(msg=f"\n  Generated: {meta.get('generated_at', 'Unknown')}"))
+        except Exception as e:
+            fire_event(DebugCmdOut(msg=f"  Error reading manifest: {e}"))
+
+    def _debug_connection_target(self, target_name: str) -> bool:
+        """Test connection to a specific target. Uses current project's profile."""
+        fire_event(DebugCmdOut(msg=f"\n--- Testing Connection: {target_name} ---"))
+        load_status = self._load_profile()
+        if load_status.run_status != RunStatus.Success or self.raw_profile_data is None:
+            fire_event(DebugCmdOut(msg="  Could not load profile or profiles.yml not found."))
+            return DebugRunStatus.FAIL.value
+        try:
+            partial = PartialProject.from_project_root(str(self.project_dir), verify_version=False)
+            renderer = DvtProjectYamlRenderer(None, self.cli_vars)
+            profile_name = partial.render_profile_name(renderer)
+        except Exception as e:
+            fire_event(DebugCmdOut(msg=f"  Could not get project profile name: {e}"))
+            return DebugRunStatus.FAIL.value
+        if profile_name not in self.raw_profile_data or profile_name == "config":
+            fire_event(DebugCmdOut(msg=f"  Profile '{profile_name}' not in profiles.yml."))
+            return DebugRunStatus.FAIL.value
+        if target_name not in (self.raw_profile_data[profile_name].get("outputs") or {}):
+            fire_event(DebugCmdOut(msg=f"  Target '{target_name}' not found in profile '{profile_name}'."))
+            return DebugRunStatus.FAIL.value
+        raw_profile = self.raw_profile_data[profile_name]
+        renderer = ProfileRenderer(self.cli_vars)
+        try:
+            prof = Profile.from_raw_profile_info(
+                raw_profile,
+                profile_name,
+                renderer=renderer,
+                target_override=target_name,
+            )
+        except Exception as e:
+            fire_event(DebugCmdOut(msg=f"  Error loading target: {e}"))
+            return DebugRunStatus.FAIL.value
+        for k, v in prof.credentials.connection_info():
+            fire_event(DebugCmdOut(msg=f"  {k}: {v}"))
+        err = self.attempt_connection(prof)
+        if err is None:
+            fire_event(DebugCmdOut(msg="  Connection: " + green("✓ Success")))
+            return DebugRunStatus.SUCCESS.value
+        fire_event(DebugCmdOut(msg="  Connection: " + red("✗ Failed")))
+        fire_event(DebugCmdOut(msg=f"  {err}"))
+        return DebugRunStatus.FAIL.value
 
     # ============
     # Config tests
