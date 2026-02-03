@@ -13,6 +13,13 @@
 - **Language**: Python. All test scripts, assertions, and negative-test automation are written in Python.
 - **Package manager**: Use **uv** for venvs, installing deps, and running commands (e.g. `uv run pytest`, `uv sync`). Prefer `uv` over `pip` or `poetry` in this repo.
 
+## How to test (package workflow)
+
+dvt-core is a **Python package**. Negative tests must run against the **installed package**.
+
+1. **Build and install dvt-core in development mode** with uv: `cd core && uv sync`.
+2. Run `dvt` with bad inputs from Testing_Playground using that uv env (e.g. `dvt init 123`, `dvt init Coke_DB` when Coke_DB exists). Verify clear errors. Do not use standalone scripts that bypass the package.
+
 ## Scope
 
 This agent handles:

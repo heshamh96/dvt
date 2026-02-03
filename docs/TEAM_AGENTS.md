@@ -112,7 +112,7 @@ When working on a specific area, reference the appropriate agent's Cursor rule f
 
 **Testing Playground**: All test-team agents run their tests in `/Users/hex/Documents/My_Projects/DVT/Testing_Playground`. Use this path as the working directory for `dvt init`, project creation, and any verification or negative tests.
 
-**Environment**: Test-team agents use **Python** for all test scripts and automation, and **uv** as the package manager (venvs, installs, `uv run pytest`, etc.). Prefer uv over pip or poetry in this repo.
+**Environment**: Test-team agents use **Python** and **uv**. They must **build and install dvt-core in development mode** (e.g. `cd core && uv sync`) and then run the installed `dvt` CLI to verify behaviour—not ad-hoc or standalone scripts that bypass the package.
 
 ## Important Reminders
 
@@ -124,6 +124,7 @@ When working on a specific area, reference the appropriate agent's Cursor rule f
 
 ## Related Documentation
 
+- [Running DVT](./RUNNING_DVT.md) - How to run the dvt CLI (venv, arch, test team)
 - [Branching and Rebase Strategy](./BRANCHING_AND_REBASE.md) - Git workflow documentation
 - `dvt_implementation_plan.md` - Canonical DVT RULES and implementation plan
 - `dvt-core-features/` - Feature specifications

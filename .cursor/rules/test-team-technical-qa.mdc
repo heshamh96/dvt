@@ -13,6 +13,13 @@
 - **Language**: Python. All test scripts, assertions, and verification logic are written in Python.
 - **Package manager**: Use **uv** for venvs, installing deps, and running commands (e.g. `uv run pytest`, `uv sync`). Prefer `uv` over `pip` or `poetry` in this repo.
 
+## How to test (package workflow)
+
+dvt-core is a **Python package**. Verification must run against the **installed package**.
+
+1. **Build and install dvt-core in development mode** with uv: `cd core && uv sync`.
+2. Run `dvt` (e.g. `dvt init Coke_DB`) from Testing_Playground using that uv env, then verify paths, names, and files per the checklist below. Do not use standalone scripts that bypass the package.
+
 ## Scope
 
 This agent handles:

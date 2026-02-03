@@ -21,6 +21,14 @@ This agent handles:
 - **Language**: Python. All test scripts, assertions, and automation are written in Python.
 - **Package manager**: Use **uv** for creating venvs, installing dependencies, and running commands (e.g. `uv run pytest`, `uv sync`). Prefer `uv` over `pip` or `poetry` when working in this repo.
 
+## How to test (package workflow)
+
+dvt-core is a **Python package**. Tests must use the **installed package**, not ad-hoc scripts or bypasses.
+
+1. **Build and install dvt-core in development mode** using uv: from repo root, `cd core && uv sync` (or equivalent so the package is installed in the uv environment).
+2. **Run `dvt`** from that environment: e.g. from Testing_Playground run `uv run --project /path/to/dvt-core/core dvt init Coke_DB --skip-profile-setup`, or activate the venv and run `dvt init Coke_DB`.
+3. **Verify** that the installed package behaves correctly (project created, ~/.dvt/ layout, profiles when applicable). Do not rely on standalone scripts that skip the real CLI or package.
+
 ## Reference Project
 
 - **Path**: `../Cocacola_DWH_on_DBT` relative to dvt-core (or absolute: `/Users/hex/Documents/My_Projects/DVT/Cocacola_DWH_on_DBT`). Can be overridden via `DVT_REFERENCE_DBT_PROJECT` if documented.
@@ -44,7 +52,7 @@ This agent handles:
 
 ## Standard Test Scenario: dvt init Coke_DB
 
-1. Run `dvt init Coke_DB` from the Testing Playground (`/Users/hex/Documents/My_Projects/DVT/Testing_Playground`) with postgres profile shape from reference.
+1. Ensure dvt-core is installed in dev mode (e.g. `cd core && uv sync`). Then run `dvt init Coke_DB` from the Testing Playground (`/Users/hex/Documents/My_Projects/DVT/Testing_Playground`) with postgres profile shape from reference (use the installed `dvt` from that uv env).
 2. Verify:
    - Project dir `Coke_DB/` exists with `dvt_project.yml` and standard directories: `models/`, `tests/`, `macros/`, `seeds/`, `snapshots/`, `analyses/`.
    - `~/.dvt/` (or PROFILES_DIR) contains `profiles.yml`, `computes.yml`, `data/mdm.duckdb`.
