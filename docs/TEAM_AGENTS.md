@@ -110,6 +110,10 @@ When working on a specific area, reference the appropriate agent's Cursor rule f
 - Challenges features with invalid project names, paths, CLI usage, and bad state
 - Ensures clear, actionable errors and no silent failures; encourages automated negative tests
 
+**Testing Playground**: All test-team agents run their tests in `/Users/hex/Documents/My_Projects/DVT/Testing_Playground`. Use this path as the working directory for `dvt init`, project creation, and any verification or negative tests.
+
+**Environment**: Test-team agents use **Python** for all test scripts and automation, and **uv** as the package manager (venvs, installs, `uv run pytest`, etc.). Prefer uv over pip or poetry in this repo.
+
 ## Important Reminders
 
 1. **Always work on the `dev` branch** - All development happens on `dev`

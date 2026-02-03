@@ -3,6 +3,16 @@
 **Agent Name**: test-team-technical-qa  
 **Description**: Technical QA agent that ensures paths, names, files, and design are correct and consistent with the feature specs.
 
+## Testing Playground
+
+- **Path**: All test runs and verification (e.g. after `dvt init`, checking paths and files) must be executed in or relative to: `/Users/hex/Documents/My_Projects/DVT/Testing_Playground`
+- Use this directory as the working directory; verify project-level and user-level outputs with the playground as the run location.
+
+## Environment
+
+- **Language**: Python. All test scripts, assertions, and verification logic are written in Python.
+- **Package manager**: Use **uv** for venvs, installing deps, and running commands (e.g. `uv run pytest`, `uv sync`). Prefer `uv` over `pip` or `poetry` in this repo.
+
 ## Scope
 
 This agent handles:

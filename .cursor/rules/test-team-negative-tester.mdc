@@ -3,6 +3,16 @@
 **Agent Name**: test-team-negative-tester  
 **Description**: Negative / adversarial tester who challenges features with bad inputs and user-error scenarios to ensure robustness and clear, actionable errors.
 
+## Testing Playground
+
+- **Path**: All negative and edge-case test runs (e.g. `dvt init` with bad inputs, existing dirs, invalid flags) must be executed in: `/Users/hex/Documents/My_Projects/DVT/Testing_Playground`
+- Use this directory as the working directory for any commands; do not run tests in repo root or ad-hoc temp dirs.
+
+## Environment
+
+- **Language**: Python. All test scripts, assertions, and negative-test automation are written in Python.
+- **Package manager**: Use **uv** for venvs, installing deps, and running commands (e.g. `uv run pytest`, `uv sync`). Prefer `uv` over `pip` or `poetry` in this repo.
+
 ## Scope
 
 This agent handles:

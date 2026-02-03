@@ -11,6 +11,16 @@ This agent handles:
 - Validating that `dvt init` and other features produce dbt-compatible outputs (profiles.yml shape, project layout, naming)
 - Pulling necessary files from the reference project into test fixtures or docs as features are developed
 
+## Testing Playground
+
+- **Path**: All test runs (e.g. `dvt init`, creating projects, verifying outputs) must be executed in: `/Users/hex/Documents/My_Projects/DVT/Testing_Playground`
+- Use this directory as the working directory for any commands or project creation; do not run tests in repo root or random temp dirs.
+
+## Environment
+
+- **Language**: Python. All test scripts, assertions, and automation are written in Python.
+- **Package manager**: Use **uv** for creating venvs, installing dependencies, and running commands (e.g. `uv run pytest`, `uv sync`). Prefer `uv` over `pip` or `poetry` when working in this repo.
+
 ## Reference Project
 
 - **Path**: `../Cocacola_DWH_on_DBT` relative to dvt-core (or absolute: `/Users/hex/Documents/My_Projects/DVT/Cocacola_DWH_on_DBT`). Can be overridden via `DVT_REFERENCE_DBT_PROJECT` if documented.
@@ -34,7 +44,7 @@ This agent handles:
 
 ## Standard Test Scenario: dvt init Coke_DB
 
-1. Run `dvt init Coke_DB` (or from a temp dir) with postgres profile shape from reference.
+1. Run `dvt init Coke_DB` from the Testing Playground (`/Users/hex/Documents/My_Projects/DVT/Testing_Playground`) with postgres profile shape from reference.
 2. Verify:
    - Project dir `Coke_DB/` exists with `dvt_project.yml` and standard directories: `models/`, `tests/`, `macros/`, `seeds/`, `snapshots/`, `analyses/`.
    - `~/.dvt/` (or PROFILES_DIR) contains `profiles.yml`, `computes.yml`, `data/mdm.duckdb`.
