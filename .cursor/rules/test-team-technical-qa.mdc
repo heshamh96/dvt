@@ -5,20 +5,22 @@
 
 ## Testing Playground
 
-- **Path**: All test runs and verification (e.g. after `dvt init`, checking paths and files) must be executed in or relative to: `/Users/hex/Documents/My_Projects/DVT/Testing_Playground`
-- Use this directory as the working directory; verify project-level and user-level outputs with the playground as the run location.
+- **Path**: All test runs run under: `/Users/hex/Documents/My_Projects/DVT/Testing_Playground`
+- **Do not remove things.** Each test run goes in a **trial folder**: `trial_<what_we_are_testing>_<number>` (e.g. `trial_dvt_init_1`). **Each trial is a self-contained uv project**: the trial has its own uv setup (`pyproject.toml`), its own `.venv`, and dvt-core installed inside it. You `cd` into the trial and run `uv run dvt ...` there. **Findings** go in that folder under `findings/`. Do not delete or overwrite trial folders.
 
 ## Environment
 
 - **Language**: Python. All test scripts, assertions, and verification logic are written in Python.
 - **Package manager**: Use **uv** for venvs, installing deps, and running commands (e.g. `uv run pytest`, `uv sync`). Prefer `uv` over `pip` or `poetry` in this repo.
 
-## How to test (package workflow)
+## How to test (each trial is a uv-contained project)
 
-dvt-core is a **Python package**. Verification must run against the **installed package**.
+dvt-core is a **Python package**. Each trial must be a **self-contained uv project** with its own venv and the tool installed inside the trial. **Do not remove previous test runs**; use a new trial folder per run.
 
-1. **Build and install dvt-core in development mode** with uv: `cd core && uv sync`.
-2. Run `dvt` (e.g. `dvt init Coke_DB`) from Testing_Playground using that uv env, then verify paths, names, and files per the checklist below. Do not use standalone scripts that bypass the package.
+1. **Use or create a trial folder** that is a uv project with dvt-core installed inside it (trial has `pyproject.toml`, `.venv`, and `uv add .../dvt-core/core` + `uv sync`).
+2. **From inside the trial folder** run `uv run dvt ...` (e.g. `uv run dvt init Coke_DB`) so the project is created inside the trial.
+3. Verify paths, names, and files per the checklist below (project under trial folder, user-level ~/.dvt/ or trial-local config).
+4. **Write findings** under the trial folder: `trial_.../findings/` (e.g. technical_qa_checklist.md or findings.md). Do not use standalone scripts that bypass the package.
 
 ## Scope
 

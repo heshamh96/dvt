@@ -13,21 +13,29 @@ This agent handles:
 
 ## Testing Playground
 
-- **Path**: All test runs (e.g. `dvt init`, creating projects, verifying outputs) must be executed in: `/Users/hex/Documents/My_Projects/DVT/Testing_Playground`
-- Use this directory as the working directory for any commands or project creation; do not run tests in repo root or random temp dirs.
+- **Path**: All test runs run under: `/Users/hex/Documents/My_Projects/DVT/Testing_Playground`
+- **Do not remove things.** Each test run goes in a **trial folder**: `trial_<what_we_are_testing>_<number>` (e.g. `trial_dvt_init_1`, `trial_dvt_init_2`).
+- **Each trial is a self-contained uv project**: the trial folder must have its own **uv** setup (e.g. `pyproject.toml`), its own **.venv**, and the **tool (dvt-core) installed inside it**. So each trial is a uv-contained folder/environment: you `cd` into the trial and run `uv run dvt ...` there. Do not rely on a shared env outside the trial; do not delete trial folders.
+- **Inside each trial folder**: (1) initialize as a uv project (`uv init` or add `pyproject.toml`), (2) add dvt-core as a dependency (e.g. `uv add /path/to/dvt-core/core` editable), (3) run `uv sync`, (4) create the DVT project and run the CLI with `uv run dvt ...`, (5) write **findings** under `findings/`.
 
 ## Environment
 
 - **Language**: Python. All test scripts, assertions, and automation are written in Python.
 - **Package manager**: Use **uv** for creating venvs, installing dependencies, and running commands (e.g. `uv run pytest`, `uv sync`). Prefer `uv` over `pip` or `poetry` when working in this repo.
 
-## How to test (package workflow)
+## How to test (each trial is a uv-contained project)
 
-dvt-core is a **Python package**. Tests must use the **installed package**, not ad-hoc scripts or bypasses.
+dvt-core is a **Python package**. Each trial must be a **self-contained uv project** with its own venv and the tool installed inside the trial. **Do not remove or overwrite previous test runs**; use a new trial folder per run.
 
-1. **Build and install dvt-core in development mode** using uv: from repo root, `cd core && uv sync` (or equivalent so the package is installed in the uv environment).
-2. **Run `dvt`** from that environment: e.g. from Testing_Playground run `uv run --project /path/to/dvt-core/core dvt init Coke_DB --skip-profile-setup`, or activate the venv and run `dvt init Coke_DB`.
-3. **Verify** that the installed package behaves correctly (project created, ~/.dvt/ layout, profiles when applicable). Do not rely on standalone scripts that skip the real CLI or package.
+1. **Create a trial folder**: e.g. `Testing_Playground/trial_dvt_init_1`.
+2. **Make the trial a uv project** (uv and tool inside the trial):
+   - `cd trial_dvt_init_1`
+   - `uv init` (creates `pyproject.toml` and optionally `.venv`)
+   - `uv add /path/to/dvt-core/core` (or path dependency in `pyproject.toml` to dvt-core, then `uv sync`) so dvt-core is installed in the trial’s `.venv`
+   - Run `uv sync` if needed
+3. **Run `dvt` from inside the trial**: e.g. `uv run dvt init Coke_DB --skip-profile-setup`. The DVT project (e.g. `Coke_DB/`) is created inside the trial folder.
+4. **Verify** the installed package (project created, ~/.dvt/ or trial-local config, profiles when applicable). Do not rely on standalone scripts that skip the real CLI.
+5. **Write findings** under the trial folder: `trial_dvt_init_1/findings/` (e.g. data_engineer_findings.md or a single findings.md).
 
 ## Reference Project
 
@@ -52,7 +60,7 @@ dvt-core is a **Python package**. Tests must use the **installed package**, not 
 
 ## Standard Test Scenario: dvt init Coke_DB
 
-1. Ensure dvt-core is installed in dev mode (e.g. `cd core && uv sync`). Then run `dvt init Coke_DB` from the Testing Playground (`/Users/hex/Documents/My_Projects/DVT/Testing_Playground`) with postgres profile shape from reference (use the installed `dvt` from that uv env).
+1. Create or use a trial folder that is a **uv project** with dvt-core installed inside it (trial has its own `.venv` and `uv run dvt`). Run `uv run dvt init Coke_DB` from **inside the trial folder** (so the project is created at `trial_dvt_init_1/Coke_DB/`) with postgres profile shape from reference.
 2. Verify:
    - Project dir `Coke_DB/` exists with `dvt_project.yml` and standard directories: `models/`, `tests/`, `macros/`, `seeds/`, `snapshots/`, `analyses/`.
    - `~/.dvt/` (or PROFILES_DIR) contains `profiles.yml`, `computes.yml`, `data/mdm.duckdb`.

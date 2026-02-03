@@ -5,20 +5,21 @@
 
 ## Testing Playground
 
-- **Path**: All negative and edge-case test runs (e.g. `dvt init` with bad inputs, existing dirs, invalid flags) must be executed in: `/Users/hex/Documents/My_Projects/DVT/Testing_Playground`
-- Use this directory as the working directory for any commands; do not run tests in repo root or ad-hoc temp dirs.
+- **Path**: All test runs run under: `/Users/hex/Documents/My_Projects/DVT/Testing_Playground`
+- **Do not remove things.** Each test run goes in a **trial folder**: `trial_<what_we_are_testing>_<number>` (e.g. `trial_dvt_init_1`, `trial_dvt_init_negative_2`). **Each trial is a self-contained uv project**: the trial has its own uv setup (`pyproject.toml`), its own `.venv`, and dvt-core installed inside it. You `cd` into the trial and run `uv run dvt ...` there. **Findings** go in that folder under `findings/`. Do not delete or overwrite trial folders.
 
 ## Environment
 
 - **Language**: Python. All test scripts, assertions, and negative-test automation are written in Python.
 - **Package manager**: Use **uv** for venvs, installing deps, and running commands (e.g. `uv run pytest`, `uv sync`). Prefer `uv` over `pip` or `poetry` in this repo.
 
-## How to test (package workflow)
+## How to test (each trial is a uv-contained project)
 
-dvt-core is a **Python package**. Negative tests must run against the **installed package**.
+dvt-core is a **Python package**. Each trial must be a **self-contained uv project** with its own venv and the tool installed inside the trial. **Do not remove previous test runs**; use a new trial folder per run.
 
-1. **Build and install dvt-core in development mode** with uv: `cd core && uv sync`.
-2. Run `dvt` with bad inputs from Testing_Playground using that uv env (e.g. `dvt init 123`, `dvt init Coke_DB` when Coke_DB exists). Verify clear errors. Do not use standalone scripts that bypass the package.
+1. **Use or create a trial folder** that is a uv project with dvt-core installed inside it (trial has `pyproject.toml`, `.venv`, and `uv add .../dvt-core/core` + `uv sync`).
+2. **From inside the trial folder** run `uv run dvt ...` with bad inputs (e.g. `uv run dvt init 123`, `uv run dvt init Coke_DB` when Coke_DB already exists). Verify clear errors.
+3. **Write findings** under the trial folder: `trial_.../findings/` (e.g. negative_findings.md with commands run, expected vs actual, exit codes). Do not use standalone scripts that bypass the package.
 
 ## Scope
 

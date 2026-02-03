@@ -28,7 +28,7 @@ Use an environment where **Python and dependencies match your CPU architecture**
    dvt init Coke_DB --skip-profile-setup
    ```
 
-## Test team
+## Test team: each trial is a uv-contained project
 
 Test-team agents run in **Testing_Playground** (`/Users/hex/Documents/My_Projects/DVT/Testing_Playground`). See that folder’s `README.md` and `.cursor/rules/test-team-*.mdc` for roles and scenarios.
 

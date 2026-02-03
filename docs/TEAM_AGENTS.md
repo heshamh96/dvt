@@ -110,9 +110,9 @@ When working on a specific area, reference the appropriate agent's Cursor rule f
 - Challenges features with invalid project names, paths, CLI usage, and bad state
 - Ensures clear, actionable errors and no silent failures; encourages automated negative tests
 
-**Testing Playground**: All test-team agents run their tests in `/Users/hex/Documents/My_Projects/DVT/Testing_Playground`. Use this path as the working directory for `dvt init`, project creation, and any verification or negative tests.
+**Testing Playground**: All test-team agents run their tests under `/Users/hex/Documents/My_Projects/DVT/Testing_Playground`. **Do not remove things.** Each test run uses a **trial folder**: `trial_<what_we_are_testing>_<number>` (e.g. `trial_dvt_init_1`). **Each trial is a self-contained uv project**: the trial has its own uv (pyproject.toml), its own .venv, and dvt-core installed inside it; you `cd` into the trial and run `uv run dvt ...` there. **Findings** are written in that folder under `findings/`.
 
-**Environment**: Test-team agents use **Python** and **uv**. They must **build and install dvt-core in development mode** (e.g. `cd core && uv sync`) and then run the installed `dvt` CLI to verify behaviour—not ad-hoc or standalone scripts that bypass the package.
+**Environment**: Test-team agents use **Python** and **uv**. Each trial must be a **uv-contained folder** with the tool installed inside the trial (e.g. `uv init`, `uv add .../dvt-core/core`, `uv sync`, then `uv run dvt ...` from the trial)—not a shared env or standalone scripts.
 
 ## Important Reminders
 
