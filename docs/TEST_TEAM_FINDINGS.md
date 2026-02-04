@@ -9,7 +9,7 @@ Summary of what the test team has verified: dvt init, dvt debug (Feature 02), an
 **Trial**: `Testing_Playground/trial_integration_3`  
 **Date**: 2026-02-03
 
-**Flow run**: init → parse → debug (full + sections). From trial root, use `--project-dir Coke_DB` for parse and all debug commands so dvt finds `Coke_DB/dvt_project.yml`.
+**Flow run**: init → parse → debug (full + sections). From trial root, use `--project-dir Coke_DB` for parse and all debug commands so dvt finds `Coke_DB/dbt_project.yml`.
 
 **Result**: All features work together. Init created Coke_DB/; parse completed with dbt-postgres; full debug and --config, --targets, --computes, --manifest, --connection dev all succeeded. No regressions. See `trial_integration_3/findings/integration_findings.md`.
 
@@ -21,7 +21,7 @@ Summary of what the test team has verified: dvt init, dvt debug (Feature 02), an
 
 ### Verified
 
-- `dvt debug --config`: Shows DVT directory, profiles.yml, computes.yml, MDM path, project path; project name and profile from dvt_project.yml.
+- `dvt debug --config`: Shows DVT directory, profiles.yml, computes.yml, MDM path, project path; project name and profile from dbt_project.yml.
 - `dvt debug --targets`: Lists **targets for the current project's profile only** (not all profiles); shows each target with type, host/schema, and connection status (✓ Connected / ✗).
 - `dvt debug --computes`: Lists compute engines from computes.yml; PySpark availability.
 - `dvt debug --manifest`: Shows target/manifest.json existence, model/test/seed/source counts, generated_at.
@@ -55,9 +55,9 @@ Used by `task/init.py` (reserved project name), `context/macro_resolver.py`, and
 ### Verified
 
 - **Reference project**: Cocacola_DWH_on_DBT is available at `/Users/hex/Documents/My_Projects/DVT/Cocacola_DWH_on_DBT` with postgres profile in `Connections/profiles.yml` (dbname: coke_db, type: postgres). Structure is suitable as reference for Coke_DB and dbt-aligned layout.
-- **Starter project layout**: `core/dvt/include/starter_project/` contains `dvt_project.yml` (with `{project_name}` / `{profile_name}` placeholders), and standard dirs: `models/`, `tests/`, `macros/`, `seeds/`, `snapshots/`, `analyses/` (with `.gitkeep` where needed). Matches dbt mindset (model-paths, target-path, clean-targets, etc.).
+- **Starter project layout**: `core/dvt/include/starter_project/` contains `dbt_project.yml` (with `{project_name}` / `{profile_name}` placeholders), and standard dirs: `models/`, `tests/`, `macros/`, `seeds/`, `snapshots/`, `analyses/` (with `.gitkeep` where needed). Matches dbt mindset (model-paths, target-path, clean-targets, etc.).
 - **User config creation**: When init logic runs (via standalone script in this env), `~/.dvt/` is created with:
-  - `computes.yml` with `computes.default` (type: spark, master: local[*], config).
+  - `computes.yml` with profile-based structure (e.g. `default.target`, `default.computes.default` with type, version, master, config).
   - `data/mdm.duckdb` (DuckDB stub with `_dvt_init` table when duckdb is available).
   So the user-level layout and content from `user_config.py` behave as specified.
 
@@ -78,9 +78,9 @@ Used by `task/init.py` (reserved project name), `context/macro_resolver.py`, and
 
 - **Paths (code and one run)**:
   - User-level: `~/.dvt/`, `~/.dvt/computes.yml`, `~/.dvt/data/`, `~/.dvt/data/mdm.duckdb` created by init user-config logic. `profiles.yml` is only created when profile setup runs (not with `--skip-profile-setup`).
-  - Project-level: Starter has `dvt_project.yml` and dirs; copy + placeholder replacement produces correct project name and profile name in YAML.
-- **computes.yml schema**: Content has top-level `computes`, then `default` with `type`, `master`, `config` (spark.driver.memory, spark.sql.adaptive.enabled). Matches `user_config.create_default_computes_yml`.
-- **Project name in dvt_project.yml**: Placeholders `{project_name}` and `{profile_name}` are replaced; project name follows identifier rules (letters/numbers/underscore, not starting with digit) per contracts.
+  - Project-level: Starter has `dbt_project.yml` and dirs; copy + placeholder replacement produces correct project name and profile name in YAML.
+- **computes.yml schema**: Content has profile names as top-level keys, each with `target` and `computes` (e.g. default.computes.default with type, version, master, config). Matches `user_config.create_default_computes_yml`.
+- **Project name in dbt_project.yml**: Placeholders `{project_name}` and `{profile_name}` are replaced; project name follows identifier rules (letters/numbers/underscore, not starting with digit) per contracts.
 - **Idempotency (code)**: `create_default_computes_yml` and `init_mdm_db` return early if file exists; no overwrite. `create_dvt_user_config` does not overwrite existing computes or mdm.duckdb.
 
 ### Not verified
@@ -97,7 +97,7 @@ Used by `task/init.py` (reserved project name), `context/macro_resolver.py`, and
 
 - **Project name validation**: `InitTask.get_valid_project_name()` uses `ProjectName` (i.e. `Identifier`) with regex `^[^\d\W]\w*$`: rejects empty, numeric-only, special characters (e.g. `my-project`, `my.project`). Rejects reserved names (internal package names, global project name). Loops with click.prompt until valid; no silent accept.
 - **Existing project dir**: If `project_path.exists()`, code fires `ProjectNameAlreadyExists` and returns without creating or overwriting.
-- **CLI `--profile`**: If run inside an existing project with `--profile`, raises `DbtRuntimeError`: "Can not init existing project with specified profile, edit dvt_project.yml instead". If `--profile <name>` and profile not in profiles: raises "Could not find profile named '...'".
+- **CLI `--profile`**: If run inside an existing project with `--profile`, raises `DbtRuntimeError`: "Can not init existing project with specified profile, edit dbt_project.yml instead". If `--profile <name>` and profile not in profiles: raises "Could not find profile named '...'".
 - **Overwrite profile**: When profile already exists in profiles.yml, `check_if_can_write_profile()` prompts for overwrite; no silent overwrite.
 
 ### Not verified (no CLI runs)

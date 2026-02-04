@@ -1,0 +1,20 @@
+# Trial 7 (trial_7_pepsi_db) – uv config template
+# Copy to your trial folder as pyproject.toml, set the path to dvt-core, then: uv sync
+#
+# Use editable = true so the trial always uses the latest dvt-core (sync, minimal help, etc.).
+
+[project]
+name = "trial-7-pepsi-db"
+version = "0.1.0"
+description = "Trial 7 Pepsi_DB – full feature test, sync working, minimal help"
+requires-python = ">=3.10"
+dependencies = [
+    "dvt-core",
+    "dbt-postgres",
+    "pyspark==3.5.0",
+]
+
+[tool.uv.sources]
+# Editable so trial always uses current dvt-core source.
+# Replace with your absolute path to dvt-core/core.
+dvt-core = { path = "/Users/hex/Documents/My_Projects/DVT/dvt-core/core", editable = true }

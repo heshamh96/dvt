@@ -68,7 +68,7 @@
    ```
 
 4. **Verify** (per test-team-technical-qa checklist):
-   - `Coke_DB/` exists with `dvt_project.yml` and standard dirs (`models/`, `tests/`, `macros/`, `seeds/`, `snapshots/`, `analyses/`)
+   - `Coke_DB/` exists with `dbt_project.yml` and standard dirs (`models/`, `tests/`, `macros/`, `seeds/`, `snapshots/`, `analyses/`)
    - `~/.dvt/` contains `computes.yml`, `data/mdm.duckdb` (and `profiles.yml` if profile setup was run)
 
 5. **Write findings** under the trial folder: `trial_dvt_init_1/findings/` (e.g. findings.md or per-agent files).

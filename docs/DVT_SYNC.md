@@ -36,7 +36,7 @@ From a project directory (or with `--project-dir <path>`):
 dvt sync
 ```
 
-If no in-project env is found, the command will prompt for the path to your Python environment.
+If no in-project env is found, the command will **prompt you interactively** for the absolute path to your Python environment. You can also pass it explicitly with quotes: `dvt sync --python-env "$(pwd)/.venv"`.
 
 ## Configuration
 
@@ -78,3 +78,10 @@ Sync uses the adapter–JDBC registry in `core/dvt/task/jdbc_drivers.py`. All UR
 ## Using a local dvt-core build with uv
 
 To use your local dvt-core repo (e.g. with the latest `dvt sync` fixes) in another project via `uv sync` **without** an editable install, see [USING_LOCAL_DVT_WITH_UV.md](USING_LOCAL_DVT_WITH_UV.md).
+
+## Trial runbooks (full features + sync)
+
+- **Trial 4**: [TRIAL_4_DVT_SYNC_CHECKLIST.md](TRIAL_4_DVT_SYNC_CHECKLIST.md) – dvt sync checklist (adapters, PySpark, JDBC).
+- **Trial 5**: [TRIAL_5_FANTA_DB_FULL_FEATURES.md](TRIAL_5_FANTA_DB_FULL_FEATURES.md) – full feature test, project Fanta_DB, append-only profiles/computes.
+- **Trial 6**: [TRIAL_6_COKE_DB_FULL_FEATURES.md](TRIAL_6_COKE_DB_FULL_FEATURES.md) – full feature test, project Coke_DB, same sync behaviour, testing agents.
+- **Trial 7**: [TRIAL_7_PEPSI_DB_FULL_FEATURES.md](TRIAL_7_PEPSI_DB_FULL_FEATURES.md) – full feature test, project Pepsi_DB; **sync working** (interactive, quoted `--python-env`, in-project env first, minimal help); uses **editable** dvt-core.

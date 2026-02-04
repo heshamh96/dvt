@@ -23,14 +23,31 @@ Use the **testing agents** (test-team-technical-qa, test-team-data-engineer, tes
    ```bash
    cp /path/to/dvt-core/docs/trial_5_pyproject.toml Testing_Playground/trial_5_fanta_db/pyproject.toml
    ```
-3. If your layout is not `.../Testing_Playground/trial_5_fanta_db` with `dvt-core` as a sibling of `Testing_Playground`, edit `pyproject.toml` and set `[tool.uv.sources].dvt-core.path` to the **absolute path** to `dvt-core/core` (e.g. `path = "/Users/hex/Documents/My_Projects/DVT/dvt-core/core"`).
+3. If your layout is not `.../Testing_Playground/trial_5_fanta_db` with `dvt-core` as a sibling of `Testing_Playground`, edit `pyproject.toml` and set `[tool.uv.sources].dvt-core` to the **absolute path** and **always include `editable = false`** (required for correct install and minimal `dvt sync --help`). Example:
+   ```toml
+   [tool.uv.sources]
+   dvt-core = { path = "/Users/hex/Documents/My_Projects/DVT/dvt-core/core", editable = false }
+   ```
 4. From the **trial folder** (`trial_5_fanta_db`), not from `Fanta_DB/`: run `uv sync`. Then run all `dvt` commands from the trial folder too (e.g. `uv run dvt sync --project-dir Fanta_DB`), so the env that has local dvt-core is used.
-5. **If `dvt sync --help` still shows dozens of flags**: the active env is not using local dvt-core. Ensure (a) the `pyproject.toml` with the path source is in the **trial root** (`trial_5_fanta_db`), (b) you ran `uv sync` from the trial root, and (c) you run `uv run dvt ...` from the trial root (or have activated the trial’s `.venv`). Do not run `uv sync` from `Fanta_DB/` if it has its own `pyproject.toml`—that env will not have the path source.
+5. **If `dvt sync --help` still shows dozens of flags** (you are not running local dvt-core): (a) In `pyproject.toml` you **must** have `editable = false` in `[tool.uv.sources].dvt-core`. (b) Run **`uv run dvt ...`** from the trial root—never bare `dvt`. (c) Run `uv sync` from the trial root, then `uv run dvt sync --help`. (d) Do not run `uv sync` or `dvt` from `Fanta_DB/` if it has its own `pyproject.toml`.
 6. **If `uv sync` installs pyspark 4.1.0**: the template pins `pyspark==3.5.0` so it matches Fanta_DB’s computes. Re-copy the latest `docs/trial_5_pyproject.toml` so the trial has that pin, then `uv sync` again.
 
 **Option B – add config by hand**
 
-See **[docs/USING_LOCAL_DVT_WITH_UV.md](USING_LOCAL_DVT_WITH_UV.md)**. In the trial's `pyproject.toml`: `dependencies = ["dvt-core", "dbt-postgres"]` (or your deps) and `[tool.uv.sources]` with `dvt-core = { path = "/full/path/to/dvt-core/core", editable = false }`, then `uv sync`.
+See **[docs/USING_LOCAL_DVT_WITH_UV.md](USING_LOCAL_DVT_WITH_UV.md)**. Your trial `pyproject.toml` must include **`editable = false`** in the path source. Full example (replace the path with your absolute path to `dvt-core/core`):
+
+```toml
+[project]
+name = "trial-5-fanta-db"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = ["dvt-core", "dbt-postgres", "pyspark==3.5.0"]
+
+[tool.uv.sources]
+dvt-core = { path = "/Users/hex/Documents/My_Projects/DVT/dvt-core/core", editable = false }
+```
+
+Then from the trial root: `uv sync` and **`uv run dvt ...`** (never bare `dvt`).
 
 ---
 
@@ -60,7 +77,7 @@ See **[docs/USING_LOCAL_DVT_WITH_UV.md](USING_LOCAL_DVT_WITH_UV.md)**. In the tr
 
 ### 3.3 Sync (adapters + PySpark + JDBC)
 
-7. **Environment for sync**: Sync uses only (a) a venv **inside** `Fanta_DB/` (`.venv`, `venv`, or `env`), or (b) `--python-env /path/to/venv`. From trial root you can run `uv run dvt sync --project-dir Fanta_DB --python-env $(pwd)/.venv` to use the trial’s venv, or create a `.venv` inside `Fanta_DB/` (e.g. `cd Fanta_DB && uv venv && uv sync` if Fanta_DB has its own pyproject.toml) and then `uv run dvt sync --project-dir Fanta_DB`.
+7. **Environment for sync**: Sync uses only (a) a venv **inside** `Fanta_DB/` (`.venv`, `venv`, or `env`), or (b) `--python-env "/path/to/venv"` (use quotes). If you omit it and there is no venv in the project dir, sync will prompt you interactively. From trial root you can run `uv run dvt sync --project-dir Fanta_DB --python-env "$(pwd)/.venv"` to use the trial’s venv, or create a `.venv` inside `Fanta_DB/` (e.g. `cd Fanta_DB && uv venv && uv sync` if Fanta_DB has its own pyproject.toml) and then `uv run dvt sync --project-dir Fanta_DB`.
 8. **Verify**: Adapters installed; pyspark version from **Fanta_DB’s** block in `~/.dvt/computes.yml` (active target’s `version`); **`~/.dvt/.jdbc_jars/`** contains JARs for the adapter type(s) in Fanta_DB profile (e.g. postgres).
 9. **Optional**: `uv run dvt sync --help` shows only `--project-dir`, `--profiles-dir`, `--python-env`, and `--help` (minimal flags when using local dvt-core build).
 

@@ -58,7 +58,7 @@ def main():
         sys.exit(1)
     shutil.copytree(STARTER, project_path, ignore=shutil.ignore_patterns(*IGNORE))
 
-    project_yml = project_path / "dvt_project.yml"
+    project_yml = project_path / "dbt_project.yml"
     content = project_yml.read_text().replace("{project_name}", project_name).replace("{profile_name}", project_name)
     project_yml.write_text(content)
 

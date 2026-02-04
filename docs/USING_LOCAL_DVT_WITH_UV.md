@@ -27,14 +27,14 @@ In your project’s `pyproject.toml` (e.g. Fanta_DB or any trial project):
    ]
    ```
 
-2. Add a **path source** so uv installs from your local repo (non-editable):
+2. Add a **path source** so uv installs from your local repo (non-editable). **You must include `editable = false`**—without it, the install and `dvt sync --help` (minimal flags) may not behave correctly:
 
    ```toml
    [tool.uv.sources]
    dvt-core = { path = "/full/path/to/dvt-core/core", editable = false }
    ```
 
-   Use the **absolute path** to the `core` directory inside the dvt-core repo (e.g. `/Users/hex/Documents/My_Projects/DVT/dvt-core/core`).
+   Use the **absolute path** to the `core` directory inside the dvt-core repo (e.g. `/Users/hex/Documents/My_Projects/DVT/dvt-core/core`). Always run **`uv run dvt ...`** from the project root (never bare `dvt`).
 
 ## 3. Sync in your project
 
