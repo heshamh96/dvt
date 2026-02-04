@@ -17,9 +17,11 @@
 
 dvt-core is a **Python package**. Each trial must be a **self-contained uv project** with its own venv and the tool installed inside the trial. **Do not remove previous test runs**; use a new trial folder per run.
 
-1. **Use or create a trial folder** that is a uv project with dvt-core installed inside it (trial has `pyproject.toml`, `.venv`, and `uv add .../dvt-core/core` + `uv sync`).
+1. **Use or create a trial folder** that is a uv project with dvt-core installed inside it (trial has `pyproject.toml`, `.venv`, and dvt-core as a dependency; see **Local dvt-core setup** in `test-team-technical-qa.mdc` or **`docs/USING_LOCAL_DVT_WITH_UV.md`**).
 2. **From inside the trial folder** run `uv run dvt ...` with bad inputs (e.g. `uv run dvt init 123`, `uv run dvt init Coke_DB` when Coke_DB already exists). Verify clear errors.
 3. **Write findings** under the trial folder: `trial_.../findings/` (e.g. negative_findings.md with commands run, expected vs actual, exit codes). Do not use standalone scripts that bypass the package.
+
+**When creating new trial runbooks**: You must document or link to the uv setup for local dvt-core (non-editable path); see `docs/USING_LOCAL_DVT_WITH_UV.md`.
 
 ## Scope
 
@@ -71,7 +73,7 @@ This agent handles:
 ### CLI
 
 - **dvt init --profile existing_name** when profile does not exist - Expect DbtRuntimeError: "Could not find profile named '...'".
-- **dvt init inside existing project with --profile** - Expect DbtRuntimeError: "Can not init existing project with specified profile, edit dvt_project.yml instead".
+- **dvt init inside existing project with --profile** - Expect DbtRuntimeError: "Can not init existing project with specified profile, edit dbt_project.yml instead".
 - **Invalid flags or arguments** - Expect Click error or clear usage message; no traceback to user without message.
 - **dvt init --profile valid_name** (profile exists) - Should use existing profile and create project; no interactive profile setup for that name.
 
@@ -90,7 +92,7 @@ This agent handles:
 
 - `ProjectNameAlreadyExists` - Fired when project path exists; return without creating.
 - `check_if_profile_exists(user_profile_name)` - Used when --profile is passed; raises if not found.
-- In-project + `--profile` - Raises DbtRuntimeError with message about editing dvt_project.yml.
+- In-project + `--profile` - Raises DbtRuntimeError with message about editing dbt_project.yml.
 - `ProjectName.is_valid(name)` and internal_package_names - Used in get_valid_project_name(); loop until valid name.
 - `check_if_can_write_profile` - Asks user to overwrite if profile already exists.
 
@@ -108,8 +110,8 @@ This agent handles:
 **Purpose**: After running the positive integration flow (init → parse → debug), run negative and edge-case scenarios **within the same trial** to ensure no feature breaks another and errors remain clear.
 
 **Negative / edge scenarios to run in trial_integration_3** (where applicable):
-- **init**: Invalid project name (e.g. `dvt init 123`), existing dir (`dvt init Coke_DB` when Coke_DB exists), in-project with `--profile` (expect error about editing dvt_project.yml).
-- **parse**: Missing or invalid profile for project; missing target in profile; corrupt dvt_project.yml. Expect clear compilation/runtime errors, no silent failure.
+- **init**: Invalid project name (e.g. `dvt init 123`), existing dir (`dvt init Coke_DB` when Coke_DB exists), in-project with `--profile` (expect error about editing dbt_project.yml).
+- **parse**: Missing or invalid profile for project; missing target in profile; corrupt dbt_project.yml. Expect clear compilation/runtime errors, no silent failure.
 - **debug**: `dvt debug --targets` with no project or missing profile; `dvt debug --computes` when project default compute not in computes.yml; `dvt debug --connection nonexistent_target`. Expect clear messages (e.g. profile not found, target not found, compute not found).
 
 Document in `trial_integration_3/findings/` (e.g. negative_findings.md): commands run, expected vs actual exit code and message, and any regression (e.g. a previously clear error becoming a traceback).

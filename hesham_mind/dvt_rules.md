@@ -1,11 +1,11 @@
 ## the following dvt rules are specific to dvt init and dvt migrate
 ### dvt init rules
-1) when issuing dvt init <with project name> it should create a directory that has dvt_project.yml along with all the directories of dvt , and should should add a new profile to ~/.dvt/profiles.yml iff it exists , and if it doesn't it should create it and add the ~/.dvt/profiles.yml and add the default duckdb database to and create or override the the <project root>.dvt/default.duckdb and the <projectr oot>/.dvt/metastore.duckdb and <project root>/.dvt/catalog.duckdb and should always create or override the ~/.dvt/.data/ directory with the mdm.duckdb database which is initialized with data in its tables to be used by the cli executions later on
-2) when issuing dvt init only it should create a project name same as the directory it is executing from and create  all the dvt directories and create or override  the <project root>.dvt/default.duckdb and the <project root>/.dvt/metastore.duckdb and <project root>/.dvt/catalog.duckdb and the dvt_project.yml file
+1) when issuing dvt init <with project name> it should create a directory that has dbt_project.yml along with all the directories of dvt , and should should add a new profile to ~/.dvt/profiles.yml iff it exists , and if it doesn't it should create it and add the ~/.dvt/profiles.yml and add the default duckdb database to and create or override the the <project root>.dvt/default.duckdb and the <projectr oot>/.dvt/metastore.duckdb and <project root>/.dvt/catalog.duckdb and should always create or override the ~/.dvt/.data/ directory with the mdm.duckdb database which is initialized with data in its tables to be used by the cli executions later on
+2) when issuing dvt init only it should create a project name same as the directory it is executing from and create  all the dvt directories and create or override  the <project root>.dvt/default.duckdb and the <project root>/.dvt/metastore.duckdb and <project root>/.dvt/catalog.duckdb and the dbt_project.yml file
  and also 
 
 ### dvt migrate rules
-1) when issuing dvt migrate inside a dbt project is should create a dvt_project.yml inside the directory and create the missing dvt directories only and same as dvt init 
+1) when issuing dvt migrate inside a dbt project is should create a dbt_project.yml inside the directory and create the missing dvt directories only and same as dvt init 
 2) whe issuing dvt migrate <path-to-dbt-project> it should copy all the dbt project staff to their respective  directories under a folder with the dbt project name enabling dvt to absort multiple dbt projects and again do same as dvt init 
 2.1) it should also look at all .yml files that define sources that shall include sources: config in them and under each source it should add the connection: config that includes the type of the default adapter of the dbt project which shall be located in the ~.dbt/profiles.yml file under the profile name of the project so that dvt end up havinng awarness of where are these sources coming from in its catalog.duckdb 
 
@@ -39,7 +39,7 @@ all compute engines specified in the computes.yml should be available in the dvt
 
 #### dvt materialization rules
 
-1)when a model has no specidied materialization type it should be materialized as the default materialization type specified in the dbt-project.yml
+1)when a model has no specidied materialization type it should be materialized as the default materialization type specified in the dbt_project.yml
 
 2)when a model has a specified materialization type it should be materialized as the specified materialization type
 

@@ -1,0 +1,5 @@
+name: sync_test
+version: 1.0
+config-version: 2
+profile: Coke_DB
+model-paths: ["models"]

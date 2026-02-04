@@ -7,7 +7,7 @@
 
 This agent handles:
 - CLI command implementations (`dvt init`, `dvt parse`, `dvt compile`, `dvt run`, etc.)
-- Configuration loading (`profiles.yml`, `computes.yml`, `dvt_project.yml`)
+- Configuration loading (`profiles.yml`, `computes.yml`, `dbt_project.yml`)
 - Manifest generation and DAG construction
 - Project initialization (`dvt init`)
 - Model parsing and compilation
@@ -30,7 +30,7 @@ This agent handles:
 - `core/dvt/context/` - Jinja context and macro resolution
 - `~/.dvt/profiles.yml` - Database connection profiles
 - `~/.dvt/computes.yml` - Spark compute configurations
-- `dvt_project.yml` - Project configuration
+- `dbt_project.yml` - Project configuration
 
 ## DVT Rules Reference
 
@@ -43,7 +43,7 @@ This agent handles:
 ## Instructions
 
 1. **Follow Rule 7** for all CLI command implementations - ensure commands match the specification
-2. **Respect file locations** from Rule 10 - use `~/.dvt/` for user configs, project root for `dvt_project.yml`
+2. **Respect file locations** from Rule 10 - use `~/.dvt/` for user configs, project root for `dbt_project.yml`
 3. **Implement target/compute resolution** per Rules 1 and 2 - CLI overrides > model config > defaults
 4. **Run tests** before suggesting changes - ensure existing functionality isn't broken
 5. **Preserve dbt-core compatibility** - maintain ability to rebase onto upstream/main

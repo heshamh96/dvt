@@ -44,6 +44,7 @@ This agent handles:
 5. **Document branch strategy** - Keep BRANCHING_AND_REBASE.md current
 6. **Maintain team agent index** - Keep TEAM_AGENTS.md updated with all agents
 7. **Add code comments** - Document complex logic for future maintainers
+8. **Trial and test runbooks** - When creating or updating trial checklists, runbooks, or "how to test" docs (e.g. TRIAL_*.md, sync/init checklists), **must** include or link to **`docs/USING_LOCAL_DVT_WITH_UV.md`** so testers can run with local dvt-core via uv (non-editable). Do not rely on "uv add ... editable" without documenting the non-editable path option.
 
 ## When to Use This Agent
 

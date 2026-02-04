@@ -17,10 +17,14 @@
 
 dvt-core is a **Python package**. Each trial must be a **self-contained uv project** with its own venv and the tool installed inside the trial. **Do not remove previous test runs**; use a new trial folder per run.
 
-1. **Use or create a trial folder** that is a uv project with dvt-core installed inside it (trial has `pyproject.toml`, `.venv`, and `uv add .../dvt-core/core` + `uv sync`).
+1. **Use or create a trial folder** that is a uv project with dvt-core installed inside it (trial has `pyproject.toml`, `.venv`, and dvt-core as a dependency; see **Local dvt-core setup** below).
 2. **From inside the trial folder** run `uv run dvt ...` (e.g. `uv run dvt init Coke_DB`) so the project is created inside the trial.
 3. Verify paths, names, and files per the checklist below (project under trial folder, user-level ~/.dvt/ or trial-local config).
 4. **Write findings** under the trial folder: `trial_.../findings/` (e.g. technical_qa_checklist.md or findings.md). Do not use standalone scripts that bypass the package.
+
+### Local dvt-core setup (required in trial docs)
+
+When you create or update a **trial checklist or runbook** (e.g. in `docs/` or in this rule file), you **must** include or link to how to install local dvt-core in the trial with **uv**, so testers get the latest code without editable install. Use the canonical doc: **`docs/USING_LOCAL_DVT_WITH_UV.md`**. In the trial's setup section, either (a) link to that doc, or (b) paste the minimal snippet: in the trial's `pyproject.toml` add `dependencies = ["dvt-core", ...]` and `[tool.uv.sources]` with `dvt-core = { path = "/full/path/to/dvt-core/core", editable = false }`, then `uv sync` in the trial folder. This ensures every new trial runbook documents the same uv-based, non-editable local install.
 
 ## Scope
 
@@ -50,13 +54,13 @@ This agent handles:
 
 - [ ] Directory exists (create_profiles_dir / create_dvt_user_config).
 - [ ] `profiles.yml` present (created when profile is set up or when writing sample; init creates dir and may create file via setup_profile).
-- [ ] `computes.yml` present with expected structure: top-level `computes`, e.g. `computes.default` with `type`, `master`, `config`.
+- [ ] `computes.yml` present with expected structure: profile names as top-level keys, each with `target` and `computes` (e.g. `default.target`, `default.computes.default` with `type`, `version`, `master`, `config`).
 - [ ] `data/` directory exists.
 - [ ] `data/mdm.duckdb` exists; when duckdb is installed, it is a valid DuckDB DB (e.g. stub table `_dvt_init`); when not, file may be touched only (see user_config.init_mdm_db).
 
 ### Project-level (new project dir, e.g. Coke_DB)
 
-- [ ] `dvt_project.yml` exists with required keys: `name`, `version`, `config-version`, `profile`, path configs (`model-paths`, `test-paths`, `macro-paths`, `seed-paths`, `snapshot-paths`, `analysis-paths`), `target-path`, `clean-targets`, and `models` section.
+- [ ] `dbt_project.yml` exists with required keys: `name`, `version`, `config-version`, `profile`, path configs (`model-paths`, `test-paths`, `macro-paths`, `seed-paths`, `snapshot-paths`, `analysis-paths`), `target-path`, `clean-targets`, and `models` section.
 - [ ] Standard directories exist: `models/`, `tests/`, `macros/`, `seeds/`, `snapshots/`, `analyses/` (from starter project copy in init).
 - [ ] Each directory contains at least `.gitkeep` or equivalent so dirs are tracked.
 
@@ -64,7 +68,7 @@ This agent handles:
 
 - [ ] Project name passes validation (e.g. `ProjectName.is_valid` in init.py; letters, digits, underscore; not reserved).
 - [ ] Profile and target names in YAML are valid; `profiles.yml` has structure `profile_name.outputs.<target>`, `profile_name.target`.
-- [ ] `computes.yml` has correct key names per user_config (e.g. `computes`, then named compute with `type`, `master`, `config`).
+- [ ] `computes.yml` has correct key names per user_config (profile -> target + computes; each compute with `type`, `version`, `master`, `config`).
 
 ### Idempotency and overwrites
 
@@ -86,10 +90,10 @@ This agent handles:
 
 **Checklist for trial_integration_3**:
 - [ ] Trial is a uv project with dvt-core and dbt-postgres; `uv sync` succeeds.
-- [ ] `uv run dvt init Coke_DB --skip-profile-setup`: Coke_DB/ created; dvt_project.yml has name, profile, paths; user-level ~/.dvt/ has computes.yml, data/, mdm.duckdb per user_config.
+- [ ] `uv run dvt init Coke_DB --skip-profile-setup`: Coke_DB/ created; dbt_project.yml has name, profile, paths; user-level ~/.dvt/ has computes.yml, data/, mdm.duckdb per user_config.
 - [ ] profiles.yml (in ~/.dvt or PROFILES_DIR) has Coke_DB profile with at least one target so parse/debug can run.
 - [ ] `uv run dvt parse --project-dir Coke_DB` (or from Coke_DB): completes without missing global_project or dbt_project.yml errors; target/manifest.json produced.
-- [ ] From trial root, use `--project-dir Coke_DB` for all debug commands so dvt finds Coke_DB/dvt_project.yml.
+- [ ] From trial root, use `--project-dir Coke_DB` for all debug commands so dvt finds Coke_DB/dbt_project.yml.
 - [ ] `uv run dvt debug --project-dir Coke_DB --config`: shows project name, profile, DVT dir, computes path, MDM path.
 - [ ] `uv run dvt debug --project-dir Coke_DB --targets`: lists only the **current project's profile** (Coke_DB) and its targets with connection status.
 - [ ] `uv run dvt debug --project-dir Coke_DB --computes`: shows only the **current project's default compute** (vars.dvt_default_compute or "default").
@@ -99,6 +103,27 @@ This agent handles:
 
 **Findings**: Write results under `trial_integration_3/findings/` (e.g. integration_checklist.md). Note any path, name, or behaviour that does not match the design or that regressed.
 
+## Trial 4: Integration test (all features including dvt sync)
+
+**Trial folder**: `Testing_Playground/trial_integration_4`
+
+**Purpose**: Full feature run with **dbt_project.yml**, profile-based **computes.yml**, and **dvt sync**: init, parse, debug (all sections), sync. Confirms no regressions and sync works with current project layout.
+
+**Checklist for trial_integration_4**:
+- [ ] Trial is a uv project with dvt-core and dbt-postgres; `uv sync` succeeds.
+- [ ] `uv run dvt init Coke_DB --skip-profile-setup`: Coke_DB/ created with **dbt_project.yml** (not dvt_project.yml); name, profile, paths present; ~/.dvt/ has computes.yml (profile-based: default.target, default.computes.default with version), data/, mdm.duckdb.
+- [ ] profiles.yml has Coke_DB profile with at least one target (e.g. dev).
+- [ ] `uv run dvt parse --project-dir Coke_DB`: completes; target/manifest.json produced.
+- [ ] `uv run dvt debug --project-dir Coke_DB --config`: project name, profile, DVT dir, computes path, MDM path.
+- [ ] `uv run dvt debug --project-dir Coke_DB --targets`: current project profile (Coke_DB) only; targets with connection status.
+- [ ] `uv run dvt debug --project-dir Coke_DB --computes`: current project default compute; shows version (pyspark) if in computes.yml.
+- [ ] `uv run dvt debug --project-dir Coke_DB --manifest`: manifest path and node counts.
+- [ ] `uv run dvt debug --project-dir Coke_DB --connection <target>`: connection test passes or clear failure.
+- [ ] `uv run dvt debug --project-dir Coke_DB` (full): version, profile, project, deps, connection all pass.
+- [ ] `uv run dvt sync --project-dir Coke_DB`: uses in-project env if .venv/venv/env exists, or prompts for path; installs adapters for profile and pyspark from active compute; no errors (or document any expected prompt/error).
+
+**Findings**: Write results under `trial_integration_4/findings/` (e.g. integration_findings.md). Note dbt_project.yml presence, computes structure, sync outcome, and any regression.
+
 ## When to Use This Agent
 
 Use test-team-technical-qa when:
@@ -106,4 +131,4 @@ Use test-team-technical-qa when:
 - Checking dvt init output (user-level and project-level) against the checklist above
 - Ensuring Rule 10 and feature specs are satisfied in implementation
 - Validating YAML structure and schema for profiles.yml and computes.yml
-- Running **trial_integration_3** to confirm all features work together and nothing regressed
+- Running **trial_integration_3** or **trial_integration_4** to confirm all features work together and nothing regressed

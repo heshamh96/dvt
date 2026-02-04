@@ -16,7 +16,7 @@ This agent handles:
 - **Path**: All test runs run under: `/Users/hex/Documents/My_Projects/DVT/Testing_Playground`
 - **Do not remove things.** Each test run goes in a **trial folder**: `trial_<what_we_are_testing>_<number>` (e.g. `trial_dvt_init_1`, `trial_dvt_init_2`).
 - **Each trial is a self-contained uv project**: the trial folder must have its own **uv** setup (e.g. `pyproject.toml`), its own **.venv**, and the **tool (dvt-core) installed inside it**. So each trial is a uv-contained folder/environment: you `cd` into the trial and run `uv run dvt ...` there. Do not rely on a shared env outside the trial; do not delete trial folders.
-- **Inside each trial folder**: (1) initialize as a uv project (`uv init` or add `pyproject.toml`), (2) add dvt-core as a dependency (e.g. `uv add /path/to/dvt-core/core` editable), (3) run `uv sync`, (4) create the DVT project and run the CLI with `uv run dvt ...`, (5) write **findings** under `findings/`.
+- **Inside each trial folder**: (1) initialize as a uv project (`uv init` or add `pyproject.toml`), (2) add dvt-core as a dependency using the **local path, non-editable** setup (see **Local dvt-core setup** below), (3) run `uv sync`, (4) create the DVT project and run the CLI with `uv run dvt ...`, (5) write **findings** under `findings/`.
 
 ## Environment
 
@@ -31,8 +31,12 @@ dvt-core is a **Python package**. Each trial must be a **self-contained uv proje
 2. **Make the trial a uv project** (uv and tool inside the trial):
    - `cd trial_dvt_init_1`
    - `uv init` (creates `pyproject.toml` and optionally `.venv`)
-   - `uv add /path/to/dvt-core/core` (or path dependency in `pyproject.toml` to dvt-core, then `uv sync`) so dvt-core is installed in the trial’s `.venv`
+   - Add dvt-core via **local path, non-editable** (see **Local dvt-core setup** below); then `uv sync`
    - Run `uv sync` if needed
+
+### Local dvt-core setup (required in trial docs)
+
+When you create or update a **trial checklist or runbook**, you **must** document how to install local dvt-core with uv so testers get the latest code **without** an editable install. **Link to or embed content from `docs/USING_LOCAL_DVT_WITH_UV.md`.** In the trial’s setup section include at least: (a) `[project] dependencies = ["dvt-core", ...]`, (b) `[tool.uv.sources] dvt-core = { path = "/full/path/to/dvt-core/core", editable = false }`, (c) then `uv sync`. This is mandatory for all new trial docs going forward.
 3. **Run `dvt` from inside the trial**: e.g. `uv run dvt init Coke_DB --skip-profile-setup`. The DVT project (e.g. `Coke_DB/`) is created inside the trial folder.
 4. **Verify** the installed package (project created, ~/.dvt/ or trial-local config, profiles when applicable). Do not rely on standalone scripts that skip the real CLI.
 5. **Write findings** under the trial folder: `trial_dvt_init_1/findings/` (e.g. data_engineer_findings.md or a single findings.md).
@@ -62,7 +66,7 @@ dvt-core is a **Python package**. Each trial must be a **self-contained uv proje
 
 1. Create or use a trial folder that is a **uv project** with dvt-core installed inside it (trial has its own `.venv` and `uv run dvt`). Run `uv run dvt init Coke_DB` from **inside the trial folder** (so the project is created at `trial_dvt_init_1/Coke_DB/`) with postgres profile shape from reference.
 2. Verify:
-   - Project dir `Coke_DB/` exists with `dvt_project.yml` and standard directories: `models/`, `tests/`, `macros/`, `seeds/`, `snapshots/`, `analyses/`.
+   - Project dir `Coke_DB/` exists with `dbt_project.yml` and standard directories: `models/`, `tests/`, `macros/`, `seeds/`, `snapshots/`, `analyses/`.
    - `~/.dvt/` (or PROFILES_DIR) contains `profiles.yml`, `computes.yml`, `data/mdm.duckdb`.
    - Profile for the project is compatible with postgres: structure matches reference `Connections/profiles.yml` (e.g. profile name `Coke_DB`, `outputs.dev` with `type`, `host`, `port`, `dbname` or `database`, `user`, `pass` or `password`, `schema`, `threads`).
 3. Assert dbt mindset: project name rules (lowercase, underscores), profile naming, path configs (`model-paths`, `target-path`, etc.) aligned with dbt semantics.
@@ -92,9 +96,9 @@ dvt-core is a **Python package**. Each trial must be a **self-contained uv proje
 
 **Features to test in trial_integration_3** (in order):
 
-1. **dvt init** – From inside the trial folder: `uv run dvt init Coke_DB --skip-profile-setup`. Verify project `Coke_DB/` is created with `dvt_project.yml`, profile name, and standard dirs; user-level `~/.dvt/` has computes.yml, data/mdm.duckdb (profiles.yml if profile setup was run).
-2. **dvt parse** – From `Coke_DB/`: ensure profile exists in `~/.dvt/profiles.yml` for Coke_DB (or set PROFILES_DIR). Run `uv run dvt parse --project-dir Coke_DB` (or `cd Coke_DB && uv run dvt parse`). Verify parse completes; adapter packages (e.g. dbt-postgres) load; no missing dvt_project.yml or macro namespace errors.
-3. **dvt debug** – From trial root use `--project-dir Coke_DB` so dvt finds Coke_DB/dvt_project.yml. Run `uv run dvt debug --project-dir Coke_DB`, then `--config`, `--targets`, `--computes`, `--manifest`, and `--connection <target>` (e.g. dev). Verify: config shows project and paths; targets show **current project profile only**; computes show **current project default compute only**; manifest shows model/test counts if present; connection test passes for the given target.
+1. **dvt init** – From inside the trial folder: `uv run dvt init Coke_DB --skip-profile-setup`. Verify project `Coke_DB/` is created with `dbt_project.yml`, profile name, and standard dirs; user-level `~/.dvt/` has computes.yml, data/mdm.duckdb (profiles.yml if profile setup was run).
+2. **dvt parse** – From `Coke_DB/`: ensure profile exists in `~/.dvt/profiles.yml` for Coke_DB (or set PROFILES_DIR). Run `uv run dvt parse --project-dir Coke_DB` (or `cd Coke_DB && uv run dvt parse`). Verify parse completes; adapter packages (e.g. dbt-postgres) load; no missing dbt_project.yml or macro namespace errors.
+3. **dvt debug** – From trial root use `--project-dir Coke_DB` so dvt finds Coke_DB/dbt_project.yml. Run `uv run dvt debug --project-dir Coke_DB`, then `--config`, `--targets`, `--computes`, `--manifest`, and `--connection <target>` (e.g. dev). Verify: config shows project and paths; targets show **current project profile only**; computes show **current project default compute only**; manifest shows model/test counts if present; connection test passes for the given target.
 
 **Setup for trial_integration_3**:
 - Create `trial_integration_3` as a uv project with dvt-core (path dep) and dbt-postgres; run `uv sync`.
@@ -105,7 +109,7 @@ dvt-core is a **Python package**. Each trial must be a **self-contained uv proje
 
 Use test-team-data-engineer when:
 - Testing `dvt init` or project-creation flows with a real-world dbt reference
-- Verifying that DVT output (dvt_project.yml, profiles.yml, directory layout) matches dbt mindset and the reference project
+- Verifying that DVT output (dbt_project.yml, profiles.yml, directory layout) matches dbt mindset and the reference project
 - Adding or updating test fixtures derived from Cocacola_DWH_on_DBT
 - Validating profile and target semantics for postgres (or other adapters) against a known-good dbt project
 - Running **trial_integration_3** to confirm all implemented features work together
