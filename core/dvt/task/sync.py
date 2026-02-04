@@ -29,6 +29,13 @@ from dvt.events.types import DebugCmdOut
 IN_PROJECT_ENV_NAMES = (".venv", "venv", "env")
 
 
+def _sync_log(msg: str) -> None:
+    """Write sync progress/errors to stderr so they are always visible (event system may not show them)."""
+    sys.stderr.write(msg + "\n")
+    sys.stderr.flush()
+    fire_event(DebugCmdOut(msg=msg))
+
+
 def _find_project_env(project_root: Path) -> Optional[Path]:
     """Return path to Python env inside project dir only (.venv, venv, env). Does not look in parent dirs."""
     project_root = Path(project_root).resolve()
@@ -194,13 +201,17 @@ class SyncTask(BaseTask):
         self.profiles_dir = Path(args.PROFILES_DIR) if args.PROFILES_DIR else get_dvt_home()
 
     def run(self):
+        _sync_log("dvt sync: starting...")
+        # Use explicit project_dir from flags, or default (cwd/parents) so CLI and programmatic use both work
+        project_dir_arg = getattr(self.args, "project_dir", None) or getattr(self.args, "PROJECT_DIR", None)
         try:
-            self.project_dir = get_nearest_project_dir(self.args.project_dir)
+            self.project_dir = get_nearest_project_dir(project_dir_arg)
         except DbtRuntimeError:
-            fire_event(DebugCmdOut(msg="Not in a DVT project. Run from a directory with dbt_project.yml (or use --project-dir)."))
+            msg = "Not in a DVT project. Run from a directory with dbt_project.yml (or use --project-dir)."
+            _sync_log(msg)
             return None, False
 
-        project_root = self.project_dir
+        project_root = Path(self.project_dir).resolve()
         assert project_root is not None
 
         # 1) Resolve Python environment: only --python-env or .venv/venv/env inside project dir
@@ -208,34 +219,45 @@ class SyncTask(BaseTask):
         if explicit_env:
             env_path = Path(explicit_env).expanduser().resolve()
             if not env_path.is_dir():
-                fire_event(DebugCmdOut(msg=f"Not a directory: {env_path}"))
+                _sync_log(f"Not a directory: {env_path}")
                 return None, False
             _get_env_python(env_path)  # validate
         else:
             env_path = _find_project_env(project_root)
         if env_path is None:
             try:
-                raw = input("No virtual environment found in project. Enter absolute path to your Python env folder: ").strip()
+                prompt_msg = (
+                    "No virtual environment found in project. Enter absolute path to your Python env folder\n"
+                    "(e.g. /path/to/.venv or, from trial root, \"$(pwd)/.venv\"): "
+                )
+                sys.stdout.write(prompt_msg)
+                sys.stdout.flush()
+                raw = input().strip()
                 if raw:
                     env_path = Path(raw).resolve()
                     if not env_path.is_dir():
-                        fire_event(DebugCmdOut(msg=f"Not a directory: {env_path}"))
+                        _sync_log(f"Not a directory: {env_path}")
                         return None, False
                     _get_env_python(env_path)  # validate
                 else:
-                    fire_event(DebugCmdOut(msg="No path provided. Sync skipped."))
+                    _sync_log('No path provided. Sync skipped. Use --python-env "/path/to/venv" (quote paths with spaces).')
                     return None, False
             except EOFError:
-                fire_event(DebugCmdOut(msg="No path provided (non-interactive). Sync skipped."))
+                _sync_log(
+                    "No path provided (non-interactive). Sync skipped. "
+                    'Run in a terminal to be prompted, or pass: --python-env "$(pwd)/.venv" (use quotes).'
+                )
                 return None, False
         self.env_path = env_path
         env_python = _get_env_python(env_path)
-        fire_event(DebugCmdOut(msg=f"Using environment: {env_path}"))
+        _sync_log(f"Using environment: {env_path}")
 
         # 2) Profile and adapter types
         profile_name = _get_profile_name(project_root)
         if not profile_name:
-            fire_event(DebugCmdOut(msg="No profile in project file. Sync skipped."))
+            _sync_log(
+                "No profile in project file. Sync skipped. Ensure dbt_project.yml (or dvt_project.yml) exists and has a 'profile' key."
+            )
             return None, False
         adapter_types = _get_adapter_types_from_profile(self.profiles_dir, profile_name)
         require_adapters = _get_require_adapters(project_root)
@@ -249,30 +271,30 @@ class SyncTask(BaseTask):
                 pkg_spec = f"{pkg}{spec}" if any(spec.startswith(c) for c in ("=", ">", "<", "~", "!")) else f"{pkg}=={spec}"
             else:
                 pkg_spec = pkg
-            fire_event(DebugCmdOut(msg=f"Installing {pkg_spec} ..."))
+            _sync_log(f"Installing {pkg_spec} ...")
             if _detect_package_manager(env_python) == "uv":
                 ok = _run_uv_pip(env_path, [pkg_spec])
             else:
                 ok = _run_pip(env_python, ["install", pkg_spec])
             if not ok:
-                fire_event(DebugCmdOut(msg=f"Failed to install {pkg_spec}"))
+                _sync_log(f"Failed to install {pkg_spec}")
 
         # 4) Pyspark: single version from active target; use canonical ~/.dvt/computes.yml
         # so the project's profile block is used (not a local computes.yml from another profile).
         computes_path = get_dvt_home(None) / "computes.yml"
         pyspark_version = _get_active_pyspark_version(computes_path, profile_name) if computes_path.exists() else None
         if pyspark_version:
-            fire_event(DebugCmdOut(msg=f"Uninstalling other pyspark versions ..."))
+            _sync_log("Uninstalling other pyspark versions ...")
             _run_pip(env_python, ["uninstall", "pyspark", "-y"])
-            fire_event(DebugCmdOut(msg=f"Installing pyspark=={pyspark_version} ..."))
+            _sync_log(f"Installing pyspark=={pyspark_version} ...")
             if _detect_package_manager(env_python) == "uv":
                 ok = _run_uv_pip(env_path, [f"pyspark=={pyspark_version}"])
             else:
                 ok = _run_pip(env_python, ["install", f"pyspark=={pyspark_version}"])
             if not ok:
-                fire_event(DebugCmdOut(msg=f"Failed to install pyspark=={pyspark_version}"))
+                _sync_log(f"Failed to install pyspark=={pyspark_version}")
         else:
-            fire_event(DebugCmdOut(msg="No pyspark version in computes.yml for this profile; skipping pyspark install."))
+            _sync_log("No pyspark version in computes.yml for this profile; skipping pyspark install.")
 
         # 5) JDBC drivers: relate profile adapters to JDBC jars and download for federation.
         # Always use canonical DVT home (~/.dvt/.jdbc_jars) so jars are in one place (e.g. trial
@@ -280,14 +302,14 @@ class SyncTask(BaseTask):
         jdbc_dir = get_jdbc_drivers_dir(None)
         drivers = get_jdbc_drivers_for_adapters(adapter_types)
         if drivers:
-            fire_event(DebugCmdOut(msg=f"Syncing JDBC drivers for adapters: {', '.join(adapter_types)}"))
+            _sync_log(f"Syncing JDBC drivers for adapters: {', '.join(adapter_types)}")
             download_jdbc_jars(
                 drivers,
                 jdbc_dir,
-                on_event=lambda msg: fire_event(DebugCmdOut(msg=msg)),
+                on_event=lambda msg: _sync_log(msg),
             )
         else:
-            fire_event(DebugCmdOut(msg="No JDBC drivers required for these adapters (or adapters not in registry)."))
+            _sync_log("No JDBC drivers required for these adapters (or adapters not in registry).")
 
-        fire_event(DebugCmdOut(msg="Sync complete."))
+        _sync_log("Sync complete.")
         return None, True

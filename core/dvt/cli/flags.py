@@ -238,10 +238,13 @@ class Flags:
         )
 
         # Get the invoked command flags.
+        # When we're already in the invoked subcommand's callback (e.g. sync), ctx is that
+        # subcommand's context and we've already assigned from it above. Do NOT re-parse
+        # sys.argv for the subcommand, as that can produce wrong params (e.g. uv run rewrites argv).
         invoked_subcommand_name = (
             ctx.invoked_subcommand if hasattr(ctx, "invoked_subcommand") else None
         )
-        if invoked_subcommand_name is not None:
+        if invoked_subcommand_name is not None and getattr(ctx, "info_name", None) != invoked_subcommand_name:
             invoked_subcommand = getattr(import_module("dvt.cli.main"), invoked_subcommand_name)
             invoked_subcommand.allow_extra_args = True
             invoked_subcommand.ignore_unknown_options = True
@@ -290,13 +293,43 @@ class Flags:
         # Set hard coded flags.
         object.__setattr__(self, "WHICH", invoked_subcommand_name or ctx.info_name)
 
+        # Sync command: ensure PROJECT_DIR and PYTHON_ENV come from ctx.params so CLI always has them.
+        # Sync does not use @global_flags, so also set defaults for flags that preflight/setup_event_logger need.
+        if getattr(ctx, "info_name", None) == "sync":
+            project_dir = ctx.params.get("project_dir")
+            python_env = ctx.params.get("python_env")
+            if project_dir is not None:
+                object.__setattr__(self, "PROJECT_DIR", project_dir)
+            if python_env is not None:
+                object.__setattr__(self, "PYTHON_ENV", python_env)
+            # Defaults for flags that setup_event_logger and preflight read but sync does not have as options.
+            _sync_flag_defaults = (
+                ("LOG_LEVEL", "info"),
+                ("LOG_LEVEL_FILE", "debug"),
+                ("LOG_FORMAT", "default"),
+                ("LOG_FORMAT_FILE", "debug"),
+                ("QUIET", False),
+                ("DEBUG", False),
+                ("USE_COLORS", True),
+                ("USE_COLORS_FILE", True),
+                ("LOG_CACHE_EVENTS", True),
+                ("LOG_FILE_MAX_BYTES", 10 * 1024 * 1024),
+                ("SEND_ANONYMOUS_USAGE_STATS", True),
+                ("UPLOAD_TO_ARTIFACTS_INGEST_API", False),
+                ("RECORD_TIMING_INFO", None),
+                ("REQUIRE_ALL_WARNINGS_HANDLED_BY_WARN_ERROR", False),
+            )
+            for name, default in _sync_flag_defaults:
+                if not hasattr(self, name):
+                    object.__setattr__(self, name, default)
+
         # Apply the lead/follow relationship between some parameters.
         self._override_if_set("USE_COLORS", "USE_COLORS_FILE", params_assigned_from_default)
         self._override_if_set("LOG_LEVEL", "LOG_LEVEL_FILE", params_assigned_from_default)
         self._override_if_set("LOG_FORMAT", "LOG_FORMAT_FILE", params_assigned_from_default)
 
         # Set default LOG_PATH from PROJECT_DIR, if available.
-        # Starting in v1.5, if `log-path` is set in `dvt_project.yml`, it will raise a deprecation warning,
+        # Starting in v1.5, if `log-path` is set in `dbt_project.yml`, it will raise a deprecation warning,
         # with the possibility of removing it in a future release.
         if getattr(self, "LOG_PATH", None) is None:
             project_dir = getattr(self, "PROJECT_DIR", str(default_project_dir()))

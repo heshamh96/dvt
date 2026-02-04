@@ -1,3 +1,5 @@
+import sys
+import traceback
 from typing import IO, List, Optional, Union
 
 from click.exceptions import ClickException
@@ -55,3 +57,17 @@ class ExceptionExit(CliException):
     def __init__(self, exception: Exception) -> None:
         super().__init__(ExitCodes.UnhandledError)
         self.exception = exception
+
+    def show(self, _file: Optional[IO] = None) -> None:  # type: ignore[type-arg]
+        """Print the wrapped exception to stderr so exit code 2 is never silent."""
+        if self.exception is not None:
+            sys.stderr.write(
+                "".join(
+                    traceback.format_exception(
+                        type(self.exception),
+                        self.exception,
+                        getattr(self.exception, "__traceback__", None),
+                    )
+                )
+            )
+            sys.stderr.flush()

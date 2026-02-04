@@ -1,5 +1,6 @@
 import importlib.util
 import os
+import sys
 import time
 import traceback
 from functools import update_wrapper
@@ -86,7 +87,12 @@ def preflight(func):
         get_invocation_context()._env = env_dict
 
         # Flags
-        flags = Flags(ctx)
+        try:
+            flags = Flags(ctx)
+        except Exception:
+            sys.stderr.write(traceback.format_exc())
+            sys.stderr.flush()
+            raise
         ctx.obj["flags"] = flags
         set_flags(flags)
         get_event_manager().require_warn_or_error_handling = (
