@@ -57,6 +57,34 @@ default:
 
 ---
 
+## Sources and connection (multi-datasource)
+
+- In **sources** (sources.yml or any schema YAML), each source block can specify **`connection`**.
+- **`connection`** must be the **target (output) name** defined in **profiles.yml** for the project's profile (e.g. `dev`, `prod`, or a custom output name).
+- DVT uses this to know which datasource a source uses for virtualization; each source can point to a different profile output so multiple datasources are tracked.
+
+Example (profiles.yml has profile `my_project` with outputs `dev` and `warehouse`):
+
+```yaml
+# schema.yml
+sources:
+  - name: app_events
+    connection: dev
+    tables:
+      - name: events
+  - name: legacy_db
+    connection: warehouse
+    tables:
+      - name: users
+```
+
+**Catalog and docs (dvt docs generate / dvt docs serve)**  
+The catalog artifact (`catalog.json`) includes:
+- **source_connections**: map of source unique_id → connection (target) name, so docs can show which connection each source uses.
+- **connection_metadata**: map of connection (target) name → optional metadata (e.g. adapter_type for the default target). When docs serve and multi-connection catalog are implemented, this can hold metadata per connection so docs show all datasources and their metadata, not just the default target.
+
+---
+
 ## Adapter Version Pinning
 
 - **Location**: `require-adapters` in **dbt_project.yml** (e.g. `require-adapters: { postgres: ">=1.0.0" }`).
