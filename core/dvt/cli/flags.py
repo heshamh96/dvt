@@ -295,7 +295,8 @@ class Flags:
 
         # Sync command: ensure PROJECT_DIR and PYTHON_ENV come from ctx.params so CLI always has them.
         # Sync does not use @global_flags, so also set defaults for flags that preflight/setup_event_logger need.
-        if getattr(ctx, "info_name", None) == "sync":
+        info_name = getattr(ctx, "info_name", None)
+        if info_name == "sync":
             project_dir = ctx.params.get("project_dir")
             python_env = ctx.params.get("python_env")
             if project_dir is not None:
@@ -303,6 +304,7 @@ class Flags:
             if python_env is not None:
                 object.__setattr__(self, "PYTHON_ENV", python_env)
             # Defaults for flags that setup_event_logger and preflight read but sync does not have as options.
+            # Set these BEFORE any code that might access them via __getattr__
             _sync_flag_defaults = (
                 ("LOG_LEVEL", "info"),
                 ("LOG_LEVEL_FILE", "debug"),
@@ -319,9 +321,9 @@ class Flags:
                 ("RECORD_TIMING_INFO", None),
                 ("REQUIRE_ALL_WARNINGS_HANDLED_BY_WARN_ERROR", False),
             )
+            # Always set these defaults for sync command - they're required by setup_event_logger
             for name, default in _sync_flag_defaults:
-                if not hasattr(self, name):
-                    object.__setattr__(self, name, default)
+                object.__setattr__(self, name, default)
 
         # Apply the lead/follow relationship between some parameters.
         self._override_if_set("USE_COLORS", "USE_COLORS_FILE", params_assigned_from_default)

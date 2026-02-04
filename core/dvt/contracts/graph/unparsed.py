@@ -356,6 +356,8 @@ class UnparsedSourceDefinition(dbtClassMixin):
     config: Dict[str, Any] = field(default_factory=dict)
     unrendered_database: Optional[str] = None
     unrendered_schema: Optional[str] = None
+    # DVT: target (output) name from the project's profile in profiles.yml; ties this source to that datasource
+    connection: Optional[str] = None
 
     @classmethod
     def validate(cls, data):

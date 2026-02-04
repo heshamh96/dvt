@@ -27,6 +27,10 @@ class CatalogResults(dbtClassMixin):
     sources: Dict[str, CatalogTable]
     errors: Optional[List[str]] = None
     _compile_results: Optional[Any] = None
+    # DVT: source unique_id -> connection (profile target name from profiles.yml) for docs visibility
+    source_connections: Dict[str, str] = field(default_factory=dict)
+    # DVT: connection (target) name -> optional metadata for docs (e.g. adapter type) for multi-connection visibility
+    connection_metadata: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
     def __post_serialize__(self, dct: Dict, context: Optional[Dict] = None):
         dct = super().__post_serialize__(dct, context)
@@ -48,6 +52,8 @@ class CatalogArtifact(CatalogResults, ArtifactMixin):
         sources: Dict[str, CatalogTable],
         compile_results: Optional[Any],
         errors: Optional[List[str]],
+        source_connections: Optional[Dict[str, str]] = None,
+        connection_metadata: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> "CatalogArtifact":
         meta = CatalogMetadata(generated_at=generated_at)
         return cls(
@@ -56,4 +62,6 @@ class CatalogArtifact(CatalogResults, ArtifactMixin):
             sources=sources,
             errors=errors,
             _compile_results=compile_results,
+            source_connections=source_connections or {},
+            connection_metadata=connection_metadata or {},
         )

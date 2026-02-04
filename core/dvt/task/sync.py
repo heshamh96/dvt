@@ -7,10 +7,11 @@ dvt sync: install adapters, pyspark, and JDBC drivers for the current project's 
 - Reads active target from computes.yml, installs only that pyspark version (uninstalls others).
 """
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
@@ -191,6 +192,163 @@ def _get_active_pyspark_version(computes_path: Path, profile_name: str) -> Optio
     return active.get("version")
 
 
+def _get_required_java_versions(spark_version: str) -> List[str]:
+    """
+    Return list of required Java major versions for the given Spark version.
+    Spark 3.2.x → Java 8, 11
+    Spark 3.3.x–3.5.x → Java 8, 11, 17
+    Spark 4.x → Java 17, 21
+    """
+    # Parse Spark version: "3.2.0" -> "3.2", "4.1.0" -> "4", "3.5" -> "3.5"
+    parts = spark_version.split(".")
+    major = int(parts[0]) if parts[0].isdigit() else 0
+    minor = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
+
+    if major == 3:
+        if minor == 2:
+            return ["8", "11"]
+        elif minor in (3, 4, 5):
+            return ["8", "11", "17"]
+        else:
+            # Default for Spark 3.x: Java 8, 11, 17
+            return ["8", "11", "17"]
+    elif major == 4:
+        return ["17", "21"]
+    else:
+        # Unknown version: default to Java 8, 11, 17 (most common)
+        return ["8", "11", "17"]
+
+
+def _detect_java_version() -> Optional[str]:
+    """
+    Detect installed Java version by running 'java -version'.
+    Returns major version as string (e.g., "8", "11", "17", "21") or None if not found.
+    """
+    try:
+        result = subprocess.run(
+            ["java", "-version"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        # Java prints version to stderr
+        output = result.stderr or result.stdout
+
+        # Patterns to match:
+        # - "openjdk version \"17.0.2\"" -> "17"
+        # - "java version \"1.8.0_291\"" -> "8"
+        # - "java version \"21.0.1\"" -> "21"
+        # - "openjdk version \"11.0.19\"" -> "11"
+
+        # Try to match "version \"X.Y.Z\"" or "version \"X\"" where X is major version
+        patterns = [
+            r'version\s+"(\d+)\.',  # Matches "version "17.0.2" -> "17"
+            r'version\s+"1\.(\d+)\.',  # Matches "version "1.8.0_291" -> "8"
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, output)
+            if match:
+                version_str = match.group(1)
+                # If we matched "1.8" pattern, version_str is "8"; otherwise it's the major version
+                return version_str
+
+        # Fallback: try to extract any number that looks like a major version
+        numbers = re.findall(r'\b(\d+)\.\d+', output)
+        if numbers:
+            major = numbers[0]
+            # If it's "1", check for Java 8 pattern
+            if major == "1" and "1.8" in output:
+                return "8"
+            return major
+
+    except FileNotFoundError:
+        return None
+    except Exception:
+        return None
+    return None
+
+
+def _check_java_compatibility(spark_version: str, java_version: Optional[str]) -> Tuple[bool, Optional[str]]:
+    """
+    Check if Java version is compatible with Spark version.
+    Returns (is_compatible, warning_message).
+    """
+    required_versions = _get_required_java_versions(spark_version)
+    required_str = ", ".join(f"Java {v}" for v in required_versions)
+
+    if java_version is None:
+        return (
+            False,
+            f"Java not found. Spark {spark_version} requires one of: {required_str}.",
+        )
+
+    if java_version not in required_versions:
+        return (
+            False,
+            f"Java {java_version} is incompatible with Spark {spark_version}. Required: {required_str}.",
+        )
+
+    return (True, None)
+
+
+def _print_java_installation_instructions(required_versions: List[str]) -> None:
+    """Print Java installation instructions for Mac and Linux."""
+    _sync_log("")
+    _sync_log("=" * 70)
+    _sync_log("Java Installation Instructions")
+    _sync_log("=" * 70)
+    _sync_log("")
+    _sync_log(f"Required Java versions: {', '.join(f'Java {v}' for v in required_versions)}")
+    _sync_log("")
+
+    # Mac instructions
+    _sync_log("macOS:")
+    _sync_log("  Option 1: Homebrew (recommended)")
+    for v in required_versions:
+        _sync_log(f'    brew install openjdk@{v}')
+    _sync_log("    Then link: brew link --overwrite openjdk@<version>")
+    _sync_log("")
+    _sync_log("  Option 2: SDKMAN")
+    _sync_log("    curl -s \"https://get.sdkman.io\" | bash")
+    _sync_log("    sdk install java <version>")
+    _sync_log("    Example: sdk install java 17.0.2-tem")
+    _sync_log("")
+    _sync_log("  Option 3: Manual download")
+    _sync_log("    Download from: https://adoptium.net/")
+    _sync_log("    Extract and set JAVA_HOME:")
+    _sync_log('    export JAVA_HOME="/Library/Java/JavaVirtualMachines/jdk-<version>.jdk/Contents/Home"')
+    _sync_log("")
+
+    # Linux instructions
+    _sync_log("Linux:")
+    _sync_log("  Option 1: apt (Debian/Ubuntu)")
+    for v in required_versions:
+        _sync_log(f'    sudo apt update && sudo apt install openjdk-{v}-jdk')
+    _sync_log("")
+    _sync_log("  Option 2: yum/dnf (RHEL/CentOS/Fedora)")
+    for v in required_versions:
+        _sync_log(f'    sudo yum install java-{v}-openjdk-devel')
+    _sync_log("    # or for newer Fedora:")
+    _sync_log(f'    sudo dnf install java-{v}-openjdk-devel')
+    _sync_log("")
+    _sync_log("  Option 3: SDKMAN")
+    _sync_log("    curl -s \"https://get.sdkman.io\" | bash")
+    _sync_log("    sdk install java <version>")
+    _sync_log("")
+    _sync_log("  Option 4: Manual download")
+    _sync_log("    Download from: https://adoptium.net/")
+    _sync_log("    Extract and set JAVA_HOME:")
+    _sync_log('    export JAVA_HOME="/usr/lib/jvm/java-<version>-openjdk"')
+    _sync_log("")
+
+    _sync_log("After installation, verify:")
+    _sync_log("  java -version")
+    _sync_log("  echo $JAVA_HOME  # Should point to the Java installation")
+    _sync_log("")
+    _sync_log("=" * 70)
+
+
 class SyncTask(BaseTask):
     """Install adapters and pyspark for the project. Resolves env; uses require-adapters and computes.yml."""
 
@@ -202,6 +360,7 @@ class SyncTask(BaseTask):
 
     def run(self):
         _sync_log("dvt sync: starting...")
+        java_warnings: List[str] = []  # Collect Java compatibility warnings
         # Use explicit project_dir from flags, or default (cwd/parents) so CLI and programmatic use both work
         project_dir_arg = getattr(self.args, "project_dir", None) or getattr(self.args, "PROJECT_DIR", None)
         try:
@@ -284,6 +443,11 @@ class SyncTask(BaseTask):
         computes_path = get_dvt_home(None) / "computes.yml"
         pyspark_version = _get_active_pyspark_version(computes_path, profile_name) if computes_path.exists() else None
         if pyspark_version:
+            # Check Java compatibility before installing pyspark
+            java_version = _detect_java_version()
+            is_compatible, warning = _check_java_compatibility(pyspark_version, java_version)
+            if not is_compatible and warning:
+                java_warnings.append(warning)
             _sync_log("Uninstalling other pyspark versions ...")
             _run_pip(env_python, ["uninstall", "pyspark", "-y"])
             _sync_log(f"Installing pyspark=={pyspark_version} ...")
@@ -310,6 +474,18 @@ class SyncTask(BaseTask):
             )
         else:
             _sync_log("No JDBC drivers required for these adapters (or adapters not in registry).")
+
+        # Show Java warnings and installation instructions if any
+        if java_warnings:
+            _sync_log("")
+            _sync_log("⚠️  Java Compatibility Warnings:")
+            for warning in java_warnings:
+                _sync_log(f"  - {warning}")
+            required_versions = []
+            if pyspark_version:
+                required_versions = _get_required_java_versions(pyspark_version)
+            if required_versions:
+                _print_java_installation_instructions(required_versions)
 
         _sync_log("Sync complete.")
         return None, True

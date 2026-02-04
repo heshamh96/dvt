@@ -319,6 +319,10 @@ class SourcePatcher:
         precedence_tags = self.calculate_tags_from_raw_target(target)
         precedence_configs["tags"] = precedence_tags
 
+        # DVT: pass through connection (profile target/output name from profiles.yml) for virtualization
+        if target.source.connection is not None:
+            precedence_configs["connection"] = target.source.connection
+
         # Because freshness is a "object" config, the freshness from the dbt_project.yml and the freshness
         # from the schema file _won't_ get merged by this process. The result will be that the freshness will
         # come from the schema file if provided, and if not, it'll fall back to the dbt_project.yml freshness.

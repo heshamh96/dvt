@@ -6,6 +6,10 @@ import traceback
 from functools import update_wrapper
 from typing import Dict, Optional
 
+# Module-level set to track printed UninstalledPackagesFoundError exception messages
+# to prevent duplicate messages as exceptions propagate through decorators
+_printed_uninstalled_packages_errors = set()
+
 from click import Context
 
 import dvt.tracking
@@ -89,7 +93,9 @@ def preflight(func):
         # Flags
         try:
             flags = Flags(ctx)
-        except Exception:
+        except Exception as e:
+            # Print exception immediately to stderr so it's never silent
+            sys.stderr.write(f"Error initializing Flags: {e}\n")
             sys.stderr.write(traceback.format_exc())
             sys.stderr.flush()
             raise
@@ -190,11 +196,53 @@ def postflight(func):
             fire_event(MainEncounteredError(exc=str(e)))
             raise ResultExit(e.result)
         except DbtException as e:
-            fire_event(MainEncounteredError(exc=str(e)))
+            # For UninstalledPackagesFoundError, don't fire event or print traceback - print once and skip event
+            # to avoid duplicate messages as exception propagates through decorators
+            from dvt.exceptions import UninstalledPackagesFoundError
+            from dvt.cli.exceptions import ExceptionExit as ExceptionExitType
+            # Check if this is UninstalledPackagesFoundError (either directly or wrapped in ExceptionExit)
+            actual_exception = e.exception if isinstance(e, ExceptionExitType) else e
+            if isinstance(actual_exception, UninstalledPackagesFoundError):
+                # Use module-level set to track printed exception messages to prevent duplicates
+                # across multiple decorator catches (use message as key since exception objects may differ)
+                exc_message = str(actual_exception)
+                if exc_message not in _printed_uninstalled_packages_errors:
+                    sys.stderr.write(f"{actual_exception}\n")
+                    sys.stderr.flush()
+                    _printed_uninstalled_packages_errors.add(exc_message)
+            else:
+                fire_event(MainEncounteredError(exc=str(e)))
+                # Print exception immediately to stderr so it's never silent
+                sys.stderr.write(f"Error: {e}\n")
+                sys.stderr.write(traceback.format_exc())
+                sys.stderr.flush()
+            # Only wrap if not already wrapped
+            if isinstance(e, ExceptionExitType):
+                raise e
             raise ExceptionExit(e)
         except BaseException as e:
-            fire_event(MainEncounteredError(exc=str(e)))
-            fire_event(MainStackTrace(stack_trace=traceback.format_exc()))
+            # Check if this is UninstalledPackagesFoundError wrapped in ExceptionExit
+            from dvt.exceptions import UninstalledPackagesFoundError
+            from dvt.cli.exceptions import ExceptionExit as ExceptionExitType
+            actual_exception = e.exception if isinstance(e, ExceptionExitType) else e
+            if isinstance(actual_exception, UninstalledPackagesFoundError):
+                # Use module-level set to track printed exception messages to prevent duplicates
+                # across multiple decorator catches (use message as key since exception objects may differ)
+                exc_message = str(actual_exception)
+                if exc_message not in _printed_uninstalled_packages_errors:
+                    sys.stderr.write(f"{actual_exception}\n")
+                    sys.stderr.flush()
+                    _printed_uninstalled_packages_errors.add(exc_message)
+            else:
+                fire_event(MainEncounteredError(exc=str(e)))
+                fire_event(MainStackTrace(stack_trace=traceback.format_exc()))
+                # Print exception immediately to stderr so it's never silent
+                sys.stderr.write(f"Error: {e}\n")
+                sys.stderr.write(traceback.format_exc())
+                sys.stderr.flush()
+            # Only wrap if not already wrapped
+            if isinstance(e, ExceptionExitType):
+                raise e
             raise ExceptionExit(e)
         finally:
             # Fire ResourceReport, but only on systems which support the resource

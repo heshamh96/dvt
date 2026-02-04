@@ -577,9 +577,10 @@ cli.add_command(ls, "ls")
 @requires.runtime_config
 @requires.manifest(write_perf_info=True)
 def parse(ctx, **kwargs):
-    """Parses the project and provides information on performance"""
-    # manifest generation and writing happens in @requires.manifest
-    return ctx.obj["manifest"], True
+    """Parses the project and provides information on performance."""
+    # Manifest generation and writing happens in @requires.manifest
+    manifest = ctx.obj["manifest"]
+    return manifest, True
 
 
 # dbt run

@@ -226,15 +226,21 @@ def load_raw_project(project_root: str, validate: bool = False) -> Dict[str, Any
 
     project_dict = _load_yaml(project_yaml_filepath, validate=validate)
 
+    if not isinstance(project_dict, dict):
+        raise DvtProjectError(f"{DBT_PROJECT_FILE_NAME} does not parse to a dictionary")
+
+    # Normalize require-dbt-version to require-dvt-version for compatibility with dbt packages
+    # DVT projects use require-dvt-version, but dbt packages use require-dbt-version
+    # This normalization happens before schema validation so both keys are accepted
+    if "require-dbt-version" in project_dict and "require-dvt-version" not in project_dict:
+        project_dict["require-dvt-version"] = project_dict.pop("require-dbt-version")
+
     if validate:
         from dvt.jsonschemas.jsonschemas import jsonschema_validate, project_schema
 
         jsonschema_validate(
             schema=project_schema(), json=project_dict, file_path=project_yaml_filepath
         )
-
-    if not isinstance(project_dict, dict):
-        raise DvtProjectError(f"{DBT_PROJECT_FILE_NAME} does not parse to a dictionary")
 
     if "tests" in project_dict and "data_tests" not in project_dict:
         project_dict["data_tests"] = project_dict.pop("tests")
@@ -406,6 +412,11 @@ class PartialProject(RenderComponents):
         self.check_config_path(rendered.project_dict, "log-path", default_value="logs")
         self.check_config_path(rendered.project_dict, "target-path", default_value="target")
 
+        # Normalize require-dbt-version to require-dvt-version for compatibility with dbt packages
+        # DVT projects use require-dvt-version, but dbt packages use require-dbt-version
+        if "require-dbt-version" in rendered.project_dict and "require-dvt-version" not in rendered.project_dict:
+            rendered.project_dict["require-dvt-version"] = rendered.project_dict.pop("require-dbt-version")
+        
         try:
             ProjectContract.validate(rendered.project_dict)
             cfg = ProjectContract.from_dict(rendered.project_dict)

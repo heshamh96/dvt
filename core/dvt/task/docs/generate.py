@@ -301,12 +301,17 @@ class GenerateTask(CompileTask):
             errors = [str(e) for e in exceptions]
 
         nodes, sources = catalog.make_unique_id_map(self.manifest, selected_node_ids)
+        source_connections, connection_metadata = self._get_source_connections_and_metadata(
+            selected_node_ids
+        )
         results = self.get_catalog_results(
             nodes=nodes,
             sources=sources,
             generated_at=datetime.now(timezone.utc).replace(tzinfo=None),
             compile_results=compile_results,
             errors=errors,
+            source_connections=source_connections,
+            connection_metadata=connection_metadata,
         )
 
         catalog_path = os.path.join(self.config.project_target_path, CATALOG_FILENAME)
@@ -353,6 +358,32 @@ class GenerateTask(CompileTask):
             include_empty_nodes=True,
         )
 
+    def _get_source_connections_and_metadata(
+        self, selected_node_ids: Optional[Set[UniqueId]]
+    ) -> Tuple[Dict[str, str], Dict[str, Dict[str, Any]]]:
+        """Build source_connections (source unique_id -> target name) and connection_metadata for catalog/docs."""
+        source_connections: Dict[str, str] = {}
+        connection_metadata: Dict[str, Dict[str, Any]] = {}
+        default_target = getattr(self.config, "target_name", None) or ""
+
+        for unique_id, source in self.manifest.sources.items():
+            if selected_node_ids is not None and unique_id not in selected_node_ids:
+                continue
+            conn = getattr(source.config, "connection", None) if source.config else None
+            connection_identifier = conn if conn else default_target
+            source_connections[unique_id] = connection_identifier
+            if connection_identifier and connection_identifier not in connection_metadata:
+                connection_metadata[connection_identifier] = {}
+
+        if default_target and default_target not in connection_metadata:
+            connection_metadata[default_target] = {}
+        if getattr(self.config, "credentials", None) is not None:
+            adapter_type = getattr(self.config.credentials, "type", None)
+            if default_target and adapter_type:
+                connection_metadata.setdefault(default_target, {})["adapter_type"] = adapter_type
+
+        return source_connections, connection_metadata
+
     def get_catalog_results(
         self,
         nodes: Dict[str, CatalogTable],
@@ -360,6 +391,8 @@ class GenerateTask(CompileTask):
         generated_at: datetime,
         compile_results: Optional[Any],
         errors: Optional[List[str]],
+        source_connections: Optional[Dict[str, str]] = None,
+        connection_metadata: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> CatalogArtifact:
         return CatalogArtifact.from_results(
             generated_at=generated_at,
@@ -367,6 +400,8 @@ class GenerateTask(CompileTask):
             sources=sources,
             compile_results=compile_results,
             errors=errors,
+            source_connections=source_connections,
+            connection_metadata=connection_metadata,
         )
 
     @classmethod
