@@ -4,6 +4,7 @@ from typing import Any, Callable, List
 import click
 
 from dvt.cli.option_types import (
+    PathWithExpandUser,
     YAML,
     ChoiceTuple,
     Package,
@@ -496,7 +497,7 @@ printer_width = _create_option_and_track_env_var(
 profile = _create_option_and_track_env_var(
     "--profile",
     envvar="DBT_PROFILE",
-    help="Which existing profile to load. Overrides setting in dvt_project.yml.",
+    help="Which existing profile to load. Overrides setting in dbt_project.yml.",
 )
 
 profiles_dir = _create_option_and_track_env_var(
@@ -504,7 +505,7 @@ profiles_dir = _create_option_and_track_env_var(
     envvar="DBT_PROFILES_DIR",
     help="Which directory to look in for the profiles.yml file. If not set, dvt will look in the current working directory first, then HOME/.dvt/",
     default=default_profiles_dir,
-    type=click.Path(exists=True),
+    type=PathWithExpandUser(exists=True),
 )
 
 # `dbt debug` uses this because it implements custom behaviour for non-existent profiles.yml directories
@@ -515,15 +516,25 @@ profiles_dir_exists_false = _create_option_and_track_env_var(
     envvar="DBT_PROFILES_DIR",
     help="Which directory to look in for the profiles.yml file. If not set, dvt will look in the current working directory first, then HOME/.dvt/",
     default=default_profiles_dir,
-    type=click.Path(exists=False),
+    type=PathWithExpandUser(exists=False),
 )
 
 project_dir = _create_option_and_track_env_var(
     "--project-dir",
     envvar="DBT_PROJECT_DIR",
-    help="Which directory to look in for the dvt_project.yml file. Default is the current working directory and its parents.",
+    help="Which directory to look in for the dbt_project.yml file. Default is the current working directory and its parents.",
     default=default_project_dir,
     type=click.Path(exists=True),
+)
+
+# Sync-only: absolute path to Python env; if not set, sync looks for .venv/venv/env inside project dir.
+sync_python_env = _create_option_and_track_env_var(
+    "--python-env",
+    "python_env",
+    envvar=None,
+    default=None,
+    type=PathWithExpandUser(exists=True),
+    help="Absolute path to the Python environment (venv) to use. If not set, sync looks for .venv, venv, or env inside the project directory.",
 )
 
 quiet = _create_option_and_track_env_var(
@@ -759,7 +770,7 @@ use_fast_test_edges = _create_option_and_track_env_var(
 vars = _create_option_and_track_env_var(
     "--vars",
     envvar=None,
-    help="Supply variables to the project. This argument overrides variables defined in your dvt_project.yml file. This argument should be a YAML string, eg. '{my_variable: my_value}'",
+    help="Supply variables to the project. This argument overrides variables defined in your dbt_project.yml file. This argument should be a YAML string, eg. '{my_variable: my_value}'",
     type=YAML(),
     default="{}",
 )
@@ -789,7 +800,7 @@ version = _create_option_and_track_env_var(
 version_check = _create_option_and_track_env_var(
     "--version-check/--no-version-check",
     envvar="DBT_VERSION_CHECK",
-    help="If set, ensure the installed dvt version matches the require-dvt-version specified in the dvt_project.yml file (if any). Otherwise, allow them to differ.",
+    help="If set, ensure the installed dvt version matches the require-dvt-version specified in the dbt_project.yml file (if any). Otherwise, allow them to differ.",
     default=True,
 )
 

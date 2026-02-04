@@ -1,22 +1,31 @@
 """
 DVT user-level configuration: ~/.dvt/profiles.yml, computes.yml, and data/mdm.duckdb.
 Used by dvt init to create the DVT home directory structure.
+Never overwrite existing profiles.yml or computes.yml; append or merge new profile entries only.
 """
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
+
+import yaml
 
 DVT_HOME = Path.home() / ".dvt"
 PROFILES_PATH = DVT_HOME / "profiles.yml"
 COMPUTES_PATH = DVT_HOME / "computes.yml"
 DATA_DIR = DVT_HOME / "data"
 MDM_DB_PATH = DATA_DIR / "mdm.duckdb"
+JDBC_DRIVERS_DIR_NAME = ".jdbc_jars"
 
 
 def get_dvt_home(profiles_dir: Optional[str] = None) -> Path:
     """Return DVT home directory (where profiles.yml and computes.yml live)."""
     if profiles_dir:
-        return Path(profiles_dir).resolve()
+        return Path(profiles_dir).expanduser().resolve()
     return DVT_HOME
+
+
+def get_jdbc_drivers_dir(profiles_dir: Optional[str] = None) -> Path:
+    """Return the directory where JDBC driver JARs for adapters are stored (e.g. ~/.dvt/.jdbc_jars)."""
+    return get_dvt_home(profiles_dir) / JDBC_DRIVERS_DIR_NAME
 
 
 def create_default_computes_yml(path: Optional[Path] = None) -> bool:
@@ -26,18 +35,63 @@ def create_default_computes_yml(path: Optional[Path] = None) -> bool:
         return False
     path.parent.mkdir(parents=True, exist_ok=True)
     content = """# DVT Compute Configuration
-# Defines Spark compute environments for federated queries.
+# Top-level keys are profile names. Each profile has target (active compute) and computes (definitions).
 # See docs: https://github.com/heshamh96/dvt
 
-computes:
-  default:
-    type: spark
-    master: "local[*]"
-    config:
-      spark.driver.memory: "2g"
-      spark.sql.adaptive.enabled: "true"
+default:
+  target: default
+  computes:
+    default:
+      type: spark
+      version: "3.5.0"
+      master: "local[*]"
+      config:
+        spark.driver.memory: "2g"
+        spark.sql.adaptive.enabled: "true"
 """
     path.write_text(content)
+    return True
+
+
+def _default_compute_block() -> Dict[str, Any]:
+    """Default compute block for a new profile (Spark local)."""
+    return {
+        "target": "default",
+        "computes": {
+            "default": {
+                "type": "spark",
+                "version": "3.5.0",
+                "master": "local[*]",
+                "config": {
+                    "spark.driver.memory": "2g",
+                    "spark.sql.adaptive.enabled": "true",
+                },
+            }
+        },
+    }
+
+
+def append_profile_to_computes_yml(
+    profile_name: str,
+    profiles_dir: Optional[str] = None,
+) -> bool:
+    """
+    If the profile is not already in computes.yml, append its block (merge).
+    Does not overwrite existing profile keys. Returns True if a new block was added.
+    """
+    dvt_home = get_dvt_home(profiles_dir)
+    computes_path = dvt_home / "computes.yml"
+    if not computes_path.exists():
+        create_default_computes_yml(computes_path)
+    with open(computes_path, "r") as f:
+        data = yaml.safe_load(f) or {}
+    if not isinstance(data, dict):
+        return False
+    if profile_name in data:
+        return False
+    data[profile_name] = _default_compute_block()
+    with open(computes_path, "w") as f:
+        yaml.dump(data, f, default_flow_style=False, sort_keys=False)
     return True
 
 

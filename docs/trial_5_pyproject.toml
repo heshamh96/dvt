@@ -1,0 +1,26 @@
+# Trial 5 (trial_5_fanta_db) – uv config template
+# Copy this file to your trial folder as pyproject.toml, then run: uv sync
+#
+# Path to dvt-core: use ONE of the following in [tool.uv.sources] below:
+#   - Relative (if trial is under Testing_Playground and dvt-core is a sibling of Testing_Playground):
+#       path = "../../dvt-core/core"
+#   - Absolute (replace with your real path):
+#       path = "/Users/hex/Documents/My_Projects/DVT/dvt-core/core"
+#
+# IMPORTANT: Run "uv sync" and "uv run dvt ..." from the TRIAL folder (trial_5_fanta_db),
+# not from Fanta_DB/. The pyproject.toml with this path source must be in the trial root.
+
+[project]
+name = "trial-5-fanta-db"
+version = "0.1.0"
+description = "Trial 5 Fanta_DB – full feature test"
+requires-python = ">=3.10"
+dependencies = [
+    "dvt-core",
+    "dbt-postgres",
+    "pyspark==3.5.0",
+]
+
+[tool.uv.sources]
+# Must set editable = false so uv installs from path (not editable link).
+dvt-core = { path = "../../dvt-core/core", editable = false }

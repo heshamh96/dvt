@@ -98,6 +98,16 @@ class dvtRunner:
             )
 
 
+# Custom Command that only shows this command's options in help (no parent group options).
+# Used by sync so "dvt sync --help" is minimal even if the root group had options.
+class _MinimalHelpCommand(click.Command):
+    def get_help(self, ctx: click.Context) -> str:
+        # Build help using only this command's params (ignore parent context).
+        formatter = ctx.make_formatter()
+        self.format_help(ctx, formatter)
+        return formatter.getvalue()
+
+
 # approach from https://github.com/pallets/click/issues/108#issuecomment-280489786
 def global_flags(func):
     @p.cache_selected_only
@@ -152,6 +162,8 @@ def global_flags(func):
 
 
 # dbt
+# Note: global_flags are not on the root group so that subcommands like `sync` can
+# have minimal help. Each command that needs global flags applies @global_flags itself.
 @click.group(
     context_settings={"help_option_names": ["-h", "--help"]},
     invoke_without_command=True,
@@ -159,7 +171,6 @@ def global_flags(func):
     epilog="Specify one of these sub-commands and you can find more help from there.",
 )
 @click.pass_context
-@global_flags
 @p.show_resource_report
 def cli(ctx, **kwargs):
     """An ELT tool for managing your SQL transformations and data models.
@@ -480,12 +491,29 @@ def deps(ctx, **kwargs):
 @requires.postflight
 @requires.preflight
 def init(ctx, **kwargs):
-    """Initialize a new DVT project (creates dvt_project.yml, ~/.dvt/, computes.yml, mdm.duckdb)."""
+    """Initialize a new DVT project (creates dbt_project.yml, ~/.dvt/, computes.yml, mdm.duckdb)."""
     from dvt.task.init import InitTask
 
     with InitTask(ctx.obj["flags"]) as task:
         results = task.run()
         success = task.interpret_results(results)
+    return results, success
+
+
+# dvt sync
+@cli.command("sync", cls=_MinimalHelpCommand)
+@click.pass_context
+@requires.postflight
+@requires.preflight
+@p.project_dir
+@p.profiles_dir
+@p.sync_python_env
+def sync(ctx, **kwargs):
+    """Sync project env: install adapters and pyspark from dbt_project.yml, profiles, and computes.yml."""
+    from dvt.task.sync import SyncTask
+
+    with SyncTask(ctx.obj["flags"]) as task:
+        results, success = task.run()
     return results, success
 
 
