@@ -146,8 +146,8 @@ class TestUnparsedRunHook(ContractTestCase):
         node_dict = {
             "name": "foo",
             "resource_type": NodeType.Operation,
-            "path": "/root/dvt_project.yml",
-            "original_file_path": "/root/dvt_project.yml",
+            "path": "/root/dbt_project.yml",
+            "original_file_path": "/root/dbt_project.yml",
             "package_name": "test",
             "language": "sql",
             "raw_code": "GRANT select on dbt_postgres",
@@ -155,8 +155,8 @@ class TestUnparsedRunHook(ContractTestCase):
         }
         node = self.ContractType(
             package_name="test",
-            path="/root/dvt_project.yml",
-            original_file_path="/root/dvt_project.yml",
+            path="/root/dbt_project.yml",
+            original_file_path="/root/dbt_project.yml",
             language="sql",
             raw_code="GRANT select on dbt_postgres",
             name="foo",
@@ -171,8 +171,8 @@ class TestUnparsedRunHook(ContractTestCase):
         node_dict = {
             "name": "foo",
             "resource_type": NodeType.Model,  # invalid
-            "path": "/root/dvt_project.yml",
-            "original_file_path": "/root/dvt_project.yml",
+            "path": "/root/dbt_project.yml",
+            "original_file_path": "/root/dbt_project.yml",
             "package_name": "test",
             "language": "sql",
             "raw_code": "GRANT select on dbt_postgres",

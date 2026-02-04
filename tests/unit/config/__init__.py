@@ -215,7 +215,7 @@ class BaseConfigTest(unittest.TestCase):
     def write_project(self, project_data=None):
         if project_data is None:
             project_data = self.project_data
-        with open(self.project_path("dvt_project.yml"), "w") as fp:
+        with open(self.project_path("dbt_project.yml"), "w") as fp:
             yaml.dump(project_data, fp)
 
     def write_packages(self, package_data):

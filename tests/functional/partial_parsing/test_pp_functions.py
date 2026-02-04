@@ -102,7 +102,7 @@ class TestPartialParsingFunctionsAndCompilationOfDownstreamNodes:
                 "+alias": "aliased_my_func",
             }
         }
-        update_config_file(add_function_alias, "dvt_project.yml")
+        update_config_file(add_function_alias, "dbt_project.yml")
 
         # Recompile
         result = run_dbt(["compile"])

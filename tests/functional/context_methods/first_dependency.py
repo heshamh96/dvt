@@ -66,7 +66,7 @@ class FirstDependencyProject:
     @pytest.fixture(scope="class")
     def first_dependency(self, project):
         first_dependency_files = {
-            "dvt_project.yml": first_dependency__dbt_project_yml,
+            "dbt_project.yml": first_dependency__dbt_project_yml,
             "models": {
                 "nested": {
                     "first_dep_model.sql": first_dependency__models__nested__first_dep_model_sql
@@ -81,7 +81,7 @@ class FirstDependencyConfigProject:
     @pytest.fixture(scope="class")
     def first_dependency(self, project):
         first_dependency_files = {
-            "dvt_project.yml": first_dependency__dbt_project_yml,
+            "dbt_project.yml": first_dependency__dbt_project_yml,
             "models": {
                 "nested": {
                     "first_dep_model.sql": first_dependency__models__nested__first_dep_model_var_sql,

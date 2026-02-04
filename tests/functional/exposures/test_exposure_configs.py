@@ -17,7 +17,7 @@ from tests.functional.exposures.fixtures import (
 )
 
 
-# Test enabled config for exposure in dvt_project.yml
+# Test enabled config for exposure in dbt_project.yml
 class TestExposureEnabledConfigProjectLevel:
     @pytest.fixture(scope="class")
     def models(self):
@@ -55,7 +55,7 @@ class TestExposureEnabledConfigProjectLevel:
                 }
             }
         }
-        update_config_file(new_enabled_config, project.project_root, "dvt_project.yml")
+        update_config_file(new_enabled_config, project.project_root, "dbt_project.yml")
         run_dbt(["parse"])
         manifest = get_manifest(project.project_root)
         assert "exposure.test.simple_exposure" not in manifest.exposures

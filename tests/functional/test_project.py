@@ -13,7 +13,7 @@ from dbt_common.events.types import Note
 
 
 class TestProjectJsonschemaValidatedOnlyOnce:
-    """Ensure that the dvt_project.yml file is validated only once, even if it is 'loaded' multiple times"""
+    """Ensure that the dbt_project.yml file is validated only once, even if it is 'loaded' multiple times"""
 
     def test_project(self, project, mocker: MockerFixture) -> None:
         mocked_jsonschema_validate = mocker.patch(
@@ -36,7 +36,7 @@ class TestGenericJsonSchemaValidationDeprecation:
             "profile": "test",
             "flags": {"send_anonymous_usage_stats": False},
         }
-        write_file(yaml.safe_dump(project_missing_name), project_root, "dvt_project.yml")
+        write_file(yaml.safe_dump(project_missing_name), project_root, "dbt_project.yml")
         event_catcher = EventCatcher(GenericJSONSchemaValidationDeprecation)
         note_catcher = EventCatcher(Note)
 

@@ -524,7 +524,7 @@ class TestCustomSchemaTests:
         project.run_sql_file(os.path.join(project.test_data_dir, "seed.sql"))
 
         local_dependency_files = {
-            "dvt_project.yml": local_dependency__dbt_project_yml,
+            "dbt_project.yml": local_dependency__dbt_project_yml,
             "macros": {"equality.sql": local_dependency__macros__equality_sql},
         }
         write_project_files(project_root, "local_dependency", local_dependency_files)
@@ -716,7 +716,7 @@ class TestSchemaTestContext:
     @pytest.fixture(scope="class", autouse=True)
     def setUp(self, project_root):
         local_utils_files = {
-            "dvt_project.yml": local_utils__dbt_project_yml,
+            "dbt_project.yml": local_utils__dbt_project_yml,
             "macros": {
                 "datediff.sql": local_utils__macros__datediff_sql,
                 "current_timestamp.sql": local_utils__macros__current_timestamp_sql,
@@ -782,7 +782,7 @@ class TestSchemaTestContextWithMacroNamespace:
     @pytest.fixture(scope="class", autouse=True)
     def setUp(self, project_root):
         test_utils_files = {
-            "dvt_project.yml": test_utils__dbt_project_yml,
+            "dbt_project.yml": test_utils__dbt_project_yml,
             "macros": {
                 "current_timestamp.sql": test_utils__macros__current_timestamp_sql,
                 "custom_test.sql": test_utils__macros__custom_test_sql,
@@ -791,7 +791,7 @@ class TestSchemaTestContextWithMacroNamespace:
         write_project_files(project_root, "test_utils", test_utils_files)
 
         local_utils_files = {
-            "dvt_project.yml": local_utils__dbt_project_yml,
+            "dbt_project.yml": local_utils__dbt_project_yml,
             "macros": {
                 "datediff.sql": local_utils__macros__datediff_sql,
                 "current_timestamp.sql": local_utils__macros__current_timestamp_sql,
@@ -1088,7 +1088,7 @@ class TestCustomSchemaTestMacroResolutionOrder:
     @pytest.fixture(scope="class", autouse=True)
     def setUp(self, project_root):
         alt_local_utils_file = {
-            "dvt_project.yml": local_utils__dbt_project_yml,
+            "dbt_project.yml": local_utils__dbt_project_yml,
             "macros": {
                 "datediff.sql": alt_local_utils__macros__type_timestamp_sql,
             },

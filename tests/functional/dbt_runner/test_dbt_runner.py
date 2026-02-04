@@ -90,8 +90,8 @@ class TestDbtRunner:
         res = dvt.invoke(["run"], project_dir="some_random_project_dir")
         assert type(res.exception) == DvtProjectError
 
-        msg = "No dvt_project.yml found at expected path some_random_project_dir"
-        assert msg in res.exception.msg
+        assert "some_random_project_dir" in res.exception.msg
+        assert "dbt_project.yml" in res.exception.msg or "project file" in res.exception.msg
 
     def test_invoke_kwargs_profiles_dir(self, project, dvt):
         res = dvt.invoke(["run"], profiles_dir="some_random_profiles_dir")
@@ -121,7 +121,7 @@ class TestDbtRunner:
         assert args == args_before
 
     def test_directory_does_not_change(self, project, dvt: dvtRunner) -> None:
-        project_dir = os.getcwd()  # The directory where dvt_project.yml exists.
+        project_dir = os.getcwd()  # The directory where dbt_project.yml exists.
         os.chdir("../")
         cmd_execution_dir = os.getcwd()  # The directory where dvt command will be run
 

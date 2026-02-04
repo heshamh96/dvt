@@ -32,7 +32,7 @@ class TestSchemaYmlVersionMissing:
 
 
 class TestProjectConfigVersionMissing:
-    # default dvt_project.yml has config-version: 2
+    # default dbt_project.yml has config-version: 2
     @pytest.fixture(scope="class")
     def project_config_remove(self):
         return ["config-version"]
@@ -42,7 +42,7 @@ class TestProjectConfigVersionMissing:
 
 
 class TestProjectYamlVersionMissing:
-    # default dvt_project.yml does not fill version
+    # default dbt_project.yml does not fill version
 
     def test_empty_version(self, project):
         run_dbt(["run"], expect_pass=True)
@@ -61,7 +61,7 @@ class TestProjectYamlVersionInvalid:
     def test_invalid_version(self, project):
         # we need to run it so the project gets set up first, otherwise we hit the semver error in setting up the test project
         run_dbt()
-        update_config_file({"version": "invalid"}, "dvt_project.yml")
+        update_config_file({"version": "invalid"}, "dbt_project.yml")
         with pytest.raises(ProjectContractError) as excinfo:
             run_dbt()
         assert "at path ['version']: 'invalid' is not valid under any of the given schemas" in str(
@@ -77,7 +77,7 @@ class TestProjectDbtCloudConfig:
     def test_dbt_cloud(self, project):
         run_dbt(["parse"], expect_pass=True)
         conf = yaml.safe_load(
-            Path(os.path.join(project.project_root, "dvt_project.yml")).read_text()
+            Path(os.path.join(project.project_root, "dbt_project.yml")).read_text()
         )
         assert conf == {
             "name": "test",
@@ -96,10 +96,10 @@ class TestProjectDbtCloudConfig:
                 "api_key": "test",
             },
         }
-        write_config_file(config, project.project_root, "dvt_project.yml")
+        write_config_file(config, project.project_root, "dbt_project.yml")
         run_dbt(["parse"], expect_pass=True)
         conf = yaml.safe_load(
-            Path(os.path.join(project.project_root, "dvt_project.yml")).read_text()
+            Path(os.path.join(project.project_root, "dbt_project.yml")).read_text()
         )
         assert conf == config
 
@@ -112,7 +112,7 @@ class TestProjectDbtCloudConfigString:
     def test_dbt_cloud_invalid(self, project):
         run_dbt()
         config = {"name": "test", "profile": "test", "dvt-cloud": "Some string"}
-        update_config_file(config, "dvt_project.yml")
+        update_config_file(config, "dbt_project.yml")
         expected_err = (
             "at path ['dvt-cloud']: 'Some string' is not valid under any of the given schemas"
         )
@@ -127,14 +127,14 @@ class TestVersionSpecifierChecksComeBeforeYamlValidation:
 
         # if no version specifier error, we should get a yaml validation error
         config_update = {"this-is-not-a-valid-key": "my-value-for-invalid-key"}
-        update_config_file(config_update, "dvt_project.yml")
+        update_config_file(config_update, "dbt_project.yml")
         result = runner.invoke(["parse"])
         assert result.exception is not None
         assert isinstance(result.exception, ProjectContractError)
         assert "Additional properties are not allowed" in str(result.exception)
 
         # add bad version specifier, and assert we get the error for that
-        update_config_file({"require-dvt-version": [">0.0.0", "<=0.0.1"]}, "dvt_project.yml")
+        update_config_file({"require-dvt-version": [">0.0.0", "<=0.0.1"]}, "dbt_project.yml")
         result = runner.invoke(["parse"])
         assert result.exception is not None
         assert isinstance(result.exception, DvtProjectError)
@@ -161,7 +161,7 @@ class TestArchiveNotAllowed:
                 ],
             }
         }
-        update_config_file(config_update, "dvt_project.yml")
+        update_config_file(config_update, "dbt_project.yml")
 
         result = runner.invoke(["parse"])
         assert result.exception is not None

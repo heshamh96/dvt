@@ -59,7 +59,7 @@ class TestTestsConfigDeprecation:
         with pytest.raises(CompilationError) as exc:
             run_dbt(["--warn-error", "--no-partial-parse", "parse"])
         exc_str = " ".join(str(exc.value).split())  # flatten all whitespace
-        expected_msg = "Configuration paths exist in your dvt_project.yml file which do not apply to any resources. There are 1 unused configuration paths: - data_tests"
+        expected_msg = "Configuration paths exist in your dbt_project.yml file which do not apply to any resources. There are 1 unused configuration paths: - data_tests"
         assert expected_msg in exc_str
 
 
@@ -132,7 +132,7 @@ class TestBothSchemaTestDeprecation:
         assert expected_msg in str(excinfo.value)
 
 
-# test for failure with  test and data_tests in the same dvt_project.yml
+# test for failure with  test and data_tests in the same dbt_project.yml
 class TestBothProjectTestDeprecation:
     @pytest.fixture(scope="class")
     def models(self):
@@ -140,7 +140,7 @@ class TestBothProjectTestDeprecation:
 
     def test_tests_config(self, project):
         config_patch = {"tests": {"+enabled": "true"}, "data_tests": {"+tags": "super"}}
-        update_config_file(config_patch, project.project_root, "dvt_project.yml")
+        update_config_file(config_patch, project.project_root, "dbt_project.yml")
 
         expected_msg = "Invalid project config: cannot have both 'tests' and 'data_tests' defined"
         with pytest.raises(ProjectContractError) as excinfo:
@@ -153,7 +153,7 @@ class TestTestConfigInDependency:
     @pytest.fixture(scope="class", autouse=True)
     def setUp(self, project_root):
         local_dependency_files = {
-            "dvt_project.yml": local_dependency__dbt_project_yml,
+            "dbt_project.yml": local_dependency__dbt_project_yml,
             "models": {
                 "schema.yml": local_dependency__schema_yml,
             },

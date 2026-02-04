@@ -25,7 +25,7 @@ class MetricConfigTests:
         )
 
 
-# Test enabled config in dvt_project.yml
+# Test enabled config in dbt_project.yml
 class TestMetricEnabledConfigProjectLevel(MetricConfigTests):
     @pytest.fixture(scope="class")
     def models(self):
@@ -62,7 +62,7 @@ class TestMetricEnabledConfigProjectLevel(MetricConfigTests):
                 }
             }
         }
-        update_config_file(new_enabled_config, project.project_root, "dvt_project.yml")
+        update_config_file(new_enabled_config, project.project_root, "dbt_project.yml")
         run_dbt(["parse"])
         manifest = get_manifest(project.project_root)
         assert "metric.test.average_tenure_minus_people" in manifest.metrics
@@ -153,7 +153,7 @@ class TestDisabledMetricRef(MetricConfigTests):
             }
         }
 
-        update_config_file(new_enabled_config, project.project_root, "dvt_project.yml")
+        update_config_file(new_enabled_config, project.project_root, "dbt_project.yml")
         with pytest.raises(CompilationError):
             run_dbt(["parse"])
 
@@ -199,7 +199,7 @@ class TestDisabledMetric(MetricConfigTests):
             }
         }
 
-        update_config_file(new_enabled_config, project.project_root, "dvt_project.yml")
+        update_config_file(new_enabled_config, project.project_root, "dbt_project.yml")
         with pytest.raises(ParsingError) as excinfo:
             run_dbt(["parse"])
             expected_msg = (
@@ -208,7 +208,7 @@ class TestDisabledMetric(MetricConfigTests):
             assert expected_msg in str(excinfo.value)
 
 
-# Test meta config in dvt_project.yml
+# Test meta config in dbt_project.yml
 class TestMetricMetaConfigProjectLevel(MetricConfigTests):
     @pytest.fixture(scope="class")
     def models(self):

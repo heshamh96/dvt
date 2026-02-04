@@ -322,7 +322,7 @@ class TestChangedSeedConfig(BaseModifiedState):
         )
         assert len(results) == 1
 
-        update_config_file({"seeds": {"test": {"quote_columns": False}}}, "dvt_project.yml")
+        update_config_file({"seeds": {"test": {"quote_columns": False}}}, "dbt_project.yml")
 
         # quoting change -> seed changed
         results = run_dbt(
@@ -390,7 +390,7 @@ class TestUnrenderedConfigSame(BaseModifiedState):
 
         # although this is the default value, dbt will recognize it as a change
         # for previously-unconfigured models, because it"s been explicitly set
-        update_config_file({"models": {"test": {"materialized": "view"}}}, "dvt_project.yml")
+        update_config_file({"models": {"test": {"materialized": "view"}}}, "dbt_project.yml")
         results = run_dbt(
             ["ls", "--resource-type", "model", "--select", "state:modified", "--state", "./state"]
         )

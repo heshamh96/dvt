@@ -149,7 +149,7 @@ class TestSourceOverride:
                 }
             }
         }
-        update_config_file(new_source_config, project.project_root, "dvt_project.yml")
+        update_config_file(new_source_config, project.project_root, "dbt_project.yml")
 
         # enable my_other_source, snapshot freshness should fail due to the new
         # not-fresh source

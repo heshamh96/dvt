@@ -131,7 +131,7 @@ packages:
 name: 'pkg'
         """
 
-        write_file(pkg_dbt_project, "pkg/dvt_project.yml")
+        write_file(pkg_dbt_project, "pkg/dbt_project.yml")
 
         run_dbt(["deps"])
 

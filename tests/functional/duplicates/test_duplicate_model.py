@@ -115,7 +115,7 @@ class TestDuplicateModelAliasEnabledAcrossPackages:
     @pytest.fixture(scope="class", autouse=True)
     def setUp(self, project_root):
         local_dependency_files = {
-            "dvt_project.yml": dbt_project_yml,
+            "dbt_project.yml": dbt_project_yml,
             "models": {"table_model.sql": enabled_model_sql},
         }
         write_project_files(project_root, "local_dependency", local_dependency_files)
@@ -136,7 +136,7 @@ class TestDuplicateModelDisabledAcrossPackages:
     @pytest.fixture(scope="class", autouse=True)
     def setUp(self, project_root):
         local_dependency_files = {
-            "dvt_project.yml": dbt_project_yml,
+            "dbt_project.yml": dbt_project_yml,
             "models": {"table_model.sql": enabled_model_sql},
         }
         write_project_files(project_root, "local_dependency", local_dependency_files)
@@ -165,7 +165,7 @@ class TestDuplicateModelNameWithTestAcrossPackages:
     @pytest.fixture(scope="class", autouse=True)
     def setUp(self, project_root):
         local_dependency_files = {
-            "dvt_project.yml": dbt_project_yml,
+            "dbt_project.yml": dbt_project_yml,
             "models": {"table_model.sql": enabled_model_sql, "schema.yml": local_dep_schema_yml},
         }
         write_project_files(project_root, "local_dependency", local_dependency_files)
@@ -199,7 +199,7 @@ class TestDuplicateModelNameWithVersionAcrossPackages:
     @pytest.fixture(scope="class", autouse=True)
     def setUp(self, project_root):
         local_dependency_files = {
-            "dvt_project.yml": dbt_project_yml,
+            "dbt_project.yml": dbt_project_yml,
             "models": {
                 "table_model.sql": enabled_model_sql,
                 "schema.yml": local_dep_versions_schema_yml,

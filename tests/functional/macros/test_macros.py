@@ -223,7 +223,7 @@ class TestMisnamedMacroNamespace:
     @pytest.fixture(scope="class", autouse=True)
     def setUp(self, project_root):
         test_utils_files = {
-            "dvt_project.yml": dbt_project__incorrect_dispatch,
+            "dbt_project.yml": dbt_project__incorrect_dispatch,
             "macros": {
                 "cowsay.sql": macros__incorrect_dispatch,
             },

@@ -1144,7 +1144,7 @@ models:
 @pytest.fixture(scope="class")
 def external_package():
     return {
-        "dvt_project.yml": external_package_project_yml,
+        "dbt_project.yml": external_package_project_yml,
         "seeds": {"accounts_seed.csv": external_package__accounts_seed_csv},
         "models": {
             "external_model.sql": external_package__external_model_sql,

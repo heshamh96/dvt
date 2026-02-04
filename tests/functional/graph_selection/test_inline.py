@@ -49,13 +49,13 @@ class TestCompileInlineWithSelector:
         assert "Compiled inline node is:" in log_output
 
         # Set all models to disabled, check that we still get inline result
-        write_file(dbt_project_yml_disabled_models, project.project_root, "dvt_project.yml")
+        write_file(dbt_project_yml_disabled_models, project.project_root, "dbt_project.yml")
         (results, log_output) = run_dbt_and_capture(["compile", "--inline", "select 1 as id"])
         assert len(results) == 1
 
         # put back non-disabled dbt_project and check for mutually exclusive error message
         # for --select and --inline
-        write_file(dbt_project_yml, project.project_root, "dvt_project.yml")
+        write_file(dbt_project_yml, project.project_root, "dbt_project.yml")
         with pytest.raises(DvtUsageException):
             run_dbt(["compile", "--select", "first_model", "--inline", "select 1 as id"])
 

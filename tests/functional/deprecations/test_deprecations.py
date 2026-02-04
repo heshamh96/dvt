@@ -184,7 +184,7 @@ class TestProjectFlagsMovedDeprecation:
             "name": "test",
             "profile": "test",
         }
-        write_file(yaml.safe_dump(project_config), project_root, "dvt_project.yml")
+        write_file(yaml.safe_dump(project_config), project_root, "dbt_project.yml")
         return project_config
 
     @pytest.fixture(scope="class")
@@ -198,7 +198,7 @@ class TestProjectFlagsMovedDeprecation:
         _, logs = run_dbt_and_capture(["parse"])
 
         assert (
-            "User config should be moved from the 'config' key in profiles.yml to the 'flags' key in dvt_project.yml."
+            "User config should be moved from the 'config' key in profiles.yml to the 'flags' key in dbt_project.yml."
             in logs
         )
         assert "project-flags-moved" in deprecations.active_deprecations
@@ -212,7 +212,7 @@ class TestProjectFlagsMovedDeprecationQuiet(TestProjectFlagsMovedDeprecation):
         _, logs = run_dbt_and_capture(["--quiet", "parse"])
 
         assert (
-            "User config should be moved from the 'config' key in profiles.yml to the 'flags' key in dvt_project.yml."
+            "User config should be moved from the 'config' key in profiles.yml to the 'flags' key in dbt_project.yml."
             not in logs
         )
         assert "project-flags-moved" in deprecations.active_deprecations
@@ -233,7 +233,7 @@ class TestProjectFlagsMovedDeprecationWarnErrorOptions(TestProjectFlagsMovedDepr
             ["--warn-error-options", "{'silence': ['ProjectFlagsMovedDeprecation']}", "parse"]
         )
         assert (
-            "User config should be moved from the 'config' key in profiles.yml to the 'flags' key in dvt_project.yml."
+            "User config should be moved from the 'config' key in profiles.yml to the 'flags' key in dbt_project.yml."
             not in logs
         )
 

@@ -145,7 +145,7 @@ class TestWarnErrorOptionsFromProject:
     @pytest.fixture(scope="function")
     def clear_project_flags(self, project_root) -> None:
         flags = {"flags": {}}
-        update_config_file(flags, project_root, "dvt_project.yml")
+        update_config_file(flags, project_root, "dbt_project.yml")
 
     def test_can_silence(
         self, project, clear_project_flags, project_root, catcher: EventCatcher, runner: dvtRunner
@@ -154,7 +154,7 @@ class TestWarnErrorOptionsFromProject:
         assert_deprecation_warning(result, catcher)
 
         silence_options = {"flags": {"warn_error_options": {"silence": ["DeprecatedModel"]}}}
-        update_config_file(silence_options, project_root, "dvt_project.yml")
+        update_config_file(silence_options, project_root, "dbt_project.yml")
 
         catcher.flush()
         result = runner.invoke(["run"])
@@ -170,7 +170,7 @@ class TestWarnErrorOptionsFromProject:
         warn_error_options: Dict[str, Any] = {
             "flags": {"warn_error_options": {"error": ["DeprecatedModel"]}}
         }
-        update_config_file(warn_error_options, project_root, "dvt_project.yml")
+        update_config_file(warn_error_options, project_root, "dbt_project.yml")
 
         catcher.flush()
         result = runner.invoke(["run"])
@@ -179,7 +179,7 @@ class TestWarnErrorOptionsFromProject:
         warn_error_options = {
             "flags": {"warn_error_options": {"error": "all", "warn": ["DeprecationsSummary"]}}
         }
-        update_config_file(warn_error_options, project_root, "dvt_project.yml")
+        update_config_file(warn_error_options, project_root, "dbt_project.yml")
 
         catcher.flush()
         result = runner.invoke(["run"])
@@ -191,7 +191,7 @@ class TestWarnErrorOptionsFromProject:
         warn_error_options: Dict[str, Any] = {
             "flags": {"warn_error_options": {"error": "all", "warn": ["DeprecationsSummary"]}}
         }
-        update_config_file(warn_error_options, project_root, "dvt_project.yml")
+        update_config_file(warn_error_options, project_root, "dbt_project.yml")
         result = runner.invoke(["run"])
         assert_deprecation_error(result)
 
@@ -203,7 +203,7 @@ class TestWarnErrorOptionsFromProject:
                 }
             }
         }
-        update_config_file(warn_error_options, project_root, "dvt_project.yml")
+        update_config_file(warn_error_options, project_root, "dbt_project.yml")
 
         catcher.flush()
         result = runner.invoke(["run"])
@@ -213,7 +213,7 @@ class TestWarnErrorOptionsFromProject:
         self, project, clear_project_flags, project_root, runner: dvtRunner
     ) -> None:
         warn_error_options = {"flags": {"warn_error_options": {"include": "all", "error": "all"}}}
-        update_config_file(warn_error_options, project_root, "dvt_project.yml")
+        update_config_file(warn_error_options, project_root, "dbt_project.yml")
         result = runner.invoke(["run"])
         assert not result.success
         assert result.exception is not None
@@ -231,7 +231,7 @@ class TestWarnErrorOptionsFromProject:
                 }
             }
         }
-        update_config_file(warn_error_options, project_root, "dvt_project.yml")
+        update_config_file(warn_error_options, project_root, "dbt_project.yml")
         result = runner.invoke(["run"])
         assert not result.success
         assert result.exception is not None
@@ -256,7 +256,7 @@ class TestEmptyWarnError:
                 },
             }
         }
-        update_config_file(project_flags, project.project_root, "dvt_project.yml")
+        update_config_file(project_flags, project.project_root, "dbt_project.yml")
         run_dbt(["run"])
         flags = get_flags()
         assert flags.warn_error_options.silence == ["TestsConfigDeprecation"]
@@ -301,7 +301,7 @@ class TestRequireAllWarningsHandledByWarnErrorBehaviorFlag:
                 "require_all_warnings_handled_by_warn_error": False,
             }
         }
-        update_config_file(project_flags, project.project_root, "dvt_project.yml")
+        update_config_file(project_flags, project.project_root, "dbt_project.yml")
         dvt_runner.invoke(["run", "--warn-error"])
 
         assert len(microbatch_warning_catcher.caught_events) == 1
@@ -318,7 +318,7 @@ class TestRequireAllWarningsHandledByWarnErrorBehaviorFlag:
                 "require_all_warnings_handled_by_warn_error": True,
             }
         }
-        update_config_file(project_flags, project.project_root, "dvt_project.yml")
+        update_config_file(project_flags, project.project_root, "dbt_project.yml")
         dvt_runner.invoke(["run", "--warn-error", "--log-format", "json"])
 
         assert len(microbatch_warning_catcher.caught_events) == 0

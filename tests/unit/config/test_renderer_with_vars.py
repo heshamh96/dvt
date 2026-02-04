@@ -1,4 +1,4 @@
-"""Unit tests for rendering dvt_project.yml with vars without defaults."""
+"""Unit tests for rendering dbt_project.yml with vars without defaults."""
 
 import pytest
 

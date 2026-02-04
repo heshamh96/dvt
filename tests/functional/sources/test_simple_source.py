@@ -191,6 +191,6 @@ class TestUnquotedSources(SuccessfulSourcesTest):
                 "database": False,
             }
         }
-        update_config_file(new_quoting_config, project.project_root, "dvt_project.yml")
+        update_config_file(new_quoting_config, project.project_root, "dbt_project.yml")
         self.run_dbt_with_vars(project, ["run"])
         self.run_dbt_with_vars(project, ["docs", "generate"])

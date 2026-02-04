@@ -59,7 +59,7 @@ class TestDisabledConfigYamlLevelEnabledMetric:
             run_dbt(["parse"])
 
 
-# Test disabling semantic model config but not metric config in dvt_project.yml
+# Test disabling semantic model config but not metric config in dbt_project.yml
 class TestMismatchesConfigProjectLevel:
     @pytest.fixture(scope="class")
     def models(self):
@@ -95,7 +95,7 @@ class TestMismatchesConfigProjectLevel:
                 }
             }
         }
-        update_config_file(new_enabled_config, project.project_root, "dvt_project.yml")
+        update_config_file(new_enabled_config, project.project_root, "dbt_project.yml")
         with pytest.raises(
             ParsingError,
             match="The measure `people` is referenced on disabled semantic model `semantic_people`.",
@@ -103,7 +103,7 @@ class TestMismatchesConfigProjectLevel:
             run_dbt(["parse"])
 
 
-# Test disabling semantic model and metric configs in dvt_project.yml
+# Test disabling semantic model and metric configs in dbt_project.yml
 class TestConfigProjectLevel:
     @pytest.fixture(scope="class")
     def models(self):
@@ -145,7 +145,7 @@ class TestConfigProjectLevel:
                 }
             },
         }
-        update_config_file(new_group_config, project.project_root, "dvt_project.yml")
+        update_config_file(new_group_config, project.project_root, "dbt_project.yml")
         run_dbt(["parse"])
         manifest = get_manifest(project.project_root)
 
@@ -169,7 +169,7 @@ class TestConfigProjectLevel:
                 }
             },
         }
-        update_config_file(new_enabled_config, project.project_root, "dvt_project.yml")
+        update_config_file(new_enabled_config, project.project_root, "dbt_project.yml")
         run_dbt(["parse"])
         manifest = get_manifest(project.project_root)
 
