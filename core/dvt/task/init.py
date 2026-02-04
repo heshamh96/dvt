@@ -26,10 +26,13 @@ from dvt.events.types import (
     StarterProjectPath,
 )
 from dvt.config.user_config import (
+    append_profile_to_computes_yml,
     create_default_computes_yml,
     create_dvt_data_dir,
     init_mdm_db,
 )
+from dvt.constants import DBT_PROJECT_FILE_NAME
+from dvt.config.project import get_project_yml_path
 from dvt.flags import get_flags
 from dvt.task.base import BaseTask, move_to_nearest_project_dir
 from dvt.version import _get_adapter_plugin_names
@@ -149,10 +152,11 @@ class InitTask(BaseTask):
         return target
 
     def get_profile_name_from_current_project(self) -> str:
-        """Reads dvt_project.yml in the current directory to retrieve the
-        profile name.
+        """Reads dbt_project.yml (or dvt_project.yml) in the current directory
+        to retrieve the profile name.
         """
-        with open("dvt_project.yml") as f:
+        project_yml_path = get_project_yml_path(os.getcwd())
+        with open(project_yml_path) as f:
             dbt_project = yaml.safe_load(f)
         return dbt_project["profile"]
 
@@ -215,7 +219,7 @@ class InitTask(BaseTask):
         return profile_name in raw_profiles
 
     def check_if_can_write_profile(self, profile_name: Optional[str] = None) -> bool:
-        """Using either a provided profile name or that specified in dvt_project.yml,
+        """Using either a provided profile name or that specified in dbt_project.yml,
         check if the profile already exists in profiles.yml, and if so ask the
         user whether to proceed and overwrite it."""
         profiles_file = Path(get_flags().PROFILES_DIR) / Path("profiles.yml")
@@ -299,9 +303,9 @@ class InitTask(BaseTask):
     def create_new_project(self, project_name: str, profile_name: str):
         self.copy_starter_repo(project_name)
         os.chdir(project_name)
-        with open("dvt_project.yml", "r") as f:
+        with open(DBT_PROJECT_FILE_NAME, "r") as f:
             content = f"{f.read()}".format(project_name=project_name, profile_name=profile_name)
-        with open("dvt_project.yml", "w") as f:
+        with open(DBT_PROJECT_FILE_NAME, "w") as f:
             f.write(content)
         fire_event(
             ProjectCreated(
@@ -328,7 +332,7 @@ class InitTask(BaseTask):
             # applicable to this case
             if self.args.profile:
                 raise DbtRuntimeError(
-                    msg="Can not init existing project with specified profile, edit dvt_project.yml instead"
+                    msg="Can not init existing project with specified profile, edit dbt_project.yml instead"
                 )
 
             # When dvt init is run inside an existing project,
@@ -336,6 +340,7 @@ class InitTask(BaseTask):
             if not self.args.skip_profile_setup:
                 profile_name = self.get_profile_name_from_current_project()
                 self.setup_profile(profile_name)
+                append_profile_to_computes_yml(profile_name, str(get_flags().PROFILES_DIR))
         else:
             # When dvt init is run outside of an existing project,
             # create a new project and set up the user's profile.
@@ -362,3 +367,4 @@ class InitTask(BaseTask):
                 # Ask for adapter only if skip_profile_setup flag is not provided
                 if not self.args.skip_profile_setup:
                     self.setup_profile(profile_name)
+                    append_profile_to_computes_yml(profile_name, str(get_flags().PROFILES_DIR))

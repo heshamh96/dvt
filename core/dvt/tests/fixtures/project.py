@@ -189,9 +189,10 @@ def project_config_update():
 
 
 # Combines the project_config_update dictionary with project_config defaults to
-# produce a project_yml config and write it out as dvt_project.yml
+# produce a project_yml config and write it out as dbt_project.yml
 @pytest.fixture(scope="class")
 def dbt_project_yml(project_root, project_config_update):
+    from dvt.constants import DBT_PROJECT_FILE_NAME
     project_config = {
         "name": "test",
         "profile": "test",
@@ -203,7 +204,7 @@ def dbt_project_yml(project_root, project_config_update):
         elif isinstance(project_config_update, str):
             updates = yaml.safe_load(project_config_update)
             project_config.update(updates)
-    write_file(yaml.safe_dump(project_config), project_root, "dvt_project.yml")
+    write_file(yaml.safe_dump(project_config), project_root, DBT_PROJECT_FILE_NAME)
     return project_config
 
 
@@ -288,7 +289,7 @@ def adapter(
     clean_up_logging,
     dbt_project_yml,
 ):
-    # The profiles.yml and dvt_project.yml should already be written out
+    # The profiles.yml and dbt_project.yml should already be written out
     args = Namespace(
         profiles_dir=str(profiles_root),
         project_dir=str(project_root),

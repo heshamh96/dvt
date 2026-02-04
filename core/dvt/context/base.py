@@ -247,7 +247,7 @@ class BaseContext(metaclass=ContextMeta):
 
     @contextproperty()
     def var(self) -> Var:
-        """Variables can be passed from your `dvt_project.yml` file into models
+        """Variables can be passed from your `dbt_project.yml` file into models
         during compilation. These variables are useful for configuring packages
         for deployment in multiple environments, or defining values that should
         be used across multiple models within a package.
@@ -268,13 +268,13 @@ class BaseContext(metaclass=ContextMeta):
             }
 
         To supply a variable to a given model, add one or more `vars`
-        dictionaries to the `models` config in your `dvt_project.yml` file.
+        dictionaries to the `models` config in your `dbt_project.yml` file.
         These `vars` are in-scope for all models at or below where they are
         defined, so place them where they make the most sense. Below are three
         different placements of the `vars` dict, all of which will make the
         `my_model` model compile.
 
-        > dvt_project.yml:
+        > dbt_project.yml:
 
             # 1) scoped at the model level
             models:

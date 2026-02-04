@@ -319,9 +319,9 @@ class SourcePatcher:
         precedence_tags = self.calculate_tags_from_raw_target(target)
         precedence_configs["tags"] = precedence_tags
 
-        # Because freshness is a "object" config, the freshness from the dvt_project.yml and the freshness
+        # Because freshness is a "object" config, the freshness from the dbt_project.yml and the freshness
         # from the schema file _won't_ get merged by this process. The result will be that the freshness will
-        # come from the schema file if provided, and if not, it'll fall back to the dvt_project.yml freshness.
+        # come from the schema file if provided, and if not, it'll fall back to the dbt_project.yml freshness.
         return generator.calculate_node_config(
             config_call_dict={},
             fqn=target.fqn,

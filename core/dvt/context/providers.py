@@ -847,7 +847,7 @@ class RuntimeSourceResolver(BaseSourceResolver):
                 disabled=(isinstance(target_source, Disabled)),
             )
 
-        # Source quoting does _not_ respect global configs in dvt_project.yml, as documented here:
+        # Source quoting does _not_ respect global configs in dbt_project.yml, as documented here:
         # https://docs.getdbt.com/reference/project-configs/quoting
         # Use an object with an empty quoting field to bypass any settings in self.
         class SourceQuotingBaseConfig:
@@ -1010,7 +1010,7 @@ class RuntimeFunctionResolver(BaseFunctionResolver):
                 disabled=(isinstance(target_function, Disabled)),
             )
 
-        # Source quoting does _not_ respect global configs in dvt_project.yml, as documented here:
+        # Source quoting does _not_ respect global configs in dbt_project.yml, as documented here:
         # https://docs.getdbt.com/reference/project-configs/quoting
         # Use an object with an empty quoting field to bypass any settings in self.
         class SourceQuotingBaseConfig:
@@ -1718,7 +1718,7 @@ class ProviderContext(ManifestContext):
                     return_value if var in env else DEFAULT_ENV_PLACEHOLDER
                 )
 
-                # hooks come from dvt_project.yml which doesn't have a real file_id
+                # hooks come from dbt_project.yml which doesn't have a real file_id
                 if self.model.file_id in self.manifest.files:
                     source_file = self.manifest.files[self.model.file_id]
                     # Schema files should never get here
@@ -1862,7 +1862,7 @@ class ModelContext(ProviderContext):
             |  {{this.name}}   | table            |
             |------------------|------------------|
 
-        Here's an example of how to use `this` in `dvt_project.yml` to grant
+        Here's an example of how to use `this` in `dbt_project.yml` to grant
         select rights on a table to a different db user.
 
         > example.yml:

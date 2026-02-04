@@ -13,7 +13,7 @@ The parsing stage of dbt produces:
 
 The macro manifest takes the place of the full-fledged Manifest and contains only macros, which are used for resolving tests during parsing. The 'adapter' code retains a MacroManifest, while the mainline parsing code will have a full manifest. The class MacroParser assists in this process.
 
-2. Loads all internal 'projects' (i.e. has a `dvt_project.yml`) and all projects in the project path.
+2. Loads all internal 'projects' (i.e. has a `dbt_project.yml`) and all projects in the project path.
 
 3. Create a ManifestLoader object from the project dependencies and the current config.
 
@@ -36,7 +36,7 @@ The macro manifest takes the place of the full-fledged Manifest and contains onl
 
 ## Parse the project files
 
-There are several parser-type objects. Each "parser" gets a list of of matching files specified by directory and ('dvt_project.yml', '*.sql', '*.yml', *.csv, or *.md)
+There are several parser-type objects. Each "parser" gets a list of of matching files specified by directory and ('dbt_project.yml', '*.sql', '*.yml', *.csv, or *.md)
 
 ### ModelParser
 

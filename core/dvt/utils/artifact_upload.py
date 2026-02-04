@@ -94,13 +94,13 @@ def upload_artifacts(project_dir, target_path, command):
             project_dir, version_check=False, profile=UnsetProfile(), cli_vars=None
         )
         if not project.dbt_cloud or "tenant_hostname" not in project.dbt_cloud:
-            raise DvtProjectError("dbt_cloud.tenant_hostname not found in dvt_project.yml")
+            raise DvtProjectError("dbt_cloud.tenant_hostname not found in dbt_project.yml")
         tenant_hostname = project.dbt_cloud["tenant_hostname"]
         if not tenant_hostname:
-            raise DvtProjectError("dbt_cloud.tenant_hostname is empty in dvt_project.yml")
+            raise DvtProjectError("dbt_cloud.tenant_hostname is empty in dbt_project.yml")
     except Exception as e:
         raise DvtProjectError(
-            f"Error reading dbt_cloud.tenant_hostname from dvt_project.yml: {str(e)}"
+            f"Error reading dbt_cloud.tenant_hostname from dbt_project.yml: {str(e)}"
         )
 
     config = ArtifactUploadConfig(tenant_hostname=tenant_hostname)

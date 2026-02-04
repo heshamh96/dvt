@@ -44,8 +44,8 @@ Methods available in parent contexts are also available in child contexts.
 
 Contexts for rendering "special" `.yml` (configuration) files:
 - `SecretContext`: Supports "secret" env vars, which are prefixed with `DBT_ENV_SECRET_`. Used for rendering in `profiles.yml` and `packages.yml` ONLY. Secrets defined elsewhere will raise explicit errors.
-- `TargetContext`: The same as `Base`, plus `target` (connection profile). Used most notably in `dvt_project.yml` and `selectors.yml`.
+- `TargetContext`: The same as `Base`, plus `target` (connection profile). Used most notably in `dbt_project.yml` and `selectors.yml`.
 
 Contexts for other `.yml` files in the project:
-- `SchemaYamlContext`: Supports `vars` declared on the CLI and in `dvt_project.yml`. Does not support custom macros, beyond `var()` + `env_var()` methods. Used for all `.yml` files, to define properties and configuration.
+- `SchemaYamlContext`: Supports `vars` declared on the CLI and in `dbt_project.yml`. Does not support custom macros, beyond `var()` + `env_var()` methods. Used for all `.yml` files, to define properties and configuration.
 - `DocsRuntimeContext`: Standard `.yml` file context, plus `doc()` method (with all `docs` blocks in scope). Used to resolve `description` properties.

@@ -1,13 +1,16 @@
 from pathlib import Path
 
-from dvt.config.project import PartialProject
+from dvt.config.project import PartialProject, project_yml_path_if_exists
 from dvt.exceptions import DvtProjectError
 
 
 def default_project_dir() -> Path:
     paths = list(Path.cwd().parents)
     paths.insert(0, Path.cwd())
-    return next((x for x in paths if (x / "dvt_project.yml").exists()), Path.cwd())
+    return next(
+        (x for x in paths if project_yml_path_if_exists(str(x)) is not None),
+        Path.cwd(),
+    )
 
 
 def default_profiles_dir() -> Path:
@@ -15,7 +18,7 @@ def default_profiles_dir() -> Path:
 
 
 def default_log_path(project_dir: Path, verify_version: bool = False) -> Path:
-    """If available, derive a default log path from dvt_project.yml. Otherwise, default to "logs".
+    """If available, derive a default log path from dbt_project.yml. Otherwise, default to "logs".
     Known limitations:
     1. Using PartialProject here, so no jinja rendering of log-path.
     2. Programmatic invocations of the cli via dvtRunner may pass a Project object directly,

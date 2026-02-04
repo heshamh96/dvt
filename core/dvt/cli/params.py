@@ -534,7 +534,7 @@ sync_python_env = _create_option_and_track_env_var(
     envvar=None,
     default=None,
     type=PathWithExpandUser(exists=True),
-    help="Absolute path to the Python environment (venv) to use. If not set, sync looks for .venv, venv, or env inside the project directory.",
+    help='Absolute path to the Python environment (venv) to use. Quote the path, e.g. --python-env "$(pwd)/.venv". If not set, sync looks for .venv, venv, or env inside the project directory, or prompts interactively.',
 )
 
 quiet = _create_option_and_track_env_var(

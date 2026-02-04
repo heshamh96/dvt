@@ -240,6 +240,20 @@
         }
       ]
     },
+    "require-adapters": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Adapter type to version spec, e.g. {\"postgres\": \">=1.0.0\"}"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "restrict-access": {
       "type": [
         "boolean",

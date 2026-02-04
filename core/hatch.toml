@@ -128,6 +128,7 @@ clean = [
     "rm -rf .eggs/",
     "rm -rf build/",
     "rm -rf dvt.egg-info/",
+    "rm -f dbt_project.yml",
     "rm -f dvt_project.yml",
     "rm -rf dist/",
     "find . -type f -name '*.pyc' -delete",

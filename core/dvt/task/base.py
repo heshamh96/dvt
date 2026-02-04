@@ -24,7 +24,7 @@ from dvt.cli.flags import Flags
 from dvt.compilation import Compiler
 from dvt.config import RuntimeConfig
 from dvt.config.profile import read_profile
-from dvt.constants import DBT_PROJECT_FILE_NAME
+from dvt.constants import DBT_PROJECT_FILE_NAME, DVT_PROJECT_FILE_NAME
 from dvt.contracts.graph.manifest import Manifest
 from dvt.events.types import (
     CatchableExceptionOnRun,
@@ -87,24 +87,22 @@ def get_nearest_project_dir(project_dir: Optional[str]) -> Path:
     # but don't look at parent directories.
     if project_dir:
         cur_dir = Path(project_dir)
-        project_file = Path(project_dir) / DBT_PROJECT_FILE_NAME
-        if project_file.is_file():
-            return cur_dir
-        else:
-            raise dbt_common.exceptions.DbtRuntimeError(
-                "fatal: Invalid --project-dir flag. Not a dvt project. "
-                "Missing dvt_project.yml file"
-            )
+        for name in (DBT_PROJECT_FILE_NAME, DVT_PROJECT_FILE_NAME):
+            if (cur_dir / name).is_file():
+                return cur_dir
+        raise dbt_common.exceptions.DbtRuntimeError(
+            "fatal: Invalid --project-dir flag. Not a dvt project. "
+            "Missing project file (dbt_project.yml or dvt_project.yml)"
+        )
 
     cur_dir = Path.cwd()
-    project_file = cur_dir / DBT_PROJECT_FILE_NAME
-    if project_file.is_file():
-        return cur_dir
-    else:
-        raise dbt_common.exceptions.DbtRuntimeError(
-            "fatal: Not a dvt project (or any of the parent directories). "
-            "Missing dvt_project.yml file"
-        )
+    for name in (DBT_PROJECT_FILE_NAME, DVT_PROJECT_FILE_NAME):
+        if (cur_dir / name).is_file():
+            return cur_dir
+    raise dbt_common.exceptions.DbtRuntimeError(
+        "fatal: Not a dvt project (or any of the parent directories). "
+        "Missing project file (dbt_project.yml or dvt_project.yml)"
+    )
 
 
 def move_to_nearest_project_dir(project_dir: Optional[str]) -> Path:

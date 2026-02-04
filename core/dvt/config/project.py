@@ -18,6 +18,7 @@ from dvt.config.utils import normalize_warn_error_options
 from dvt.constants import (
     DBT_PROJECT_FILE_NAME,
     DEPENDENCIES_FILE_NAME,
+    DVT_PROJECT_FILE_NAME,
     PACKAGE_LOCK_HASH_KEY,
     PACKAGES_FILE_NAME,
 )
@@ -77,12 +78,11 @@ Validator Error:
 {error}
 """
 
-# Adapter packages (e.g. dbt-postgres) use dbt_project.yml; DVT projects use dvt_project.yml
-DBT_COMPAT_PROJECT_FILE_NAME = "dbt_project.yml"
+# Primary project file is dbt_project.yml; dvt_project.yml is fallback for backward compatibility.
 
 MISSING_DBT_PROJECT_ERROR = """\
-No {DBT_PROJECT_FILE_NAME} or {DBT_COMPAT_PROJECT_FILE_NAME} found at expected path {path}
-Verify that each entry within packages.yml (and their transitive dependencies) contains a project file (dvt_project.yml or dbt_project.yml).
+No {DBT_PROJECT_FILE_NAME} or {DVT_PROJECT_FILE_NAME} found at expected path {path}
+Verify that each entry within packages.yml (and their transitive dependencies) contains a project file (dbt_project.yml or dvt_project.yml).
 """
 
 
@@ -195,9 +195,9 @@ def value_or(value: Optional[T], default: T) -> T:
 
 
 def get_project_yml_path(project_root: str) -> str:
-    """Return path to project yaml (dvt_project.yml or dbt_project.yml). Raises if neither exists."""
+    """Return path to project yaml (dbt_project.yml or dvt_project.yml). Raises if neither exists."""
     project_root = os.path.normpath(project_root)
-    for name in (DBT_PROJECT_FILE_NAME, DBT_COMPAT_PROJECT_FILE_NAME):
+    for name in (DBT_PROJECT_FILE_NAME, DVT_PROJECT_FILE_NAME):
         p = os.path.join(project_root, name)
         if path_exists(p):
             return p
@@ -205,9 +205,19 @@ def get_project_yml_path(project_root: str) -> str:
         MISSING_DBT_PROJECT_ERROR.format(
             path=project_root,
             DBT_PROJECT_FILE_NAME=DBT_PROJECT_FILE_NAME,
-            DBT_COMPAT_PROJECT_FILE_NAME=DBT_COMPAT_PROJECT_FILE_NAME,
+            DVT_PROJECT_FILE_NAME=DVT_PROJECT_FILE_NAME,
         )
     )
+
+
+def project_yml_path_if_exists(project_root: str) -> Optional[str]:
+    """Return path to project yaml if one exists, else None. Does not raise."""
+    project_root = os.path.normpath(project_root)
+    for name in (DBT_PROJECT_FILE_NAME, DVT_PROJECT_FILE_NAME):
+        p = os.path.join(project_root, name)
+        if path_exists(p):
+            return p
+    return None
 
 
 def load_raw_project(project_root: str, validate: bool = False) -> Dict[str, Any]:
@@ -832,19 +842,17 @@ class Project:
 def read_project_flags(project_dir: str, profiles_dir: str) -> ProjectFlags:
     try:
         project_flags: Dict[str, Any] = {}
-        # Read project_flags from dvt_project.yml first
-        # Flags are instantiated before the project, so we don't
-        # want to throw an error for non-existence of dvt_project.yml here
-        # because it breaks things.
+        # Read project_flags from project file (dbt_project.yml or dvt_project.yml).
+        # Flags are instantiated before the project, so we don't want to throw for
+        # non-existence here.
         project_root = os.path.normpath(project_dir)
-        project_yaml_filepath = os.path.join(project_root, DBT_PROJECT_FILE_NAME)
-        if path_exists(project_yaml_filepath):
+        if project_yml_path_if_exists(project_root):
             try:
                 project_dict = load_raw_project(project_root)
                 if "flags" in project_dict:
                     project_flags = project_dict.pop("flags")
             except Exception:
-                # This is probably a yaml load error.The error will be reported
+                # This is probably a yaml load error. The error will be reported
                 # later, when the project loads.
                 pass
 

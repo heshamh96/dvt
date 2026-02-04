@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Optional
 
 import pytz
@@ -9,6 +10,23 @@ from dvt.events import ALL_EVENT_NAMES
 from dvt.exceptions import OptionNotYamlDictError, ValidationError
 from dbt_common.exceptions import DbtValidationError
 from dbt_common.helper_types import WarnErrorOptionsV2
+
+
+class PathWithExpandUser(ParamType):
+    """Click Path type that expands ~ before resolving/exists check."""
+
+    name = "path"
+
+    def __init__(self, exists: bool = True):
+        self.exists = exists
+
+    def convert(self, value, param, ctx):
+        if value is None:
+            return value
+        path = Path(value).expanduser().resolve()
+        if self.exists and not path.exists():
+            self.fail(f"Path '{path}' does not exist.", param, ctx)
+        return path
 
 
 class YAML(ParamType):

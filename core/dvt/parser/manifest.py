@@ -775,10 +775,10 @@ class ManifestLoader:
             )
             total_parsed_path_count += project_parsed_path_count
 
-        # HookParser doesn't run from loaded files, just dvt_project.yml,
+        # HookParser doesn't run from loaded files, just the project file (dbt_project.yml),
         # so do separately
         # This shouldn't need to be parsed again if we're starting from
-        # a saved manifest, because that won't be allowed if dvt_project.yml
+        # a saved manifest, because that won't be allowed if the project file
         # changed, but leave for now.
         if not self.partially_parsing and HookParser in parser_types:
             hook_parser = HookParser(project, self.manifest, self.root_project)
@@ -911,7 +911,7 @@ class ManifestLoader:
             != manifest.state_check.project_env_vars_hash
         ):
             fire_event(
-                UnableToPartialParse(reason="env vars used in dvt_project.yml have changed")
+                UnableToPartialParse(reason="env vars used in dbt_project.yml have changed")
             )
             valid = False
             reparse_reason = ReparseReason.proj_env_vars_changed
@@ -1071,7 +1071,7 @@ class ManifestLoader:
         connection_keys.sort()
         profile_hash = FileHash.from_contents(pprint.pformat(connection_keys))
 
-        # Create a FileHashes for project yml for all dependencies (dvt_project.yml or dbt_project.yml)
+        # Create a FileHashes for project yml for all dependencies (dbt_project.yml or dvt_project.yml)
         project_hashes = {}
         for name, project in all_projects.items():
             path = get_project_yml_path(project.project_root)

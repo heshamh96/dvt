@@ -228,8 +228,8 @@ def jsonschema_validate(schema: Dict[str, Any], json: Dict[str, Any], file_path:
                                 file=file_path,
                                 key_path=key_path,
                             )
-            # dvt_project.yml configs
-            elif "dvt_project.yml" in file_path and error_path[0] in _HIERARCHICAL_CONFIG_KEYS:
+            # dbt_project.yml configs
+            elif "dbt_project.yml" in file_path and error_path[0] in _HIERARCHICAL_CONFIG_KEYS:
                 for sub_error in sub_errors:
                     if isinstance(sub_error, ValidationError) and sub_error.validator == "type":
                         # Only raise type-errors if they are indicating leaf config without a plus prefix

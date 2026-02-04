@@ -867,7 +867,7 @@ class NodePatchParser(PatchParser[NodeTarget, ParsedNodePatch], Generic[NodeTarg
                         f"Found {len(found_nodes)} matching disabled nodes for "
                         f"{resource_type} '{patch.name}'. Multiple nodes for the same "
                         "unique id cannot be enabled in the schema file. They must be enabled "
-                        "in `dvt_project.yml` or in the sql files."
+                        "in `dbt_project.yml` or in the sql files."
                     )
                     raise ParsingError(msg)
 
@@ -1005,7 +1005,7 @@ class ModelPatchParser(NodePatchParser[UnparsedModelUpdate]):
                                 f"Found {len(found_nodes)} matching disabled nodes for "
                                 f"{resource_type} '{target.name}'. Multiple nodes for the same "
                                 "unique id cannot be enabled in the schema file. They must be enabled "
-                                "in `dvt_project.yml` or in the sql files."
+                                "in `dbt_project.yml` or in the sql files."
                             )
                             raise ParsingError(msg)
                         # We know that there's only one node in the disabled list because

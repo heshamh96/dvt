@@ -157,7 +157,7 @@ class BaseContextConfigGenerator(Generic[T]):
         result = self.initial_result(resource_type=resource_type, base=base)
 
         # builds the config from what was specified in the runtime_config, which generally
-        # comes from the project's dvt_project.yml file.
+        # comes from the project's dbt_project.yml file.
         project_configs = self._project_configs(own_config, fqn, resource_type)
         for fqn_config in project_configs:
             result = self._update_from_config(result, fqn_config)
@@ -220,7 +220,7 @@ class ContextConfigGenerator(BaseContextConfigGenerator[C]):
 
     def translate_hook_names(self, project_dict):
         # This is a kind of kludge because the fix for #6411 specifically allowed misspelling
-        # the hook field names in dvt_project.yml, which only ever worked because we didn't
+        # the hook field names in dbt_project.yml, which only ever worked because we didn't
         # run validate on the dbt_project configs.
         if "pre_hook" in project_dict:
             project_dict["pre-hook"] = project_dict.pop("pre_hook")

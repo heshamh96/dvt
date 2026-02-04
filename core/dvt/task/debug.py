@@ -23,6 +23,8 @@ from dvt.config.user_config import COMPUTES_PATH, DVT_HOME, MDM_DB_PATH
 from dvt.events.types import DebugCmdOut, DebugCmdResult, OpenCommand
 from dvt.links import ProfileConfigDocs
 from dvt.mp_context import get_mp_context
+from dvt.config.project import project_yml_path_if_exists
+from dvt.constants import DBT_PROJECT_FILE_NAME
 from dvt.task.base import BaseTask, get_nearest_project_dir
 from dvt.version import get_installed_version
 from dbt_common.events.format import pluralize
@@ -30,12 +32,12 @@ from dbt_common.events.functions import fire_event
 from dbt_common.ui import green, red
 
 ONLY_PROFILE_MESSAGE = """
-A `dvt_project.yml` file was not found in this directory.
+A project file (dbt_project.yml or dvt_project.yml) was not found in this directory.
 Using the only profile `{}`.
 """.lstrip()
 
 MULTIPLE_PROFILE_MESSAGE = """
-A `dvt_project.yml` file was not found in this directory.
+A project file (dbt_project.yml or dvt_project.yml) was not found in this directory.
 dvt found the following profiles:
 {}
 
@@ -88,7 +90,10 @@ class DebugTask(BaseTask):
                 self.project_dir = args.project_dir
             else:
                 self.project_dir = Path.cwd()
-        self.project_path = os.path.join(self.project_dir, "dvt_project.yml")
+        path_if_exists = project_yml_path_if_exists(str(self.project_dir))
+        self.project_path = path_if_exists or os.path.join(
+            self.project_dir, DBT_PROJECT_FILE_NAME
+        )
         self.cli_vars: Dict[str, Any] = args.vars
 
         # set by _load_*
@@ -155,7 +160,7 @@ class DebugTask(BaseTask):
         load_profile_status: SubtaskStatus = self._load_profile()
         fire_event(DebugCmdOut(msg="Using profiles dir at {}".format(self.profiles_dir)))
         fire_event(DebugCmdOut(msg="Using profiles.yml file at {}".format(self.profile_path)))
-        fire_event(DebugCmdOut(msg="Using dvt_project.yml file at {}".format(self.project_path)))
+        fire_event(DebugCmdOut(msg="Using project file at {}".format(self.project_path)))
         if load_profile_status.run_status == RunStatus.Success:
             if self.profile is None:
                 raise dbt_common.exceptions.DbtInternalError(
@@ -301,7 +306,7 @@ class DebugTask(BaseTask):
         if self.raw_profile_data:
             profiles = [k for k in self.raw_profile_data if k != "config"]
             if project_profile is None:
-                summary_message = "Could not load dvt_project.yml\n"
+                summary_message = "Could not load project file (dbt_project.yml or dvt_project.yml)\n"
             elif len(profiles) == 0:
                 summary_message = "The profiles.yml has no profiles\n"
             elif len(profiles) == 1:
@@ -504,11 +509,14 @@ class DebugTask(BaseTask):
         """Display the current project's default compute only (from project vars or 'default')."""
         fire_event(DebugCmdOut(msg="\n--- Compute (current project default only) ---"))
         compute_name = "default"
+        profile_name = "default"
         if os.path.exists(self.project_path):
             try:
                 partial = PartialProject.from_project_root(str(self.project_dir), verify_version=False)
                 vars_config = (partial.project_dict or {}).get("vars") or {}
                 compute_name = vars_config.get("dvt_default_compute", "default")
+                renderer = DvtProjectYamlRenderer(None, self.cli_vars)
+                profile_name = partial.render_profile_name(renderer) or "default"
             except Exception:
                 pass
         computes_path = Path(self.profiles_dir) / "computes.yml" if self.profiles_dir else COMPUTES_PATH
@@ -523,7 +531,15 @@ class DebugTask(BaseTask):
             return
         try:
             raw = load_yaml_text(dbt_common.clients.system.load_file_contents(str(computes_path)))
-            all_computes = (raw or {}).get("computes") or {}
+            raw = raw or {}
+            # New structure: profile name -> { target: <name>, computes: { <name>: config } }
+            profile_block = raw.get(profile_name) if isinstance(raw.get(profile_name), dict) else None
+            if profile_block and "computes" in profile_block:
+                compute_name = profile_block.get("target", compute_name)
+                all_computes = profile_block.get("computes") or {}
+            else:
+                # Legacy flat: top-level "computes"
+                all_computes = raw.get("computes") or {}
         except Exception as e:
             fire_event(DebugCmdOut(msg=f"  Error reading computes.yml: {e}"))
             return
@@ -537,6 +553,8 @@ class DebugTask(BaseTask):
             return
         fire_event(DebugCmdOut(msg=f"\n  {compute_name} (project default):"))
         fire_event(DebugCmdOut(msg=f"    Type: {cfg.get('type', 'spark')}"))
+        if cfg.get("version"):
+            fire_event(DebugCmdOut(msg=f"    Version (pyspark): {cfg.get('version')}"))
         fire_event(DebugCmdOut(msg=f"    Master: {cfg.get('master', 'N/A')}"))
         for k, v in list((cfg.get("config") or {}).items())[:5]:
             fire_event(DebugCmdOut(msg=f"    {k}: {v}"))
@@ -647,7 +665,7 @@ class DebugTask(BaseTask):
     def test_configuration(self, profile_status_msg, project_status_msg):
         fire_event(DebugCmdOut(msg="Configuration:"))
         fire_event(DebugCmdOut(msg=f"  profiles.yml file [{profile_status_msg}]"))
-        fire_event(DebugCmdOut(msg=f"  dvt_project.yml file [{project_status_msg}]"))
+        fire_event(DebugCmdOut(msg=f"  project file (dbt_project.yml) [{project_status_msg}]"))
 
         # skip profile stuff if we can't find a profile name
         if self.profile_name is not None:

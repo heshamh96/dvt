@@ -182,7 +182,7 @@ class Profile(HasCredentials):
             NO_SUPPLIED_PROFILE_ERROR = """\
 dvt cannot run because no profile was specified for this dvt project.
 To specify a profile for this project, add a line like the this to
-your dvt_project.yml file:
+your dbt_project.yml file:
 
 profile: [profile name]
 

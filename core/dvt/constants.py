@@ -11,7 +11,8 @@ PIN_PACKAGE_URL = (
     "https://docs.getdbt.com/docs/package-management#section-specifying-package-versions"
 )
 
-DBT_PROJECT_FILE_NAME = "dvt_project.yml"
+DBT_PROJECT_FILE_NAME = "dbt_project.yml"
+DVT_PROJECT_FILE_NAME = "dvt_project.yml"  # fallback for backward compatibility
 PACKAGES_FILE_NAME = "packages.yml"
 DEPENDENCIES_FILE_NAME = "dependencies.yml"
 PACKAGE_LOCK_FILE_NAME = "package-lock.yml"

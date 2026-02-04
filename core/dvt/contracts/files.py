@@ -21,7 +21,7 @@ class ParseFileType(StrEnum):
     Seed = "seed"
     Documentation = "docs"
     Schema = "schema"
-    Hook = "hook"  # not a real filetype, from dvt_project.yml
+    Hook = "hook"  # not a real filetype, from dbt_project.yml
     Fixture = "fixture"
     Function = "function"
 

@@ -69,7 +69,7 @@ class HookSearcher(Iterable[HookBlock]):
 
 class HookParser(SimpleParser[HookBlock, HookNode]):
 
-    # Hooks are only in the project yml file (dvt_project.yml or dbt_project.yml for adapter packages)
+    # Hooks are only in the project yml file (dbt_project.yml or dvt_project.yml for adapter packages)
     def get_path(self) -> FilePath:
         # There ought to be an existing file object for this, but
         # until that is implemented use a dummy modification time

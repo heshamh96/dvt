@@ -248,6 +248,7 @@ class Project(dbtClassMixin):
     on_run_start: Optional[List[str]] = field(default_factory=list_str)
     on_run_end: Optional[List[str]] = field(default_factory=list_str)
     require_dbt_version: Optional[Union[List[str], str]] = None
+    require_adapters: Optional[Dict[str, str]] = None  # adapter type -> version spec, e.g. {"postgres": ">=1.0.0"}
     dispatch: List[Dict[str, Any]] = field(default_factory=list)
     models: Dict[str, Any] = field(default_factory=dict)
     seeds: Dict[str, Any] = field(default_factory=dict)
@@ -297,6 +298,7 @@ class Project(dbtClassMixin):
             "on_run_start": "on-run-start",
             "on_run_end": "on-run-end",
             "require_dbt_version": "require-dvt-version",
+            "require_adapters": "require-adapters",
             "query_comment": "query-comment",
             "restrict_access": "restrict-access",
             "semantic_models": "semantic-models",

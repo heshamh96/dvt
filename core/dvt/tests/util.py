@@ -616,13 +616,15 @@ def assert_message_in_logs(message: str, logs: str, expected_pass: bool = True):
 
 
 def get_project_config(project):
-    file_yaml = read_file(project.project_root, "dvt_project.yml")
+    from dvt.constants import DBT_PROJECT_FILE_NAME
+    file_yaml = read_file(project.project_root, DBT_PROJECT_FILE_NAME)
     return yaml.safe_load(file_yaml)
 
 
 def set_project_config(project, config):
+    from dvt.constants import DBT_PROJECT_FILE_NAME
     config_yaml = yaml.safe_dump(config)
-    write_file(config_yaml, project.project_root, "dvt_project.yml")
+    write_file(config_yaml, project.project_root, DBT_PROJECT_FILE_NAME)
 
 
 def get_model_file(project, relation: BaseRelation) -> str:

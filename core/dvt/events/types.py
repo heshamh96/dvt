@@ -287,7 +287,7 @@ class PackageInstallPathDeprecation(WarnLevel):
     def message(self) -> str:
         description = """\
         The default package install path has changed from `dbt_modules` to `dbt_packages`.
-        Please update `clean-targets` in `dvt_project.yml` and check `.gitignore` as well.
+        Please update `clean-targets` in `dbt_project.yml` and check `.gitignore` as well.
         Or, set `packages-install-path: dbt_modules` if you'd like to keep the current value.
         """
 
@@ -304,7 +304,7 @@ class ConfigSourcePathDeprecation(WarnLevel):
     def message(self) -> str:
         description = (
             f"The `{self.deprecated_path}` config has been renamed to `{self.exp_path}`. "
-            "Please update your `dvt_project.yml` configuration to reflect this change."
+            "Please update your `dbt_project.yml` configuration to reflect this change."
         )
 
         if require_event_names_in_deprecations():
@@ -320,7 +320,7 @@ class ConfigDataPathDeprecation(WarnLevel):
     def message(self) -> str:
         description = (
             f"The `{self.deprecated_path}` config has been renamed to `{self.exp_path}`. "
-            "Please update your `dvt_project.yml` configuration to reflect this change."
+            "Please update your `dbt_project.yml` configuration to reflect this change."
         )
 
         if require_event_names_in_deprecations():
@@ -414,7 +414,7 @@ class ConfigLogPathDeprecation(WarnLevel):
         cli_flag = "--log-path"
         env_var = "DBT_LOG_PATH"
         description = (
-            f"The `{self.deprecated_path}` config in `dvt_project.yml` has been deprecated, "
+            f"The `{self.deprecated_path}` config in `dbt_project.yml` has been deprecated, "
             f"and will no longer be supported in a future version of dvt-core. "
             f"If you wish to write dvt {output} to a custom directory, please use "
             f"the {cli_flag} CLI flag or {env_var} env var instead."
@@ -435,7 +435,7 @@ class ConfigTargetPathDeprecation(WarnLevel):
         cli_flag = "--target-path"
         env_var = "DBT_TARGET_PATH"
         description = (
-            f"The `{self.deprecated_path}` config in `dvt_project.yml` has been deprecated, "
+            f"The `{self.deprecated_path}` config in `dbt_project.yml` has been deprecated, "
             f"and will no longer be supported in a future version of dvt-core. "
             f"If you wish to write dvt {output} to a custom directory, please use "
             f"the {cli_flag} CLI flag or {env_var} env var instead."
@@ -473,7 +473,7 @@ class ProjectFlagsMovedDeprecation(WarnLevel):
     def message(self) -> str:
         description = (
             "User config should be moved from the 'config' key in profiles.yml to the 'flags' "
-            "key in dvt_project.yml."
+            "key in dbt_project.yml."
         )
         # Can't use line_wrap_message here because flags.printer_width isn't available yet
         if require_event_names_in_deprecations():
@@ -575,7 +575,7 @@ class MicrobatchMacroOutsideOfBatchesDeprecation(WarnLevel):
         return "D020"
 
     def message(self) -> str:
-        description = "The use of a custom microbatch macro outside of batched execution is deprecated. To use it with batched execution, set `flags.require_batched_execution_for_custom_microbatch_strategy` to `True` in `dvt_project.yml`. In the future this will be the default behavior."
+        description = "The use of a custom microbatch macro outside of batched execution is deprecated. To use it with batched execution, set `flags.require_batched_execution_for_custom_microbatch_strategy` to `True` in `dbt_project.yml`. In the future this will be the default behavior."
 
         if require_event_names_in_deprecations():
             return line_wrap_message(_deprecation_tag(description, self.__class__.__name__))
@@ -748,7 +748,7 @@ class MissingPlusPrefixDeprecation(WarnLevel):
         return "D037"
 
     def message(self) -> str:
-        description = f"Missing '+' prefix on `{self.key}` found at `{self.key_path}` in file `{self.file}`. Hierarchical config values without a '+' prefix are deprecated in dvt_project.yml."
+        description = f"Missing '+' prefix on `{self.key}` found at `{self.key_path}` in file `{self.file}`. Hierarchical config values without a '+' prefix are deprecated in dbt_project.yml."
         return line_wrap_message(_deprecation_tag(description, self.__class__.__name__))
 
 
@@ -948,7 +948,7 @@ class UnusedResourceConfigPath(WarnLevel):
     def message(self) -> str:
         path_list = "\n".join(f"- {u}" for u in self.unused_config_paths)
         msg = (
-            "Configuration paths exist in your dvt_project.yml file which do not "
+            "Configuration paths exist in your dbt_project.yml file which do not "
             "apply to any resources.\n"
             f"There are {len(self.unused_config_paths)} unused configuration paths:\n{path_list}"
         )

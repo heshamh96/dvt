@@ -281,7 +281,7 @@ class RuntimeConfig(Project, Profile, AdapterRequiredConfig):
     # Called in task/base.py, in BaseTask.from_args
     @classmethod
     def from_args(cls, args: Any) -> "RuntimeConfig":
-        """Given arguments, read in dvt_project.yml from the current directory,
+        """Given arguments, read in dbt_project.yml from the current directory,
         read in packages.yml if it exists, and use them to find the profile to
         load.
 
@@ -483,7 +483,7 @@ class UnsetProfile(Profile):
 
 
 UNUSED_RESOURCE_CONFIGURATION_PATH_MESSAGE = """\
-Configuration paths exist in your dvt_project.yml file which do not \
+Configuration paths exist in your dbt_project.yml file which do not \
 apply to any resources.
 There are {} unused configuration paths:
 {}
