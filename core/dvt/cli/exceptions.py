@@ -65,10 +65,22 @@ class ExceptionExit(CliException):
     def __init__(self, exception: Exception) -> None:
         super().__init__(ExitCodes.UnhandledError)
         self.exception = exception
-        # For UninstalledPackagesFoundError, don't set message to prevent Click from printing it
-        # (it's already printed once in the exception handler to avoid duplicates)
-        from dvt.exceptions import UninstalledPackagesFoundError
+        # For UninstalledPackagesFoundError, adapter-missing, and project-not-found errors,
+        # don't print - they're already handled with clean messages in requires.py
+        from dvt.exceptions import UninstalledPackagesFoundError, DvtProfileError, DvtProjectError
+        skip_print = False
         if isinstance(exception, UninstalledPackagesFoundError):
+            skip_print = True
+        elif isinstance(exception, DvtProfileError):
+            exc_str_check = str(exception)
+            if "Could not find adapter" in exc_str_check or "Run 'dvt sync'" in exc_str_check:
+                skip_print = True
+        elif isinstance(exception, DvtProjectError):
+            exc_str_check = str(exception)
+            if "No dbt_project.yml" in exc_str_check or "No dvt_project.yml" in exc_str_check or "not found at expected path" in exc_str_check:
+                skip_print = True
+
+        if skip_print:
             # Set empty message so Click doesn't print it again
             self.message = ""
         else:
@@ -92,13 +104,22 @@ class ExceptionExit(CliException):
     def show(self, _file: Optional[IO] = None) -> None:  # type: ignore[type-arg]
         """Print the wrapped exception to stderr so exit code 2 is never silent."""
         if self.exception is not None:
-            # For UninstalledPackagesFoundError, don't print here - it's already printed once
-            # in the exception handler to avoid duplicates as exception propagates through decorators
-            from dvt.exceptions import UninstalledPackagesFoundError
+            # For UninstalledPackagesFoundError, adapter-missing, and project-not-found errors,
+            # don't print - they're already handled with clean messages in requires.py
+            from dvt.exceptions import UninstalledPackagesFoundError, DvtProfileError, DvtProjectError
+            skip_print = False
             if isinstance(self.exception, UninstalledPackagesFoundError):
-                # Don't print - already printed in exception handler
-                pass
-            else:
+                skip_print = True
+            elif isinstance(self.exception, DvtProfileError):
+                exc_str_check = str(self.exception)
+                if "Could not find adapter" in exc_str_check or "Run 'dvt sync'" in exc_str_check:
+                    skip_print = True
+            elif isinstance(self.exception, DvtProjectError):
+                exc_str_check = str(self.exception)
+                if "No dbt_project.yml" in exc_str_check or "No dvt_project.yml" in exc_str_check or "not found at expected path" in exc_str_check:
+                    skip_print = True
+
+            if not skip_print:
                 exc_str = "".join(
                     traceback.format_exception(
                         type(self.exception),

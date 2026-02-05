@@ -1,16 +1,40 @@
 import importlib.util
 import os
+import re
 import sys
 import time
 import traceback
 from functools import update_wrapper
 from typing import Dict, Optional
 
-# Module-level set to track printed UninstalledPackagesFoundError exception messages
+# Module-level sets to track printed exception messages
 # to prevent duplicate messages as exceptions propagate through decorators
 _printed_uninstalled_packages_errors = set()
-# Same for adapter-missing profile errors (print once, no traceback)
 _printed_adapter_missing_errors = set()
+_printed_project_not_found_errors = set()
+
+
+def _extract_clean_adapter_error(exc_str: str) -> str:
+    """Extract a clean, user-friendly message from adapter error."""
+    # Find adapter type (e.g., "postgres", "databricks")
+    adapter_match = re.search(r"Could not find adapter type (\w+)", exc_str)
+    adapter_name = adapter_match.group(1) if adapter_match else "unknown"
+    return f"❌ Missing adapter '{adapter_name}'. Run 'dvt sync' to install it."
+
+
+def _is_project_not_found_error(exc: Exception) -> bool:
+    """Check if exception is a project-not-found error."""
+    exc_str = str(exc)
+    return (
+        "No dbt_project.yml" in exc_str
+        or "No dvt_project.yml" in exc_str
+        or "not found at expected path" in exc_str
+    )
+
+
+def _extract_clean_project_error(exc_str: str) -> str:
+    """Extract a clean, user-friendly message from project-not-found error."""
+    return "❌ Not in a DVT project directory. Run from a folder with dbt_project.yml or use --project-dir."
 
 from click import Context
 
@@ -215,12 +239,19 @@ def postflight(func):
             elif isinstance(actual_exception, DvtProfileError) and (
                 "Could not find adapter" in str(actual_exception) or "Run 'dvt sync'" in str(actual_exception)
             ):
-                # Adapter missing: print message once, no traceback
-                exc_message = str(actual_exception)
-                if exc_message not in _printed_adapter_missing_errors:
-                    sys.stderr.write(f"Error: {actual_exception}\n")
+                # Adapter missing: print clean message once, NO traceback
+                clean_msg = _extract_clean_adapter_error(str(actual_exception))
+                if clean_msg not in _printed_adapter_missing_errors:
+                    sys.stderr.write(clean_msg + "\n")
                     sys.stderr.flush()
-                    _printed_adapter_missing_errors.add(exc_message)
+                    _printed_adapter_missing_errors.add(clean_msg)
+            elif isinstance(actual_exception, DvtProjectError) and _is_project_not_found_error(actual_exception):
+                # Project not found: print clean message once, NO traceback
+                clean_msg = _extract_clean_project_error(str(actual_exception))
+                if clean_msg not in _printed_project_not_found_errors:
+                    sys.stderr.write(clean_msg + "\n")
+                    sys.stderr.flush()
+                    _printed_project_not_found_errors.add(clean_msg)
             else:
                 fire_event(MainEncounteredError(exc=str(e)))
                 # Print exception immediately to stderr so it's never silent
@@ -247,11 +278,19 @@ def postflight(func):
             elif isinstance(actual_exception, DvtProfileError) and (
                 "Could not find adapter" in str(actual_exception) or "Run 'dvt sync'" in str(actual_exception)
             ):
-                exc_message = str(actual_exception)
-                if exc_message not in _printed_adapter_missing_errors:
-                    sys.stderr.write(f"Error: {actual_exception}\n")
+                # Adapter missing: print clean message once, NO traceback
+                clean_msg = _extract_clean_adapter_error(str(actual_exception))
+                if clean_msg not in _printed_adapter_missing_errors:
+                    sys.stderr.write(clean_msg + "\n")
                     sys.stderr.flush()
-                    _printed_adapter_missing_errors.add(exc_message)
+                    _printed_adapter_missing_errors.add(clean_msg)
+            elif isinstance(actual_exception, DvtProjectError) and _is_project_not_found_error(actual_exception):
+                # Project not found: print clean message once, NO traceback
+                clean_msg = _extract_clean_project_error(str(actual_exception))
+                if clean_msg not in _printed_project_not_found_errors:
+                    sys.stderr.write(clean_msg + "\n")
+                    sys.stderr.flush()
+                    _printed_project_not_found_errors.add(clean_msg)
             else:
                 fire_event(MainEncounteredError(exc=str(e)))
                 fire_event(MainStackTrace(stack_trace=traceback.format_exc()))
