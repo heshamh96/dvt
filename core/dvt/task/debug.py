@@ -29,7 +29,7 @@ from dvt.task.base import BaseTask, get_nearest_project_dir
 from dvt.version import get_installed_version
 from dbt_common.events.format import pluralize
 from dbt_common.events.functions import fire_event
-from dbt_common.ui import green, red
+from dbt_common.ui import green, red, yellow
 
 ONLY_PROFILE_MESSAGE = """
 A project file (dbt_project.yml or dvt_project.yml) was not found in this directory.
@@ -146,6 +146,12 @@ class DebugTask(BaseTask):
                     self._debug_computes()
                 if show_manifest:
                     self._debug_manifest()
+                if not os.path.exists(self.project_path):
+                    fire_event(
+                        DebugCmdOut(
+                            msg=yellow("\n⚠️  No project file found. Run from the project directory, use --project-dir <path>, or run 'dvt sync' to set up your environment.")
+                        )
+                    )
             if connection_target:
                 return self._debug_connection_target(connection_target)
             return DebugRunStatus.SUCCESS.value
@@ -201,6 +207,11 @@ class DebugTask(BaseTask):
             fire_event(DebugCmdResult(msg=red(f"{(pluralize(failure_count, 'check'))} failed:")))
             for status in all_failing_statuses:
                 fire_event(DebugCmdResult(msg=f"{status.summary_message}\n"))
+            fire_event(
+                DebugCmdResult(
+                    msg=yellow("💡 Tip: Run 'dvt sync' to install adapters and fix the environment, then fix any connection or config issues.\n")
+                )
+            )
             return DebugRunStatus.FAIL.value
         else:
             fire_event(DebugCmdResult(msg=green("All checks passed!")))
@@ -479,6 +490,7 @@ class DebugTask(BaseTask):
         fire_event(DebugCmdOut(msg=f"\nProfile: {profile_name}"))
         fire_event(DebugCmdOut(msg=f"  Active Target: {active_target}"))
         renderer = ProfileRenderer(self.cli_vars)
+        has_adapter_errors = False
         for target_name, target_config in outputs.items():
             if not isinstance(target_config, dict):
                 continue
@@ -503,7 +515,11 @@ class DebugTask(BaseTask):
                 status = green("✓ Connected") if err is None else red(f"✗ {err[:60]}")
             except Exception as e:
                 status = red(f"✗ Error: {str(e)[:50]}")
+                if "No module named" in str(e) or "Could not find adapter" in str(e):
+                    has_adapter_errors = True
             fire_event(DebugCmdOut(msg=f"      Status: {status}"))
+        if has_adapter_errors:
+            fire_event(DebugCmdOut(msg=yellow("\n  💡 Tip: Run 'dvt sync' to install missing adapters.")))
 
     def _debug_computes(self) -> None:
         """Display the current project's default compute only (from project vars or 'default')."""
@@ -527,7 +543,8 @@ class DebugTask(BaseTask):
                 from pyspark.sql import SparkSession  # noqa: F401
                 fire_event(DebugCmdOut(msg="  PySpark: ✓ available"))
             except ImportError:
-                fire_event(DebugCmdOut(msg="  PySpark: ✗ not installed"))
+                fire_event(DebugCmdOut(msg=red("  PySpark: ✗ not installed")))
+                fire_event(DebugCmdOut(msg=yellow("  💡 Tip: Run 'dvt sync' to install pyspark.")))
             return
         try:
             raw = load_yaml_text(dbt_common.clients.system.load_file_contents(str(computes_path)))
@@ -562,7 +579,31 @@ class DebugTask(BaseTask):
             from pyspark.sql import SparkSession  # noqa: F401
             fire_event(DebugCmdOut(msg="\n  PySpark: ✓ available"))
         except ImportError:
-            fire_event(DebugCmdOut(msg="\n  PySpark: ✗ not installed"))
+            fire_event(DebugCmdOut(msg=red("\n  PySpark: ✗ not installed")))
+            fire_event(DebugCmdOut(msg=yellow("  💡 Tip: Run 'dvt sync' to install pyspark.")))
+            return
+        # Verify Spark connection (like --targets does for DBs)
+        if cfg.get("type", "spark") == "spark":
+            master = cfg.get("master") or "local[*]"
+            spark = None
+            try:
+                builder = (
+                    SparkSession.builder.appName("dvt-debug-compute-check")
+                    .master(master)
+                )
+                for k, v in (cfg.get("config") or {}).items():
+                    builder = builder.config(k, v)
+                spark = builder.getOrCreate()
+                _ = spark.sparkContext.version
+                fire_event(DebugCmdOut(msg="  Spark: " + green("✓ Connected")))
+            except Exception as e:
+                fire_event(DebugCmdOut(msg="  Spark: " + red(f"✗ {str(e)[:55]}")))
+            finally:
+                if spark is not None:
+                    try:
+                        spark.stop()
+                    except Exception:
+                        pass
 
     def _debug_manifest(self) -> None:
         """Display manifest summary from target/manifest.json."""

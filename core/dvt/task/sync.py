@@ -25,6 +25,7 @@ from dbt_common.events.functions import fire_event
 from dbt_common.exceptions import DbtRuntimeError
 
 from dvt.events.types import DebugCmdOut
+from dbt_common.ui import yellow, green, red
 
 # In-project env dir names (order = preference)
 IN_PROJECT_ENV_NAMES = (".venv", "venv", "env")
@@ -77,20 +78,40 @@ def _run_pip(env_python: Path, args: List[str]) -> bool:
         return False
 
 
-def _run_uv_pip(env_path: Path, args: List[str]) -> bool:
+def _run_uv_pip(env_path: Path, args: List[str], timeout: int = 300) -> bool:
     """Run uv pip with --python pointing to env. Return True on success."""
     env_python = _get_env_python(env_path)
     cmd = ["uv", "pip", "install", "--python", str(env_python)] + args
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         if result.returncode != 0:
             sys.stderr.write(result.stderr or "")
             return False
         return True
     except FileNotFoundError:
         return False  # uv not available
+    except subprocess.TimeoutExpired:
+        sys.stderr.write(f"uv pip failed: timed out after {timeout} seconds\n")
+        return False
     except Exception as e:
         sys.stderr.write(f"uv pip failed: {e}\n")
+        return False
+
+
+def _run_uv_pip_uninstall(env_path: Path, packages: List[str]) -> bool:
+    """Run uv pip uninstall with --python pointing to env. Return True on success."""
+    env_python = _get_env_python(env_path)
+    cmd = ["uv", "pip", "uninstall", "--python", str(env_python)] + packages
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        if result.returncode != 0:
+            sys.stderr.write(result.stderr or "")
+            return False
+        return True
+    except FileNotFoundError:
+        return False
+    except Exception as e:
+        sys.stderr.write(f"uv pip uninstall failed: {e}\n")
         return False
 
 
@@ -295,22 +316,22 @@ def _check_java_compatibility(spark_version: str, java_version: Optional[str]) -
 def _print_java_installation_instructions(required_versions: List[str]) -> None:
     """Print Java installation instructions for Mac and Linux."""
     _sync_log("")
-    _sync_log("=" * 70)
-    _sync_log("Java Installation Instructions")
-    _sync_log("=" * 70)
+    _sync_log(yellow("=" * 70))
+    _sync_log(yellow("☕ Java Installation Instructions"))
+    _sync_log(yellow("=" * 70))
     _sync_log("")
-    _sync_log(f"Required Java versions: {', '.join(f'Java {v}' for v in required_versions)}")
+    _sync_log(f"Required Java versions: {yellow(', '.join(f'Java {v}' for v in required_versions))}")
     _sync_log("")
 
     # Mac instructions
-    _sync_log("macOS:")
+    _sync_log(green("🍎 macOS:"))
     _sync_log("  Option 1: Homebrew (recommended)")
     for v in required_versions:
         _sync_log(f'    brew install openjdk@{v}')
     _sync_log("    Then link: brew link --overwrite openjdk@<version>")
     _sync_log("")
     _sync_log("  Option 2: SDKMAN")
-    _sync_log("    curl -s \"https://get.sdkman.io\" | bash")
+    _sync_log('    curl -s "https://get.sdkman.io" | bash')
     _sync_log("    sdk install java <version>")
     _sync_log("    Example: sdk install java 17.0.2-tem")
     _sync_log("")
@@ -321,7 +342,7 @@ def _print_java_installation_instructions(required_versions: List[str]) -> None:
     _sync_log("")
 
     # Linux instructions
-    _sync_log("Linux:")
+    _sync_log(green("🐧 Linux:"))
     _sync_log("  Option 1: apt (Debian/Ubuntu)")
     for v in required_versions:
         _sync_log(f'    sudo apt update && sudo apt install openjdk-{v}-jdk')
@@ -333,7 +354,7 @@ def _print_java_installation_instructions(required_versions: List[str]) -> None:
     _sync_log(f'    sudo dnf install java-{v}-openjdk-devel')
     _sync_log("")
     _sync_log("  Option 3: SDKMAN")
-    _sync_log("    curl -s \"https://get.sdkman.io\" | bash")
+    _sync_log('    curl -s "https://get.sdkman.io" | bash')
     _sync_log("    sdk install java <version>")
     _sync_log("")
     _sync_log("  Option 4: Manual download")
@@ -342,11 +363,11 @@ def _print_java_installation_instructions(required_versions: List[str]) -> None:
     _sync_log('    export JAVA_HOME="/usr/lib/jvm/java-<version>-openjdk"')
     _sync_log("")
 
-    _sync_log("After installation, verify:")
+    _sync_log(green("✅ After installation, verify:"))
     _sync_log("  java -version")
     _sync_log("  echo $JAVA_HOME  # Should point to the Java installation")
     _sync_log("")
-    _sync_log("=" * 70)
+    _sync_log(yellow("=" * 70))
 
 
 class SyncTask(BaseTask):
@@ -366,7 +387,7 @@ class SyncTask(BaseTask):
         try:
             self.project_dir = get_nearest_project_dir(project_dir_arg)
         except DbtRuntimeError:
-            msg = "Not in a DVT project. Run from a directory with dbt_project.yml (or use --project-dir)."
+            msg = red("❌ Not in a DVT project. Run from a directory with dbt_project.yml (or use --project-dir).")
             _sync_log(msg)
             return None, False
 
@@ -409,7 +430,7 @@ class SyncTask(BaseTask):
                 return None, False
         self.env_path = env_path
         env_python = _get_env_python(env_path)
-        _sync_log(f"Using environment: {env_path}")
+        _sync_log(green(f"📦 Using environment: {env_path}"))
 
         # 2) Profile and adapter types
         profile_name = _get_profile_name(project_root)
@@ -430,13 +451,13 @@ class SyncTask(BaseTask):
                 pkg_spec = f"{pkg}{spec}" if any(spec.startswith(c) for c in ("=", ">", "<", "~", "!")) else f"{pkg}=={spec}"
             else:
                 pkg_spec = pkg
-            _sync_log(f"Installing {pkg_spec} ...")
+            _sync_log(f"📥 Installing {pkg_spec} ...")
             if _detect_package_manager(env_python) == "uv":
                 ok = _run_uv_pip(env_path, [pkg_spec])
             else:
                 ok = _run_pip(env_python, ["install", pkg_spec])
             if not ok:
-                _sync_log(f"Failed to install {pkg_spec}")
+                _sync_log(red(f"❌ Failed to install {pkg_spec}"))
 
         # 4) Pyspark: single version from active target; use canonical ~/.dvt/computes.yml
         # so the project's profile block is used (not a local computes.yml from another profile).
@@ -448,15 +469,19 @@ class SyncTask(BaseTask):
             is_compatible, warning = _check_java_compatibility(pyspark_version, java_version)
             if not is_compatible and warning:
                 java_warnings.append(warning)
-            _sync_log("Uninstalling other pyspark versions ...")
-            _run_pip(env_python, ["uninstall", "pyspark", "-y"])
-            _sync_log(f"Installing pyspark=={pyspark_version} ...")
+            _sync_log("🔄 Uninstalling other pyspark versions ...")
             if _detect_package_manager(env_python) == "uv":
-                ok = _run_uv_pip(env_path, [f"pyspark=={pyspark_version}"])
+                _run_uv_pip_uninstall(env_path, ["pyspark"])
+            else:
+                _run_pip(env_python, ["uninstall", "pyspark", "-y"])
+            _sync_log(f"📥 Installing pyspark=={pyspark_version} ...")
+            # Pyspark download can be slow; use 10 min timeout for uv pip install
+            if _detect_package_manager(env_python) == "uv":
+                ok = _run_uv_pip(env_path, [f"pyspark=={pyspark_version}"], timeout=600)
             else:
                 ok = _run_pip(env_python, ["install", f"pyspark=={pyspark_version}"])
             if not ok:
-                _sync_log(f"Failed to install pyspark=={pyspark_version}")
+                _sync_log(red(f"❌ Failed to install pyspark=={pyspark_version}"))
         else:
             _sync_log("No pyspark version in computes.yml for this profile; skipping pyspark install.")
 
@@ -466,26 +491,26 @@ class SyncTask(BaseTask):
         jdbc_dir = get_jdbc_drivers_dir(None)
         drivers = get_jdbc_drivers_for_adapters(adapter_types)
         if drivers:
-            _sync_log(f"Syncing JDBC drivers for adapters: {', '.join(adapter_types)}")
+            _sync_log(f"🔌 Syncing JDBC drivers for adapters: {', '.join(adapter_types)}")
             download_jdbc_jars(
                 drivers,
                 jdbc_dir,
                 on_event=lambda msg: _sync_log(msg),
             )
         else:
-            _sync_log("No JDBC drivers required for these adapters (or adapters not in registry).")
+            _sync_log("ℹ️  No JDBC drivers required for these adapters (or adapters not in registry).")
 
         # Show Java warnings and installation instructions if any
         if java_warnings:
             _sync_log("")
-            _sync_log("⚠️  Java Compatibility Warnings:")
+            _sync_log(yellow("⚠️  Java Compatibility Warnings:"))
             for warning in java_warnings:
-                _sync_log(f"  - {warning}")
+                _sync_log(red(f"  - {warning}"))
             required_versions = []
             if pyspark_version:
                 required_versions = _get_required_java_versions(pyspark_version)
             if required_versions:
                 _print_java_installation_instructions(required_versions)
 
-        _sync_log("Sync complete.")
+        _sync_log(green("✅ Sync complete."))
         return None, True

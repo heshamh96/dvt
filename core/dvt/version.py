@@ -22,6 +22,7 @@ def get_version_information() -> str:
     core_msg_lines, core_info_msg = _get_core_msg_lines(installed, latest)
     core_msg = _format_core_msg(core_msg_lines)
     plugin_version_msg = _get_plugins_msg()
+    compute_msg = _get_compute_msg()
 
     msg_lines = [core_msg]
 
@@ -29,6 +30,10 @@ def get_version_information() -> str:
         msg_lines.append(core_info_msg)
 
     msg_lines.append(plugin_version_msg)
+
+    if compute_msg:
+        msg_lines.append(compute_msg)
+
     msg_lines.append("")
 
     return "\n\n".join(msg_lines)
@@ -56,7 +61,7 @@ def _get_core_msg_lines(
     latest: Optional[semver.VersionSpecifier],
 ) -> Tuple[List[List[str]], str]:
     installed_s = installed.to_version_string(skip_matcher=True)
-    installed_line = ["installed", installed_s, ""]
+    installed_line = ["Installed", installed_s, ""]
     update_info = ""
 
     if latest is None:
@@ -68,7 +73,7 @@ def _get_core_msg_lines(
         return [installed_line], update_info
 
     latest_s = latest.to_version_string(skip_matcher=True)
-    latest_line = ["latest", latest_s, green("Up to date!")]
+    latest_line = ["Latest", latest_s, green("Up to date!")]
 
     if installed > latest:
         latest_line[2] = yellow("Ahead of latest version!")
@@ -113,6 +118,9 @@ def _get_plugins_msg() -> str:
     for plugin in _pad_lines(plugins, seperator=":"):
         msg_lines.append(_format_single_plugin(plugin, ""))
 
+    if not plugins:
+        msg_lines.append("  (none)")
+
     if display_update_msg:
         update_msg = (
             "  At least one plugin is out of date with dvt-core.\n"
@@ -120,6 +128,27 @@ def _get_plugins_msg() -> str:
             "  https://docs.getdbt.com/docs/installation"
         )
         msg_lines += ["", update_msg]
+
+    return "\n".join(msg_lines)
+
+
+def _get_compute_msg() -> Optional[str]:
+    """Get compute engine version information (e.g., pyspark)."""
+    compute_engines = []
+
+    # Check for pyspark
+    try:
+        pyspark_version = importlib_metadata.version("pyspark")
+        compute_engines.append(("pyspark", pyspark_version))
+    except importlib_metadata.PackageNotFoundError:
+        pass
+
+    if not compute_engines:
+        return None
+
+    msg_lines = ["Compute:"]
+    for name, version in compute_engines:
+        msg_lines.append(f"  - {name}: {version}")
 
     return "\n".join(msg_lines)
 
@@ -196,7 +225,7 @@ def _pad_lines(lines: List[List[str]], seperator: str = "") -> List[List[str]]:
 
 
 def get_package_pypi_url(package_name: str) -> str:
-    return f"https://pypi.org/pypi/dvt-{package_name}/json"
+    return f"https://pypi.org/pypi/dbt-{package_name}/json"
 
 
 def _get_dbt_plugins_info() -> Iterator[Tuple[str, str]]:
@@ -229,11 +258,9 @@ def _get_adapter_plugin_names() -> Iterator[str]:
 
 
 def _resolve_version() -> str:
-    try:
-        return importlib_metadata.version("dvt-core")
-    except importlib_metadata.PackageNotFoundError:
-        # When running from source (not installed), use version from __version__.py
-        return __version_string
+    # Always use __version__.py as the source of truth for DVT
+    # This ensures development versions show the correct version
+    return __version_string
 
 
 __version__ = _resolve_version()
