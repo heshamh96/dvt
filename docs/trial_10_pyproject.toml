@@ -1,0 +1,22 @@
+# Trial 10 (trial_10_coke_db) – uv config template
+# Copy this file to your trial folder as pyproject.toml, then run: uv sync
+#
+# dvt-core is installed from PyPI (no path source). Use the current published version.
+#
+# IMPORTANT: Run "uv sync" and "uv run dvt ..." from the TRIAL folder (trial_10_coke_db),
+# not from Coke_DB/.
+
+[project]
+name = "trial-10-coke-db"
+version = "0.1.0"
+description = "Trial 10 Coke_DB – full feature test, dvt-core from PyPI"
+requires-python = ">=3.10"
+dependencies = [
+    "dvt-core",
+    "dbt-postgres",
+    "pyspark==3.5.0",
+]
+
+[tool.uv]
+# Use PyPI so uv resolves dvt-core without needing --index-url on every command.
+index-url = "https://pypi.org/simple/"
