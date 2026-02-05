@@ -522,7 +522,7 @@ profiles_dir_exists_false = _create_option_and_track_env_var(
 project_dir = _create_option_and_track_env_var(
     "--project-dir",
     envvar="DBT_PROJECT_DIR",
-    help="Which directory to look in for the dbt_project.yml file. Default is the current working directory and its parents.",
+    help="Which directory to look in for the dbt_project.yml file. Default is the current directory, its parents, or a direct subdirectory containing a project.",
     default=default_project_dir,
     type=click.Path(exists=True),
 )

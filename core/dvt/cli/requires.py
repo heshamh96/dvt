@@ -9,6 +9,8 @@ from typing import Dict, Optional
 # Module-level set to track printed UninstalledPackagesFoundError exception messages
 # to prevent duplicate messages as exceptions propagate through decorators
 _printed_uninstalled_packages_errors = set()
+# Same for adapter-missing profile errors (print once, no traceback)
+_printed_adapter_missing_errors = set()
 
 from click import Context
 
@@ -34,7 +36,7 @@ from dvt.events.types import (
     MainTrackingUserState,
     ResourceReport,
 )
-from dvt.exceptions import DvtProjectError, FailFastError
+from dvt.exceptions import DvtProfileError, DvtProjectError, FailFastError
 from dvt.flags import get_flag_dict, get_flags, set_flags
 from dvt.mp_context import get_mp_context
 from dvt.parser.manifest import parse_manifest
@@ -210,6 +212,15 @@ def postflight(func):
                     sys.stderr.write(f"{actual_exception}\n")
                     sys.stderr.flush()
                     _printed_uninstalled_packages_errors.add(exc_message)
+            elif isinstance(actual_exception, DvtProfileError) and (
+                "Could not find adapter" in str(actual_exception) or "Run 'dvt sync'" in str(actual_exception)
+            ):
+                # Adapter missing: print message once, no traceback
+                exc_message = str(actual_exception)
+                if exc_message not in _printed_adapter_missing_errors:
+                    sys.stderr.write(f"Error: {actual_exception}\n")
+                    sys.stderr.flush()
+                    _printed_adapter_missing_errors.add(exc_message)
             else:
                 fire_event(MainEncounteredError(exc=str(e)))
                 # Print exception immediately to stderr so it's never silent
@@ -221,7 +232,7 @@ def postflight(func):
                 raise e
             raise ExceptionExit(e)
         except BaseException as e:
-            # Check if this is UninstalledPackagesFoundError wrapped in ExceptionExit
+            # Check if this is UninstalledPackagesFoundError or adapter-missing DvtProfileError wrapped in ExceptionExit
             from dvt.exceptions import UninstalledPackagesFoundError
             from dvt.cli.exceptions import ExceptionExit as ExceptionExitType
             actual_exception = e.exception if isinstance(e, ExceptionExitType) else e
@@ -233,6 +244,14 @@ def postflight(func):
                     sys.stderr.write(f"{actual_exception}\n")
                     sys.stderr.flush()
                     _printed_uninstalled_packages_errors.add(exc_message)
+            elif isinstance(actual_exception, DvtProfileError) and (
+                "Could not find adapter" in str(actual_exception) or "Run 'dvt sync'" in str(actual_exception)
+            ):
+                exc_message = str(actual_exception)
+                if exc_message not in _printed_adapter_missing_errors:
+                    sys.stderr.write(f"Error: {actual_exception}\n")
+                    sys.stderr.flush()
+                    _printed_adapter_missing_errors.add(exc_message)
             else:
                 fire_event(MainEncounteredError(exc=str(e)))
                 fire_event(MainStackTrace(stack_trace=traceback.format_exc()))

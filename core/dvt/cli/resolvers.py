@@ -1,16 +1,28 @@
 from pathlib import Path
 
 from dvt.config.project import PartialProject, project_yml_path_if_exists
+from dvt.constants import DBT_PROJECT_FILE_NAME, DVT_PROJECT_FILE_NAME
 from dvt.exceptions import DvtProjectError
 
 
 def default_project_dir() -> Path:
+    # 1) Check current directory and parents (so "dvt parse" works from a subdir of the project)
     paths = list(Path.cwd().parents)
     paths.insert(0, Path.cwd())
-    return next(
-        (x for x in paths if project_yml_path_if_exists(str(x)) is not None),
-        Path.cwd(),
-    )
+    for x in paths:
+        if project_yml_path_if_exists(str(x)) is not None:
+            return x
+    # 2) If no project in cwd or parents, check direct children (so "dvt parse" works from a parent of the project)
+    cwd = Path.cwd()
+    try:
+        subdirs = sorted(p for p in cwd.iterdir() if p.is_dir())
+    except OSError:
+        subdirs = []
+    for subdir in subdirs:
+        for name in (DBT_PROJECT_FILE_NAME, DVT_PROJECT_FILE_NAME):
+            if (subdir / name).is_file():
+                return subdir
+    return Path.cwd()
 
 
 def default_profiles_dir() -> Path:

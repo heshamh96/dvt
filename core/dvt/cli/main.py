@@ -170,6 +170,7 @@ def global_flags(func):
     no_args_is_help=True,
     epilog="Specify one of these sub-commands and you can find more help from there.",
 )
+@p.version
 @click.pass_context
 @p.show_resource_report
 def cli(ctx, **kwargs):
