@@ -83,6 +83,8 @@ Validator Error:
 MISSING_DBT_PROJECT_ERROR = """\
 No {DBT_PROJECT_FILE_NAME} or {DVT_PROJECT_FILE_NAME} found at expected path {path}
 Verify that each entry within packages.yml (and their transitive dependencies) contains a project file (dbt_project.yml or dvt_project.yml).
+
+Run from the project directory, use --project-dir <path>, or run 'dvt sync' to set up your environment.
 """
 
 

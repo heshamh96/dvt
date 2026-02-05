@@ -153,6 +153,8 @@ class Profile(HasCredentials):
             credentials = cls.from_dict(data)
         except (DbtRuntimeError, ValidationError) as e:
             msg = str(e) if isinstance(e, DbtRuntimeError) else e.message
+            if "Could not find adapter type" in msg or "No module named 'dbt.adapters." in msg:
+                msg = msg.rstrip(".") + ". Run 'dvt sync' to install the required adapter(s)."
             raise DvtProfileError(
                 'Credentials in profile "{}", target "{}" invalid: {}'.format(
                     profile_name, target_name, msg
