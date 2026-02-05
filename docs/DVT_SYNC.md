@@ -85,3 +85,4 @@ To use your local dvt-core repo (e.g. with the latest `dvt sync` fixes) in anoth
 - **Trial 5**: [TRIAL_5_FANTA_DB_FULL_FEATURES.md](TRIAL_5_FANTA_DB_FULL_FEATURES.md) – full feature test, project Fanta_DB, append-only profiles/computes.
 - **Trial 6**: [TRIAL_6_COKE_DB_FULL_FEATURES.md](TRIAL_6_COKE_DB_FULL_FEATURES.md) – full feature test, project Coke_DB, same sync behaviour, testing agents.
 - **Trial 7**: [TRIAL_7_PEPSI_DB_FULL_FEATURES.md](TRIAL_7_PEPSI_DB_FULL_FEATURES.md) – full feature test, project Pepsi_DB; **sync working** (interactive, quoted `--python-env`, in-project env first, minimal help); uses **editable** dvt-core.
+- **Trial 10**: [TRIAL_10_COKE_DB_PYPI.md](TRIAL_10_COKE_DB_PYPI.md) – full feature test, project Coke_DB; **dvt-core from PyPI** (released package); testing agents.

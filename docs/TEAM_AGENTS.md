@@ -14,8 +14,12 @@ All sub-agents follow these principles:
 
 | Agent ID | Cursor Rule File | Scope | When to Use |
 |----------|------------------|-------|-------------|
+| **project** | `.cursor/rules/project.mdc` | Global project rules, structure, conventions | Always active - provides project-wide context |
 | **dev-team-architecture** | `.cursor/rules/dev-team-architecture.mdc` | Design, DVT rules compliance, cross-cutting concerns | When making architectural decisions, reviewing DVT RULES compliance, or working on execution path resolution |
 | **dev-team-backend** | `.cursor/rules/dev-team-backend.mdc` | CLI commands, configuration, manifest, DAG | When implementing CLI commands (`dvt init`, `dvt compile`, `dvt run`), config loading, or DAG construction |
+| **dev-team-cli** | `.cursor/rules/dev-team-cli.mdc` | Click commands, parameters, dvtRunner API | When working on CLI structure, parameters, or programmatic API |
+| **dev-team-parser** | `.cursor/rules/dev-team-parser.mdc` | YAML/SQL parsing, manifest generation | When working on parsing logic, schema validation, or Jinja context |
+| **dev-team-sync** | `.cursor/rules/dev-team-sync.mdc` | dvt sync, adapter installation, pyspark management | When working on `dvt sync` or environment management |
 | **dev-team-federation** | `.cursor/rules/dev-team-federation.mdc` | Spark federation engine, cross-database queries | When working on federation engine, Spark integration, predicate pushdown, or SQL dialect translation |
 | **dev-team-adapters** | `.cursor/rules/dev-team-adapters.mdc` | Database adapters, JDBC connectivity, target management | When implementing adapters, JDBC connectivity, or `dvt target` commands |
 | **dev-team-mdm-types** | `.cursor/rules/dev-team-mdm-types.mdc` | MDM database, datatype mappings, type conversion | When working on MDM database, type system, column naming rules, or schema caching |

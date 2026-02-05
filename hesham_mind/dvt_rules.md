@@ -1,23 +1,4 @@
-## the following dvt rules are specific to dvt init and dvt migrate
-### dvt init rules
-1) when issuing dvt init <with project name> it should create a directory that has dbt_project.yml along with all the directories of dvt , and should should add a new profile to ~/.dvt/profiles.yml iff it exists , and if it doesn't it should create it and add the ~/.dvt/profiles.yml and add the default duckdb database to and create or override the the <project root>.dvt/default.duckdb and the <projectr oot>/.dvt/metastore.duckdb and <project root>/.dvt/catalog.duckdb and should always create or override the ~/.dvt/.data/ directory with the mdm.duckdb database which is initialized with data in its tables to be used by the cli executions later on
-2) when issuing dvt init only it should create a project name same as the directory it is executing from and create  all the dvt directories and create or override  the <project root>.dvt/default.duckdb and the <project root>/.dvt/metastore.duckdb and <project root>/.dvt/catalog.duckdb and the dbt_project.yml file
- and also 
 
-### dvt migrate rules
-1) when issuing dvt migrate inside a dbt project is should create a dbt_project.yml inside the directory and create the missing dvt directories only and same as dvt init 
-2) whe issuing dvt migrate <path-to-dbt-project> it should copy all the dbt project staff to their respective  directories under a folder with the dbt project name enabling dvt to absort multiple dbt projects and again do same as dvt init 
-2.1) it should also look at all .yml files that define sources that shall include sources: config in them and under each source it should add the connection: config that includes the type of the default adapter of the dbt project which shall be located in the ~.dbt/profiles.yml file under the profile name of the project so that dvt end up havinng awarness of where are these sources coming from in its catalog.duckdb 
-
-## dvt metadata rules
-0) this should use the queries defined in the mdm.duckdb database to query the metadata of all the adapters defined in the project each with its compitable query
-1) when issuing dvt metadata snapshot it should read metadata of all columns for all sources and models that exist , if they don't yet , it should only work with sources defined , and then write all that to the metastore.duckdb database
-
-2) when models are executed they should always update the metastore.duckdb with their datatypes and columns 
-
-3) all columns in the federation path should work through metadata changes specific to syntax and datatype conversions that exist in the mdm.duckdb database in the ~.dvt/.data/mdm.duckdb so that the model never fail in execution when running the full dag
-
-## the following dvt rules are execution rules specific to commands that has access to dag , things like run and build and test and any command that has selectors
 
 ###  dvt compute rules
 1) dvt uses push down first using adapters whenever possible using dbt adapters , only uses federation path when cross engines are used using spark jdbc connectors
@@ -136,23 +117,7 @@ in case of using only 1 adapter it should be perfectly working as dbt , using th
 ## the following rules are writing rules that are specific to the declarative nature of dvt which is similar to dbt 
 
 ### for consecative executions the writing rules should be as follows
-1)  for models any execution should be like how dbt executes things so in "run" models that get regreated again are done via truncate and insert unless --full-refresh is specified then it should drop or in some cases when needed dop cascade and then 
+1)  for models any execution should be like how dbt executes things so in "run" models that get recreated again are done via truncate and insert unless --full-refresh is specified then it should drop or in some cases when needed dop cascade and then 
 
 2) for seeds it should also work like dbt , truncate and insert unless --full-refresh is specified so that the table gets dropped or drop cascade that it gets fully refreshed 
 
-
-## the following rules are specific to the catalog generation
-
-### for dvt docs command
-1) dvt docs generate should work on catalog generation accross all adapters with columns and their info all at once and they all should be written to the catalog.duckdb 
-2) wthe cli flags --target and --compute shall not be included in the dvt docs generate command , it should only work same as dbt docs generate , as it wouldn't be reliable since we are working accross databases 
-3) dvt docs serve shall work same as the dbt docs serve , reflecting a catalog full of metadata about the sources and models and the lineage of all things accross all databases
-4) dvt docs generate shall respect all the selectors same as dbt docs geenrate as it will be only working on metadata about nodes like sources and ref models
-5) it should read all its data from the <project>/.dvt/catalog.duckdb
-
-
-## the following dvt profiling rules are specific to the functionality of profiling in dvt 
-### dvt profile run command rules
-1) when issuing dvt profile run it should profile all columns , strings and non strings , and save all these results to the <project>/.dvt/metastore.duckdb
-2) it should respect the dbt selectors 
-3) the --sample flag should have numbers or pecentages so that it 
