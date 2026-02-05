@@ -1098,6 +1098,20 @@ class UninstalledPackagesFoundError(CompilationError):
         return msg
 
 
+class PySparkNotInstalledError(CompilationError):
+    """Raised when PySpark is required but not installed."""
+
+    def __init__(self):
+        self._already_printed = False  # Flag to prevent duplicate printing
+        super().__init__(msg=self.get_message())
+
+    def get_message(self) -> str:
+        return (
+            "\n❌ PySpark is required for this operation.\n"
+            "   Run 'dvt sync' to install PySpark.\n"
+        )
+
+
 class OptionNotYamlDictError(CompilationError):
     def __init__(self, var_type, option_name):
         self.var_type = var_type

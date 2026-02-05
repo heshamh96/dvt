@@ -410,15 +410,16 @@ def show(ctx, **kwargs):
     return results, success
 
 
-# dbt debug (Feature 02: --config, --manifest, --targets, --computes, --connection <target>)
+# dbt debug
 @cli.command("debug")
 @click.pass_context
 @global_flags
 @p.debug_connection
 @p.debug_show_config
 @p.debug_show_manifest
-@p.debug_show_targets
-@p.debug_show_computes
+@p.debug_target
+@p.debug_compute
+@p.debug_bucket
 @p.config_dir
 @p.profiles_dir_exists_false
 @p.project_dir
@@ -426,7 +427,7 @@ def show(ctx, **kwargs):
 @requires.postflight
 @requires.preflight
 def debug(ctx, **kwargs):
-    """Show DVT configuration, targets (current profile), computes, manifest, and test database connection. Use --config, --targets, --computes, or --manifest to show only that section. Use --connection <target> to test a specific target."""
+    """Show DVT configuration: all targets, computes, and buckets. Use --debug-target, --debug-compute, or --debug-bucket to debug specific items. Use --connection <target> to test a database connection."""
     from dvt.task.debug import DebugTask
 
     task = DebugTask(
@@ -725,6 +726,7 @@ def run_operation(ctx, **kwargs):
 @cli.command("seed")
 @click.pass_context
 @global_flags
+@p.compute
 @p.exclude
 @p.full_refresh
 @p.profiles_dir
@@ -743,7 +745,7 @@ def run_operation(ctx, **kwargs):
 @requires.runtime_config
 @requires.manifest
 def seed(ctx, **kwargs):
-    """Load data from csv files into your data warehouse."""
+    """Load CSV seed files into your data warehouse via Spark JDBC. Use --compute to specify compute engine, --target for destination."""
     from dvt.task.seed import SeedTask
 
     task = SeedTask(

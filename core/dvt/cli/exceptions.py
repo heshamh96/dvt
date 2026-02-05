@@ -65,11 +65,13 @@ class ExceptionExit(CliException):
     def __init__(self, exception: Exception) -> None:
         super().__init__(ExitCodes.UnhandledError)
         self.exception = exception
-        # For UninstalledPackagesFoundError, adapter-missing, and project-not-found errors,
-        # don't print - they're already handled with clean messages in requires.py
-        from dvt.exceptions import UninstalledPackagesFoundError, DvtProfileError, DvtProjectError
+        # For UninstalledPackagesFoundError, PySparkNotInstalledError, adapter-missing, and
+        # project-not-found errors, don't print - they're already handled with clean messages in requires.py
+        from dvt.exceptions import UninstalledPackagesFoundError, PySparkNotInstalledError, DvtProfileError, DvtProjectError
         skip_print = False
         if isinstance(exception, UninstalledPackagesFoundError):
+            skip_print = True
+        elif isinstance(exception, PySparkNotInstalledError):
             skip_print = True
         elif isinstance(exception, DvtProfileError):
             exc_str_check = str(exception)
@@ -104,11 +106,13 @@ class ExceptionExit(CliException):
     def show(self, _file: Optional[IO] = None) -> None:  # type: ignore[type-arg]
         """Print the wrapped exception to stderr so exit code 2 is never silent."""
         if self.exception is not None:
-            # For UninstalledPackagesFoundError, adapter-missing, and project-not-found errors,
-            # don't print - they're already handled with clean messages in requires.py
-            from dvt.exceptions import UninstalledPackagesFoundError, DvtProfileError, DvtProjectError
+            # For UninstalledPackagesFoundError, PySparkNotInstalledError, adapter-missing, and
+            # project-not-found errors, don't print - they're already handled with clean messages in requires.py
+            from dvt.exceptions import UninstalledPackagesFoundError, PySparkNotInstalledError, DvtProfileError, DvtProjectError
             skip_print = False
             if isinstance(self.exception, UninstalledPackagesFoundError):
+                skip_print = True
+            elif isinstance(self.exception, PySparkNotInstalledError):
                 skip_print = True
             elif isinstance(self.exception, DvtProfileError):
                 exc_str_check = str(self.exception)

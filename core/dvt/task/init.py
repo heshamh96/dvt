@@ -26,7 +26,9 @@ from dvt.events.types import (
     StarterProjectPath,
 )
 from dvt.config.user_config import (
+    append_profile_to_buckets_yml,
     append_profile_to_computes_yml,
+    create_default_buckets_yml,
     create_default_computes_yml,
     create_dvt_data_dir,
     init_mdm_db,
@@ -79,7 +81,7 @@ class InitTask(BaseTask):
         return False
 
     def create_dvt_user_config(self, profiles_dir: str) -> None:
-        """Create DVT user-level config: computes.yml, data/, and mdm.duckdb in the profiles dir."""
+        """Create DVT user-level config: computes.yml, buckets.yml, data/, and mdm.duckdb in the profiles dir."""
         profiles_path = Path(str(profiles_dir))
         if not profiles_path.exists():
             return
@@ -87,6 +89,9 @@ class InitTask(BaseTask):
         computes_path = dvt_home / "computes.yml"
         if create_default_computes_yml(computes_path):
             fire_event(ConfigFolderDirectory(dir=str(computes_path.parent)))
+        buckets_path = dvt_home / "buckets.yml"
+        if create_default_buckets_yml(buckets_path):
+            fire_event(ConfigFolderDirectory(dir=str(buckets_path.parent)))
         create_dvt_data_dir(str(dvt_home))
         init_mdm_db(str(dvt_home))
 
@@ -341,6 +346,7 @@ class InitTask(BaseTask):
                 profile_name = self.get_profile_name_from_current_project()
                 self.setup_profile(profile_name)
                 append_profile_to_computes_yml(profile_name, str(get_flags().PROFILES_DIR))
+                append_profile_to_buckets_yml(profile_name, str(get_flags().PROFILES_DIR))
         else:
             # When dvt init is run outside of an existing project,
             # create a new project and set up the user's profile.
@@ -368,3 +374,4 @@ class InitTask(BaseTask):
                 if not self.args.skip_profile_setup:
                     self.setup_profile(profile_name)
                     append_profile_to_computes_yml(profile_name, str(get_flags().PROFILES_DIR))
+                    append_profile_to_buckets_yml(profile_name, str(get_flags().PROFILES_DIR))

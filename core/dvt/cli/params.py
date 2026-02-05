@@ -114,7 +114,7 @@ debug_connection = _create_option_and_track_env_var(
     type=click.STRING,
 )
 
-# Feature 02: dvt debug section flags (show only these sections when set)
+# Feature 02: dvt debug section flags
 debug_show_config = _create_option_and_track_env_var(
     "--config",
     envvar=None,
@@ -127,17 +127,31 @@ debug_show_manifest = _create_option_and_track_env_var(
     help="Show manifest summary only.",
     is_flag=True,
 )
-debug_show_targets = _create_option_and_track_env_var(
-    "--targets",
+# Debug specific target/compute/bucket (optional filters)
+# Note: Using long flags only to avoid conflicts with global_flags (-t is used by --target)
+debug_target = _create_option_and_track_env_var(
+    "--debug-target",
+    "debug_target",
     envvar=None,
-    help="List targets for the current project's profile with connection status.",
-    is_flag=True,
+    help="Debug a specific target from profiles.yml. If not set, shows all targets.",
+    default=None,
+    type=click.STRING,
 )
-debug_show_computes = _create_option_and_track_env_var(
-    "--computes",
+debug_compute = _create_option_and_track_env_var(
+    "--debug-compute",
+    "debug_compute",
     envvar=None,
-    help="Show the current project's default compute only (from vars.dvt_default_compute or 'default').",
-    is_flag=True,
+    help="Debug a specific compute from computes.yml. If not set, shows all computes.",
+    default=None,
+    type=click.STRING,
+)
+debug_bucket = _create_option_and_track_env_var(
+    "--debug-bucket",
+    "debug_bucket",
+    envvar=None,
+    help="Debug a specific bucket from buckets.yml. If not set, shows all buckets.",
+    default=None,
+    type=click.STRING,
 )
 
 # flag was previously named DEFER_MODE
@@ -615,6 +629,14 @@ show = _create_option_and_track_env_var(
     envvar=None,
     help="Show a sample of the loaded data in the terminal",
     is_flag=True,
+)
+
+# DVT: Compute engine selection for federation/seed operations
+compute = _create_option_and_track_env_var(
+    "--compute",
+    "-c",
+    envvar=None,
+    help="Which compute engine to use (from computes.yml). Defaults to project's default compute.",
 )
 
 show_limit = _create_option_and_track_env_var(

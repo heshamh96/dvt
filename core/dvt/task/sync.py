@@ -20,6 +20,7 @@ from dvt.config.project import project_yml_path_if_exists
 from dvt.config.user_config import get_dvt_home, get_jdbc_drivers_dir
 from dvt.task.base import BaseTask, get_nearest_project_dir
 from dvt.task.jdbc_drivers import download_jdbc_jars, get_jdbc_drivers_for_adapters
+from dvt.task.native_connectors import get_native_connectors_for_adapters, sync_native_connectors
 from dbt_common.clients.system import load_file_contents
 from dbt_common.events.functions import fire_event
 from dbt_common.exceptions import DbtRuntimeError
@@ -499,6 +500,22 @@ class SyncTask(BaseTask):
             )
         else:
             _sync_log("ℹ️  No JDBC drivers required for these adapters (or adapters not in registry).")
+
+        # 6) Native connectors: download Spark native connectors for Snowflake, BigQuery, Redshift
+        # These enable optimized data transfer using cloud storage staging.
+        native_connectors = get_native_connectors_for_adapters(adapter_types)
+        if native_connectors:
+            _sync_log(f"🚀 Syncing native connectors for: {', '.join([c.adapter for c in native_connectors])}")
+            native_results = sync_native_connectors(
+                adapter_types,
+                profiles_dir=None,  # Use canonical ~/.dvt
+                on_event=lambda msg: _sync_log(msg),
+            )
+            for adapter, success in native_results.items():
+                if not success:
+                    _sync_log(yellow(f"  ⚠️  Native connector for {adapter} failed to download"))
+        else:
+            _sync_log("ℹ️  No native connectors available for these adapters (JDBC will be used).")
 
         # Show Java warnings and installation instructions if any
         if java_warnings:

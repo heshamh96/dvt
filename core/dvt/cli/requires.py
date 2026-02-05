@@ -222,13 +222,20 @@ def postflight(func):
             fire_event(MainEncounteredError(exc=str(e)))
             raise ResultExit(e.result)
         except DbtException as e:
-            # For UninstalledPackagesFoundError, don't fire event or print traceback - print once and skip event
+            # For certain errors, don't fire event or print traceback - print once and skip event
             # to avoid duplicate messages as exception propagates through decorators
-            from dvt.exceptions import UninstalledPackagesFoundError
+            from dvt.exceptions import UninstalledPackagesFoundError, PySparkNotInstalledError
             from dvt.cli.exceptions import ExceptionExit as ExceptionExitType
-            # Check if this is UninstalledPackagesFoundError (either directly or wrapped in ExceptionExit)
+            # Check if this is a special error type (either directly or wrapped in ExceptionExit)
             actual_exception = e.exception if isinstance(e, ExceptionExitType) else e
-            if isinstance(actual_exception, UninstalledPackagesFoundError):
+            if isinstance(actual_exception, PySparkNotInstalledError):
+                # PySpark not installed: print clean message once, NO traceback
+                exc_message = str(actual_exception)
+                if exc_message not in _printed_uninstalled_packages_errors:
+                    sys.stderr.write(exc_message)
+                    sys.stderr.flush()
+                    _printed_uninstalled_packages_errors.add(exc_message)
+            elif isinstance(actual_exception, UninstalledPackagesFoundError):
                 # Use module-level set to track printed exception messages to prevent duplicates
                 # across multiple decorator catches (use message as key since exception objects may differ)
                 exc_message = str(actual_exception)
@@ -263,11 +270,18 @@ def postflight(func):
                 raise e
             raise ExceptionExit(e)
         except BaseException as e:
-            # Check if this is UninstalledPackagesFoundError or adapter-missing DvtProfileError wrapped in ExceptionExit
-            from dvt.exceptions import UninstalledPackagesFoundError
+            # Check if this is UninstalledPackagesFoundError, PySparkNotInstalledError, or adapter-missing DvtProfileError wrapped in ExceptionExit
+            from dvt.exceptions import UninstalledPackagesFoundError, PySparkNotInstalledError
             from dvt.cli.exceptions import ExceptionExit as ExceptionExitType
             actual_exception = e.exception if isinstance(e, ExceptionExitType) else e
-            if isinstance(actual_exception, UninstalledPackagesFoundError):
+            if isinstance(actual_exception, PySparkNotInstalledError):
+                # PySpark not installed: print clean message once, NO traceback
+                exc_message = str(actual_exception)
+                if exc_message not in _printed_uninstalled_packages_errors:
+                    sys.stderr.write(exc_message)
+                    sys.stderr.flush()
+                    _printed_uninstalled_packages_errors.add(exc_message)
+            elif isinstance(actual_exception, UninstalledPackagesFoundError):
                 # Use module-level set to track printed exception messages to prevent duplicates
                 # across multiple decorator catches (use message as key since exception objects may differ)
                 exc_message = str(actual_exception)

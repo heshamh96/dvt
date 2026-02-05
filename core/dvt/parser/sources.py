@@ -25,7 +25,10 @@ from dvt.contracts.graph.unparsed import (
     UnparsedSourceDefinition,
     UnparsedSourceTableDefinition,
 )
+import sys
+
 from dvt.events.types import FreshnessConfigProblem, UnusedTables, ValidationWarning
+from dbt_common.ui import yellow
 from dvt.exceptions import ParsingError
 from dvt.node_types import NodeType
 from dvt.parser.common import ParserRef
@@ -54,6 +57,7 @@ class SourcePatcher:
         self.patches_used: Dict[SourceKey, Set[str]] = {}
         self.sources: Dict[str, SourceDefinition] = {}
         self._deprecations: Set[Any] = set()
+        self._warned_source_connections: Set[str] = set()  # DVT: Track sources already warned
 
     # This method calls the 'parse_source' method which takes
     # the UnpatchedSourceDefinitions in the manifest and combines them
@@ -125,6 +129,9 @@ class SourcePatcher:
     def parse_source(self, target: UnpatchedSourceDefinition) -> SourceDefinition:
         source = target.source
         table = target.table
+
+        # DVT: Validate that source has a 'connection' property for federation support
+        self._validate_source_connection(source, target.original_file_path)
         refs = ParserRef.from_target(table)
         unique_id = target.unique_id
         description = table.description or ""
@@ -339,6 +346,30 @@ class SourcePatcher:
         adapter = get_adapter(self.root_project)
         relation_cls = adapter.Relation
         return str(relation_cls.create_from(self.root_project, node))
+
+    def _validate_source_connection(
+        self, source: UnparsedSourceDefinition, file_path: str
+    ) -> None:
+        """Validate that source has a 'connection' property (DVT federation support).
+
+        For DVT federation to work correctly, sources must specify which profile
+        target they connect to. This enables the federation resolver to determine
+        execution paths for cross-target queries.
+
+        Emits a warning if connection is missing (for backward compatibility with dbt).
+        Only warns once per source name.
+        """
+        if source.connection is None:
+            # Only warn once per source name
+            source_key = f"{file_path}:{source.name}"
+            if source_key not in self._warned_source_connections:
+                self._warned_source_connections.add(source_key)
+                msg = (
+                    f"Warning: Source '{source.name}' in {file_path} is missing 'connection'. "
+                    f"DVT recommends specifying which target the source connects to.\n"
+                )
+                sys.stderr.write(yellow(msg))
+                sys.stderr.flush()
 
     def warn_unused(self) -> None:
         unused_tables: Dict[SourceKey, Optional[Set[str]]] = {}

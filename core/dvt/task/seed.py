@@ -1,67 +1,100 @@
-import random
-from typing import Optional, Type
+import sys
+from typing import Any, Dict, Optional, Type
 
-from dvt.artifacts.schemas.results import NodeStatus, RunStatus
-from dvt.contracts.graph.manifest import Manifest
-from dvt.events.types import LogSeedResult, LogStartLine, SeedHeader
+from dvt.artifacts.schemas.run import RunExecutionResult
+from dvt.exceptions import PySparkNotInstalledError
 from dvt.graph import ResourceTypeSelector
 from dvt.node_types import NodeType
-from dvt.task import group_lookup
 from dvt.task.base import BaseRunner
 from dvt.task.printer import print_run_end_messages
-from dvt.task.run import ModelRunner, RunTask
-from dbt_common.events.base_types import EventLevel
-from dbt_common.events.functions import fire_event
-from dbt_common.events.types import Formatting
+from dvt.task.run import RunTask
 from dbt_common.exceptions import DbtInternalError
+from dbt_common.ui import green
 
 
-class SeedRunner(ModelRunner):
-    def describe_node(self) -> str:
-        return "seed file {}".format(self.get_node_representation())
+def _load_compute_config(compute_name: Optional[str], profiles_dir: Optional[str] = None) -> Dict[str, Any]:
+    """Load compute configuration from computes.yml.
 
-    def before_execute(self) -> None:
-        fire_event(
-            LogStartLine(
-                description=self.describe_node(),
-                index=self.node_index,
-                total=self.num_nodes,
-                node_info=self.node.node_info,
-            )
-        )
+    Args:
+        compute_name: Name of the compute to load, or None for default
+        profiles_dir: Optional profiles directory override
 
-    def _build_run_model_result(self, model, context):
-        result = super()._build_run_model_result(model, context)
-        agate_result = context["load_result"]("agate_table")
-        result.agate_table = agate_result.table
-        return result
+    Returns:
+        Compute configuration dict with master, config, etc.
+    """
+    try:
+        from dvt.config.user_config import load_computes_config
+    except ImportError:
+        return {}
 
-    def compile(self, manifest: Manifest):
-        return self.node
+    computes = load_computes_config(profiles_dir)
+    if not computes:
+        return {}
 
-    def print_result_line(self, result):
-        model = result.node
-        group = group_lookup.get(model.unique_id)
-        level = EventLevel.ERROR if result.status == NodeStatus.Error else EventLevel.INFO
-        fire_event(
-            LogSeedResult(
-                status=result.status,
-                result_message=result.message,
-                index=self.node_index,
-                total=self.num_nodes,
-                execution_time=result.execution_time,
-                schema=self.node.schema,
-                relation=model.alias,
-                node_info=model.node_info,
-                group=group,
-            ),
-            level=level,
-        )
+    # If no compute specified, look for 'default' or first available
+    if not compute_name:
+        if "default" in computes:
+            return computes["default"]
+        # Return first compute if available
+        if computes:
+            first_key = next(iter(computes))
+            return computes[first_key]
+        return {}
+
+    # Return specified compute or empty dict
+    return computes.get(compute_name, {})
 
 
 class SeedTask(RunTask):
+    """Seed task that uses Spark JDBC for loading CSV files.
+
+    DVT always uses Spark-based seeding for:
+    - Better performance with large files
+    - Cross-target seeding support
+    - Consistent federation architecture
+
+    Use --compute to specify compute engine, --target for destination.
+
+    Thread Safety:
+    - ONE Spark session is shared across all seed threads
+    - Session is initialized ONCE before any seeds run
+    - This avoids race conditions in singleton reset
+    """
+
     def raise_on_first_error(self) -> bool:
         return False
+
+    def run(self) -> RunExecutionResult:
+        """Run the seed task, checking for PySpark first.
+
+        Initializes a single Spark session before running any seeds.
+        All seed threads share this session (Spark handles concurrency internally).
+        """
+        from dvt.task.spark_seed import is_spark_available
+
+        if not is_spark_available():
+            raise PySparkNotInstalledError()
+
+        # Initialize Spark session ONCE before any seeds run
+        # All seed threads will share this session
+        from dvt.federation.spark_manager import SparkManager
+
+        compute_name = getattr(self.args, "COMPUTE", None) or getattr(self.args, "compute", None)
+        compute_config = _load_compute_config(compute_name)
+
+        # Create and store the singleton instance with the compute config
+        SparkManager._instance = SparkManager(compute_config)
+        app_name = f"DVT-Seed-{compute_name or 'default'}"
+        SparkManager._instance.get_or_create_session(app_name)
+
+        try:
+            return super().run()
+        finally:
+            # Clean up Spark session to prevent resource leaks
+            try:
+                SparkManager.get_instance().stop_session()
+            except Exception:
+                pass  # Ignore cleanup errors
 
     def get_node_selector(self):
         if self.manifest is None or self.graph is None:
@@ -74,30 +107,25 @@ class SeedTask(RunTask):
         )
 
     def get_runner_type(self, _) -> Optional[Type[BaseRunner]]:
-        return SeedRunner
+        """Get the Spark-based seed runner."""
+        from dvt.task.spark_seed import SparkSeedRunner
+
+        # Log compute/target info
+        compute_name = getattr(self.args, "COMPUTE", None) or getattr(self.args, "compute", None)
+        target_name = getattr(self.args, "TARGET", None) or getattr(self.args, "target", None)
+
+        info_parts = ["🚀 Spark seed"]
+        if compute_name:
+            info_parts.append(f"compute={compute_name}")
+        if target_name:
+            info_parts.append(f"target={target_name}")
+
+        sys.stderr.write(green(" ".join(info_parts) + "\n"))
+        return SparkSeedRunner
 
     def task_end_messages(self, results) -> None:
-        if self.args.show:
-            self.show_tables(results)
-
         print_run_end_messages(results)
 
-    def show_table(self, result):
-        table = result.agate_table
-        rand_table = table.order_by(lambda x: random.random())
 
-        schema = result.node.schema
-        alias = result.node.alias
-
-        header = "Random sample of table: {}.{}".format(schema, alias)
-        fire_event(Formatting(""))
-        fire_event(SeedHeader(header=header))
-        fire_event(Formatting("-" * len(header)))
-
-        rand_table.print_table(max_rows=10, max_columns=None)
-        fire_event(Formatting(""))
-
-    def show_tables(self, results):
-        for result in results:
-            if result.status != RunStatus.Error:
-                self.show_table(result)
+# Alias for backward compatibility with build.py and other imports
+from dvt.task.spark_seed import SparkSeedRunner as SeedRunner  # noqa: E402, F401

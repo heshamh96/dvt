@@ -11,9 +11,11 @@ import yaml
 DVT_HOME = Path.home() / ".dvt"
 PROFILES_PATH = DVT_HOME / "profiles.yml"
 COMPUTES_PATH = DVT_HOME / "computes.yml"
+BUCKETS_PATH = DVT_HOME / "buckets.yml"
 DATA_DIR = DVT_HOME / "data"
 MDM_DB_PATH = DATA_DIR / "mdm.duckdb"
 JDBC_DRIVERS_DIR_NAME = ".jdbc_jars"
+NATIVE_CONNECTORS_DIR_NAME = "native"
 
 
 def get_dvt_home(profiles_dir: Optional[str] = None) -> Path:
@@ -26,6 +28,11 @@ def get_dvt_home(profiles_dir: Optional[str] = None) -> Path:
 def get_jdbc_drivers_dir(profiles_dir: Optional[str] = None) -> Path:
     """Return the directory where JDBC driver JARs for adapters are stored (e.g. ~/.dvt/.jdbc_jars)."""
     return get_dvt_home(profiles_dir) / JDBC_DRIVERS_DIR_NAME
+
+
+def get_native_connectors_dir(profiles_dir: Optional[str] = None) -> Path:
+    """Return the directory where native connector JARs are stored (e.g. ~/.dvt/lib/native)."""
+    return get_dvt_home(profiles_dir) / "lib" / NATIVE_CONNECTORS_DIR_NAME
 
 
 def create_default_computes_yml(path: Optional[Path] = None) -> bool:
@@ -51,6 +58,197 @@ default:
 """
     path.write_text(content)
     return True
+
+
+def create_default_buckets_yml(path: Optional[Path] = None) -> bool:
+    """Create buckets.yml with template for native connector staging if it doesn't exist.
+
+    Buckets are per-profile (like profiles.yml). Each profile has:
+    - target: Default bucket name to use
+    - buckets: Bucket definitions (like outputs in profiles.yml)
+
+    Returns True if created.
+    """
+    path = Path(path) if path is not None else BUCKETS_PATH
+    if path.exists():
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    content = """# DVT Bucket Configuration
+# Structure mirrors profiles.yml: each profile has target (default bucket) and buckets (definitions).
+# Native connectors use cloud storage for faster data transfer instead of JDBC.
+# See docs: https://github.com/heshamh96/dvt
+
+# Example profile configuration:
+# my_profile:
+#   target: default  # Default bucket to use
+#   buckets:
+#     default:
+#       type: s3  # s3, gcs, azure
+#       bucket: my-dvt-staging-bucket
+#       prefix: dvt-staging/
+#       # region: us-east-1
+#       # access_key_id: YOUR_ACCESS_KEY
+#       # secret_access_key: YOUR_SECRET_KEY
+#     snowflake_staging:
+#       type: s3
+#       bucket: snowflake-staging-bucket
+#       prefix: dvt/
+#       # storage_integration: MY_S3_INTEGRATION
+#       # region: us-west-2
+#       # access_key_id: YOUR_ACCESS_KEY
+#       # secret_access_key: YOUR_SECRET_KEY
+#     bigquery_staging:
+#       type: gcs
+#       bucket: bigquery-staging-bucket
+#       prefix: dvt-temp/
+#       # project: my-gcp-project
+#       # credentials_path: /path/to/service-account.json
+#     redshift_staging:
+#       type: s3
+#       bucket: redshift-staging-bucket
+#       prefix: dvt-unload/
+#       # iam_role: arn:aws:iam::123456789:role/RedshiftS3Access
+#       # region: us-east-1
+"""
+    path.write_text(content)
+    return True
+
+
+def _default_bucket_block() -> Dict[str, Any]:
+    """Default bucket block for a new profile (template with commented credentials)."""
+    return {
+        "target": "default",
+        "buckets": {
+            "default": {
+                "type": "s3",
+                "bucket": "my-dvt-staging-bucket",
+                "prefix": "dvt-staging/",
+                # Credentials are added as comments in the YAML output
+            },
+        },
+    }
+
+
+def load_buckets_config(profiles_dir: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Load and parse buckets.yml. Returns None if not found or invalid."""
+    dvt_home = get_dvt_home(profiles_dir)
+    buckets_path = dvt_home / "buckets.yml"
+    if not buckets_path.exists():
+        return None
+    try:
+        with open(buckets_path, "r") as f:
+            data = yaml.safe_load(f)
+        return data if isinstance(data, dict) else None
+    except Exception:
+        return None
+
+
+def load_buckets_for_profile(
+    profile_name: str, profiles_dir: Optional[str] = None
+) -> Optional[Dict[str, Any]]:
+    """Load bucket configuration for a specific profile.
+
+    Returns dict with 'target' and 'buckets' keys, or None if not found.
+    Structure mirrors profiles.yml:
+    {
+        "target": "default",  # Default bucket name
+        "buckets": {
+            "default": {"type": "s3", "bucket": "...", ...},
+            "snowflake_staging": {"type": "s3", ...},
+        }
+    }
+    """
+    all_buckets = load_buckets_config(profiles_dir)
+    if not all_buckets or profile_name not in all_buckets:
+        return None
+    profile_buckets = all_buckets.get(profile_name)
+    if not isinstance(profile_buckets, dict):
+        return None
+    return profile_buckets
+
+
+def _bucket_profile_template(profile_name: str) -> str:
+    """Generate a bucket profile template with all subconfigs commented."""
+    return f"""{profile_name}:
+  target: default  # Default bucket to use
+  buckets:
+    default:
+      # type: # s3, gcs, azure
+      # bucket: my-dvt-staging-bucket
+      # prefix: dvt-staging/
+      # region: us-east-1
+      # access_key_id: YOUR_ACCESS_KEY
+      # secret_access_key: YOUR_SECRET_KEY
+"""
+
+
+def append_profile_to_buckets_yml(
+    profile_name: str,
+    profiles_dir: Optional[str] = None,
+) -> bool:
+    """
+    If the profile is not already in buckets.yml, append its block.
+    Does not overwrite existing profile keys. Returns True if a new block was added.
+    """
+    dvt_home = get_dvt_home(profiles_dir)
+    buckets_path = dvt_home / "buckets.yml"
+
+    # Create file if it doesn't exist
+    if not buckets_path.exists():
+        create_default_buckets_yml(buckets_path)
+
+    # Check if profile already exists
+    with open(buckets_path, "r") as f:
+        content = f.read()
+        data = yaml.safe_load(content) or {}
+
+    if not isinstance(data, dict):
+        data = {}
+
+    if profile_name in data:
+        return False
+
+    # Append the new profile template with comments
+    with open(buckets_path, "a") as f:
+        f.write("\n" + _bucket_profile_template(profile_name))
+
+    return True
+
+
+def load_computes_config(profiles_dir: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Load and parse computes.yml. Returns compute definitions dict or None.
+
+    The returned dict maps compute names to their configuration:
+    {
+        "default": {"type": "spark", "master": "local[*]", "config": {...}},
+        "databricks": {"type": "spark", "master": "databricks://...", ...}
+    }
+
+    This extracts the 'computes' block from the active profile in computes.yml.
+    """
+    dvt_home = get_dvt_home(profiles_dir)
+    computes_path = dvt_home / "computes.yml"
+    if not computes_path.exists():
+        return None
+    try:
+        with open(computes_path, "r") as f:
+            data = yaml.safe_load(f)
+        if not isinstance(data, dict):
+            return None
+
+        # computes.yml structure: {profile_name: {target: ..., computes: {...}}}
+        # For now, use "default" profile or first available
+        if "default" in data and isinstance(data["default"], dict):
+            return data["default"].get("computes", {})
+
+        # Try first profile
+        for profile_name, profile_data in data.items():
+            if isinstance(profile_data, dict) and "computes" in profile_data:
+                return profile_data["computes"]
+
+        return None
+    except Exception:
+        return None
 
 
 def _default_compute_block() -> Dict[str, Any]:
