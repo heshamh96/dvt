@@ -113,3 +113,13 @@ poetry.lock
 
 # asdf
 .tool-versions
+
+# Claude Code local settings (personal overrides)
+.claude/settings.local.json
+
+# Nuitka build artifacts
+*.build/
+*.dist/
+*.onefile-build/
+dist/dvt
+dist/dvt.bin
