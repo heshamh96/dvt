@@ -31,6 +31,55 @@ class SnowflakeExtractor(BaseExtractor):
 
     adapter_types = ["snowflake"]
 
+    def _get_connection(self, config: ExtractionConfig = None) -> Any:
+        """Get or create a Snowflake database connection.
+
+        If self.connection is None but connection_config is available,
+        creates a new connection using snowflake.connector.
+
+        Args:
+            config: Optional extraction config with connection_config
+
+        Returns:
+            Snowflake database connection
+        """
+        if self.connection is not None:
+            return self.connection
+
+        # Return cached lazy connection if available
+        if self._lazy_connection is not None:
+            return self._lazy_connection
+
+        # Try to get connection_config from config or instance
+        conn_config = None
+        if config and config.connection_config:
+            conn_config = config.connection_config
+        elif self.connection_config:
+            conn_config = self.connection_config
+
+        if not conn_config:
+            raise ValueError(
+                "No connection provided and no connection_config available. "
+                "Either provide a connection to the extractor or include "
+                "connection_config in ExtractionConfig."
+            )
+
+        try:
+            import snowflake.connector
+        except ImportError:
+            raise ImportError(
+                "snowflake-connector-python is required for Snowflake extraction. "
+                "Install with: pip install snowflake-connector-python"
+            )
+
+        from dvt.federation.auth.snowflake import SnowflakeAuthHandler
+
+        handler = SnowflakeAuthHandler()
+        connect_kwargs = handler.get_native_connection_kwargs(conn_config)
+
+        self._lazy_connection = snowflake.connector.connect(**connect_kwargs)
+        return self._lazy_connection
+
     def supports_native_export(self, bucket_type: str) -> bool:
         """Snowflake supports native export to S3, GCS, and Azure."""
         return bucket_type in ("s3", "gcs", "azure")
@@ -91,7 +140,7 @@ class SnowflakeExtractor(BaseExtractor):
                 MAX_FILE_SIZE = 268435456
             """
 
-            cursor = self.connection.cursor()
+            cursor = self._get_connection(config).cursor()
             cursor.execute(copy_sql)
 
             # Get row count from COPY result
@@ -160,7 +209,7 @@ class SnowflakeExtractor(BaseExtractor):
             where_clause = " AND ".join(config.predicates)
             query += f" WHERE {where_clause}"
 
-        cursor = self.connection.cursor()
+        cursor = self._get_connection(config).cursor()
         cursor.execute(query)
 
         hashes = {}
@@ -175,13 +224,14 @@ class SnowflakeExtractor(BaseExtractor):
         schema: str,
         table: str,
         predicates: Optional[List[str]] = None,
+        config: ExtractionConfig = None,
     ) -> int:
         """Get row count using COUNT(*)."""
         query = f"SELECT COUNT(*) FROM {schema}.{table}"
         if predicates:
             query += f" WHERE {' AND '.join(predicates)}"
 
-        cursor = self.connection.cursor()
+        cursor = self._get_connection(config).cursor()
         cursor.execute(query)
         count = cursor.fetchone()[0]
         cursor.close()
@@ -191,6 +241,7 @@ class SnowflakeExtractor(BaseExtractor):
         self,
         schema: str,
         table: str,
+        config: ExtractionConfig = None,
     ) -> List[Dict[str, str]]:
         """Get column metadata from information_schema."""
         query = """
@@ -199,7 +250,7 @@ class SnowflakeExtractor(BaseExtractor):
             WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s
             ORDER BY ORDINAL_POSITION
         """
-        cursor = self.connection.cursor()
+        cursor = self._get_connection(config).cursor()
         cursor.execute(query, (schema.upper(), table.upper()))
 
         columns = []
@@ -213,11 +264,12 @@ class SnowflakeExtractor(BaseExtractor):
         self,
         schema: str,
         table: str,
+        config: ExtractionConfig = None,
     ) -> List[str]:
         """Detect primary key using SHOW PRIMARY KEYS."""
         query = f"SHOW PRIMARY KEYS IN TABLE {schema}.{table}"
 
-        cursor = self.connection.cursor()
+        cursor = self._get_connection(config).cursor()
         try:
             cursor.execute(query)
             # Column name is at index 4 in SHOW PRIMARY KEYS result

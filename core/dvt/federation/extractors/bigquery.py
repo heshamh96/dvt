@@ -28,6 +28,103 @@ class BigQueryExtractor(BaseExtractor):
 
     adapter_types = ["bigquery"]
 
+    def _get_connection(self, config: ExtractionConfig = None) -> Any:
+        """Get or create a BigQuery client connection.
+
+        If self.connection is None but connection_config is available,
+        creates a new connection using google.cloud.bigquery.
+
+        Args:
+            config: Optional extraction config with connection_config
+
+        Returns:
+            BigQuery client (with cursor() method wrapper)
+        """
+        if self.connection is not None:
+            return self.connection
+
+        # Return cached lazy connection if available
+        if self._lazy_connection is not None:
+            return self._lazy_connection
+
+        # Try to get connection_config from config or instance
+        conn_config = None
+        if config and config.connection_config:
+            conn_config = config.connection_config
+        elif self.connection_config:
+            conn_config = self.connection_config
+
+        if not conn_config:
+            raise ValueError(
+                "No connection provided and no connection_config available. "
+                "Either provide a connection to the extractor or include "
+                "connection_config in ExtractionConfig."
+            )
+
+        try:
+            from google.cloud import bigquery
+            from google.oauth2 import service_account
+        except ImportError:
+            raise ImportError(
+                "google-cloud-bigquery is required for BigQuery extraction. "
+                "Install with: pip install google-cloud-bigquery"
+            )
+
+        from dvt.federation.auth.bigquery import BigQueryAuthHandler
+
+        handler = BigQueryAuthHandler()
+        connect_kwargs = handler.get_native_connection_kwargs(conn_config)
+
+        # Build credentials
+        credentials = None
+        if connect_kwargs.get("keyfile"):
+            credentials = service_account.Credentials.from_service_account_file(
+                connect_kwargs["keyfile"]
+            )
+        elif connect_kwargs.get("keyfile_json"):
+            credentials = service_account.Credentials.from_service_account_info(
+                connect_kwargs["keyfile_json"]
+            )
+
+        # Create BigQuery client
+        client = bigquery.Client(
+            project=connect_kwargs.get("project"),
+            credentials=credentials,
+        )
+
+        # Wrap client to provide cursor() interface for compatibility
+        class BigQueryConnectionWrapper:
+            def __init__(self, bq_client):
+                self._client = bq_client
+
+            def cursor(self):
+                return BigQueryCursorWrapper(self._client)
+
+        class BigQueryCursorWrapper:
+            def __init__(self, bq_client):
+                self._client = bq_client
+                self._result = None
+
+            def execute(self, query, params=None):
+                self._result = self._client.query(query).result()
+
+            def fetchone(self):
+                if self._result:
+                    for row in self._result:
+                        return tuple(row.values())
+                return None
+
+            def fetchall(self):
+                if self._result:
+                    return [tuple(row.values()) for row in self._result]
+                return []
+
+            def close(self):
+                self._result = None
+
+        self._lazy_connection = BigQueryConnectionWrapper(client)
+        return self._lazy_connection
+
     def supports_native_export(self, bucket_type: str) -> bool:
         """BigQuery supports native export to GCS."""
         return bucket_type == "gcs"
@@ -87,13 +184,13 @@ class BigQueryExtractor(BaseExtractor):
                 {query}
             """
 
-            cursor = self.connection.cursor()
+            cursor = self._get_connection(config).cursor()
             cursor.execute(export_sql)
             cursor.close()
 
             # Get row count
             count_query = f"SELECT COUNT(*) FROM ({query})"
-            cursor = self.connection.cursor()
+            cursor = self._get_connection(config).cursor()
             cursor.execute(count_query)
             row_count = cursor.fetchone()[0]
             cursor.close()
@@ -157,7 +254,7 @@ class BigQueryExtractor(BaseExtractor):
             where_clause = " AND ".join(config.predicates)
             query += f" WHERE {where_clause}"
 
-        cursor = self.connection.cursor()
+        cursor = self._get_connection(config).cursor()
         cursor.execute(query)
 
         hashes = {}
@@ -172,13 +269,14 @@ class BigQueryExtractor(BaseExtractor):
         schema: str,
         table: str,
         predicates: Optional[List[str]] = None,
+        config: ExtractionConfig = None,
     ) -> int:
         """Get row count using COUNT(*)."""
         query = f"SELECT COUNT(*) FROM `{schema}.{table}`"
         if predicates:
             query += f" WHERE {' AND '.join(predicates)}"
 
-        cursor = self.connection.cursor()
+        cursor = self._get_connection(config).cursor()
         cursor.execute(query)
         count = cursor.fetchone()[0]
         cursor.close()
@@ -188,6 +286,7 @@ class BigQueryExtractor(BaseExtractor):
         self,
         schema: str,
         table: str,
+        config: ExtractionConfig = None,
     ) -> List[Dict[str, str]]:
         """Get column metadata from INFORMATION_SCHEMA."""
         query = f"""
@@ -196,7 +295,7 @@ class BigQueryExtractor(BaseExtractor):
             WHERE table_name = '{table}'
             ORDER BY ordinal_position
         """
-        cursor = self.connection.cursor()
+        cursor = self._get_connection(config).cursor()
         cursor.execute(query)
 
         columns = []
@@ -210,6 +309,7 @@ class BigQueryExtractor(BaseExtractor):
         self,
         schema: str,
         table: str,
+        config: ExtractionConfig = None,
     ) -> List[str]:
         """Detect primary key from BigQuery table constraints.
 
@@ -222,7 +322,7 @@ class BigQueryExtractor(BaseExtractor):
             AND constraint_name LIKE '%_pk'
             ORDER BY ordinal_position
         """
-        cursor = self.connection.cursor()
+        cursor = self._get_connection(config).cursor()
         try:
             cursor.execute(query)
             pk_cols = [row[0] for row in cursor.fetchall()]

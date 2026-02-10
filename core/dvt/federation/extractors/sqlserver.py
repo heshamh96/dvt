@@ -5,7 +5,7 @@ Also handles Azure Synapse and Fabric.
 """
 
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from dvt.federation.extractors.base import (
     BaseExtractor,
@@ -21,6 +21,68 @@ class SQLServerExtractor(BaseExtractor):
     """
 
     adapter_types = ["sqlserver", "synapse", "fabric"]
+
+    def _get_connection(self, config: ExtractionConfig = None) -> Any:
+        """Get or create a SQL Server database connection.
+
+        If self.connection is None but connection_config is available,
+        creates a new connection using pyodbc.
+
+        Args:
+            config: Optional extraction config with connection_config
+
+        Returns:
+            SQL Server database connection
+        """
+        if self.connection is not None:
+            return self.connection
+
+        if self._lazy_connection is not None:
+            return self._lazy_connection
+
+        conn_config = None
+        if config and config.connection_config:
+            conn_config = config.connection_config
+        elif self.connection_config:
+            conn_config = self.connection_config
+
+        if not conn_config:
+            raise ValueError(
+                "No connection provided and no connection_config available. "
+                "Either provide a connection to the extractor or include "
+                "connection_config in ExtractionConfig."
+            )
+
+        try:
+            import pyodbc
+        except ImportError:
+            raise ImportError(
+                "pyodbc is required for SQL Server extraction. "
+                "Install with: pip install pyodbc"
+            )
+
+        from dvt.federation.auth.sqlserver import SQLServerAuthHandler
+
+        handler = SQLServerAuthHandler()
+        kwargs = handler.get_native_connection_kwargs(conn_config)
+
+        # Build connection string for pyodbc
+        driver = conn_config.get("driver", "ODBC Driver 17 for SQL Server")
+        conn_str = (
+            f"DRIVER={{{driver}}};"
+            f"SERVER={kwargs.get('server', '')};"
+            f"PORT={kwargs.get('port', '1433')};"
+            f"DATABASE={kwargs.get('database', '')};"
+            f"UID={kwargs.get('user', '')};"
+            f"PWD={kwargs.get('password', '')};"
+        )
+        if kwargs.get("encrypt"):
+            conn_str += f"Encrypt={kwargs['encrypt']};"
+        if conn_config.get("trust_cert"):
+            conn_str += "TrustServerCertificate=yes;"
+
+        self._lazy_connection = pyodbc.connect(conn_str)
+        return self._lazy_connection
 
     def extract(self, config: ExtractionConfig, output_path: Path) -> ExtractionResult:
         """Extract data from SQL Server to Parquet using Spark JDBC."""
@@ -50,38 +112,46 @@ class SQLServerExtractor(BaseExtractor):
         if config.predicates:
             query += f" WHERE {' AND '.join(config.predicates)}"
 
-        cursor = self.connection.cursor()
+        cursor = self._get_connection(config).cursor()
         cursor.execute(query)
         hashes = {str(row[0]): row[1] for row in cursor.fetchall()}
         cursor.close()
         return hashes
 
     def get_row_count(
-        self, schema: str, table: str, predicates: Optional[List[str]] = None
+        self,
+        schema: str,
+        table: str,
+        predicates: Optional[List[str]] = None,
+        config: ExtractionConfig = None,
     ) -> int:
         query = f"SELECT COUNT(*) FROM [{schema}].[{table}]"
         if predicates:
             query += f" WHERE {' AND '.join(predicates)}"
-        cursor = self.connection.cursor()
+        cursor = self._get_connection(config).cursor()
         cursor.execute(query)
         count = cursor.fetchone()[0]
         cursor.close()
         return count
 
-    def get_columns(self, schema: str, table: str) -> List[Dict[str, str]]:
+    def get_columns(
+        self, schema: str, table: str, config: ExtractionConfig = None
+    ) -> List[Dict[str, str]]:
         query = """
             SELECT COLUMN_NAME, DATA_TYPE
             FROM INFORMATION_SCHEMA.COLUMNS
             WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
             ORDER BY ORDINAL_POSITION
         """
-        cursor = self.connection.cursor()
+        cursor = self._get_connection(config).cursor()
         cursor.execute(query, (schema, table))
         columns = [{"name": row[0], "type": row[1]} for row in cursor.fetchall()]
         cursor.close()
         return columns
 
-    def detect_primary_key(self, schema: str, table: str) -> List[str]:
+    def detect_primary_key(
+        self, schema: str, table: str, config: ExtractionConfig = None
+    ) -> List[str]:
         query = """
             SELECT c.COLUMN_NAME
             FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
@@ -92,7 +162,7 @@ class SQLServerExtractor(BaseExtractor):
             AND tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
             ORDER BY c.ORDINAL_POSITION
         """
-        cursor = self.connection.cursor()
+        cursor = self._get_connection(config).cursor()
         try:
             cursor.execute(query, (schema, table))
             pk_cols = [row[0] for row in cursor.fetchall()]

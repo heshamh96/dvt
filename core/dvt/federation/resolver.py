@@ -214,15 +214,11 @@ class FederationResolver:
             if model_target:
                 return model_target
 
-        # Profile default
-        if hasattr(self.config, "target"):
-            return self.config.target
+        # Profile default (RuntimeConfig uses target_name, not target)
+        if hasattr(self.config, "target_name") and self.config.target_name:
+            return self.config.target_name
 
-        # Fallback to profile's default target
-        if hasattr(self.config, "profile") and hasattr(self.config.profile, "target"):
-            return self.config.profile.target
-
-        # Ultimate fallback
+        # Ultimate fallback - should not reach here with valid config
         return "default"
 
     def _resolve_compute(self, model: Any) -> str:
@@ -391,10 +387,8 @@ class FederationResolver:
 
     def _get_default_target(self) -> str:
         """Get default target from profile."""
-        if hasattr(self.config, "target"):
-            return self.config.target
-        if hasattr(self.config, "profile") and hasattr(self.config.profile, "target"):
-            return self.config.profile.target
+        if hasattr(self.config, "target_name") and self.config.target_name:
+            return self.config.target_name
         return "default"
 
     def _get_computes_config(self) -> Optional[Dict[str, Any]]:

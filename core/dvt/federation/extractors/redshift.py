@@ -28,6 +28,55 @@ class RedshiftExtractor(BaseExtractor):
 
     adapter_types = ["redshift"]
 
+    def _get_connection(self, config: ExtractionConfig = None) -> Any:
+        """Get or create a Redshift database connection.
+
+        If self.connection is None but connection_config is available,
+        creates a new connection using psycopg2 (Redshift is PostgreSQL-compatible).
+
+        Args:
+            config: Optional extraction config with connection_config
+
+        Returns:
+            Redshift database connection
+        """
+        if self.connection is not None:
+            return self.connection
+
+        # Return cached lazy connection if available
+        if self._lazy_connection is not None:
+            return self._lazy_connection
+
+        # Try to get connection_config from config or instance
+        conn_config = None
+        if config and config.connection_config:
+            conn_config = config.connection_config
+        elif self.connection_config:
+            conn_config = self.connection_config
+
+        if not conn_config:
+            raise ValueError(
+                "No connection provided and no connection_config available. "
+                "Either provide a connection to the extractor or include "
+                "connection_config in ExtractionConfig."
+            )
+
+        try:
+            import psycopg2
+        except ImportError:
+            raise ImportError(
+                "psycopg2 is required for Redshift extraction. "
+                "Install with: pip install psycopg2-binary"
+            )
+
+        from dvt.federation.auth.redshift import RedshiftAuthHandler
+
+        handler = RedshiftAuthHandler()
+        connect_kwargs = handler.get_native_connection_kwargs(conn_config)
+
+        self._lazy_connection = psycopg2.connect(**connect_kwargs)
+        return self._lazy_connection
+
     def supports_native_export(self, bucket_type: str) -> bool:
         """Redshift supports native export to S3."""
         return bucket_type == "s3"
@@ -85,12 +134,12 @@ class RedshiftExtractor(BaseExtractor):
                 PARALLEL ON
             """
 
-            cursor = self.connection.cursor()
+            cursor = self._get_connection(config).cursor()
             cursor.execute(unload_sql)
             cursor.close()
 
             # Get row count
-            count_cursor = self.connection.cursor()
+            count_cursor = self._get_connection(config).cursor()
             count_cursor.execute(f"SELECT COUNT(*) FROM ({query})")
             row_count = count_cursor.fetchone()[0]
             count_cursor.close()
@@ -131,7 +180,7 @@ class RedshiftExtractor(BaseExtractor):
         )
 
         cols = config.columns or [
-            c["name"] for c in self.get_columns(config.schema, config.table)
+            c["name"] for c in self.get_columns(config.schema, config.table, config)
         ]
         col_exprs = [f"NVL(CAST({c} AS VARCHAR), '')" for c in cols]
         hash_expr = f"MD5(CONCAT({', '.join(col_exprs)}))"
@@ -143,45 +192,53 @@ class RedshiftExtractor(BaseExtractor):
         if config.predicates:
             query += f" WHERE {' AND '.join(config.predicates)}"
 
-        cursor = self.connection.cursor()
+        cursor = self._get_connection(config).cursor()
         cursor.execute(query)
         hashes = {row[0]: row[1] for row in cursor.fetchall()}
         cursor.close()
         return hashes
 
     def get_row_count(
-        self, schema: str, table: str, predicates: Optional[List[str]] = None
+        self,
+        schema: str,
+        table: str,
+        predicates: Optional[List[str]] = None,
+        config: ExtractionConfig = None,
     ) -> int:
         query = f"SELECT COUNT(*) FROM {schema}.{table}"
         if predicates:
             query += f" WHERE {' AND '.join(predicates)}"
-        cursor = self.connection.cursor()
+        cursor = self._get_connection(config).cursor()
         cursor.execute(query)
         count = cursor.fetchone()[0]
         cursor.close()
         return count
 
-    def get_columns(self, schema: str, table: str) -> List[Dict[str, str]]:
+    def get_columns(
+        self, schema: str, table: str, config: ExtractionConfig = None
+    ) -> List[Dict[str, str]]:
         query = """
             SELECT column_name, data_type
             FROM information_schema.columns
             WHERE table_schema = %s AND table_name = %s
             ORDER BY ordinal_position
         """
-        cursor = self.connection.cursor()
+        cursor = self._get_connection(config).cursor()
         cursor.execute(query, (schema, table))
         columns = [{"name": row[0], "type": row[1]} for row in cursor.fetchall()]
         cursor.close()
         return columns
 
-    def detect_primary_key(self, schema: str, table: str) -> List[str]:
+    def detect_primary_key(
+        self, schema: str, table: str, config: ExtractionConfig = None
+    ) -> List[str]:
         query = """
             SELECT column_name FROM svv_table_info ti
             JOIN information_schema.columns c
                 ON ti.schema = c.table_schema AND ti.table = c.table_name
             WHERE ti.schema = %s AND ti.table = %s AND c.ordinal_position = 1
         """
-        cursor = self.connection.cursor()
+        cursor = self._get_connection(config).cursor()
         try:
             cursor.execute(query, (schema, table))
             pk_cols = [row[0] for row in cursor.fetchall()]

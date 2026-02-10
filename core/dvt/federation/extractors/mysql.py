@@ -5,7 +5,7 @@ Uses Spark JDBC for parallel extraction.
 """
 
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from dvt.federation.extractors.base import (
     BaseExtractor,
@@ -29,6 +29,63 @@ class MySQLExtractor(BaseExtractor):
         "starrocks",
         "doris",
     ]
+
+    def _get_connection(self, config: ExtractionConfig = None) -> Any:
+        """Get or create a MySQL database connection.
+
+        If self.connection is None but connection_config is available,
+        creates a new connection using mysql.connector.
+
+        Args:
+            config: Optional extraction config with connection_config
+
+        Returns:
+            MySQL database connection
+        """
+        if self.connection is not None:
+            return self.connection
+
+        # Return cached lazy connection if available
+        if self._lazy_connection is not None:
+            return self._lazy_connection
+
+        # Try to get connection_config from config or instance
+        conn_config = None
+        if config and config.connection_config:
+            conn_config = config.connection_config
+        elif self.connection_config:
+            conn_config = self.connection_config
+
+        if not conn_config:
+            raise ValueError(
+                "No connection provided and no connection_config available. "
+                "Either provide a connection to the extractor or include "
+                "connection_config in ExtractionConfig."
+            )
+
+        # Try mysql-connector-python first, fall back to pymysql
+        try:
+            import mysql.connector
+
+            driver = mysql.connector
+        except ImportError:
+            try:
+                import pymysql
+
+                driver = pymysql
+            except ImportError:
+                raise ImportError(
+                    "mysql-connector-python or pymysql is required for MySQL extraction. "
+                    "Install with: pip install mysql-connector-python"
+                )
+
+        from dvt.federation.auth.mysql import MySQLAuthHandler
+
+        handler = MySQLAuthHandler()
+        connect_kwargs = handler.get_native_connection_kwargs(conn_config)
+
+        self._lazy_connection = driver.connect(**connect_kwargs)
+        return self._lazy_connection
 
     def extract(
         self,
@@ -75,7 +132,7 @@ class MySQLExtractor(BaseExtractor):
             where_clause = " AND ".join(config.predicates)
             query += f" WHERE {where_clause}"
 
-        cursor = self.connection.cursor()
+        cursor = self._get_connection(config).cursor()
         cursor.execute(query)
 
         hashes = {}
@@ -90,13 +147,14 @@ class MySQLExtractor(BaseExtractor):
         schema: str,
         table: str,
         predicates: Optional[List[str]] = None,
+        config: ExtractionConfig = None,
     ) -> int:
         """Get row count using COUNT(*)."""
         query = f"SELECT COUNT(*) FROM {schema}.{table}"
         if predicates:
             query += f" WHERE {' AND '.join(predicates)}"
 
-        cursor = self.connection.cursor()
+        cursor = self._get_connection(config).cursor()
         cursor.execute(query)
         count = cursor.fetchone()[0]
         cursor.close()
@@ -106,6 +164,7 @@ class MySQLExtractor(BaseExtractor):
         self,
         schema: str,
         table: str,
+        config: ExtractionConfig = None,
     ) -> List[Dict[str, str]]:
         """Get column metadata from information_schema."""
         query = """
@@ -114,7 +173,7 @@ class MySQLExtractor(BaseExtractor):
             WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s
             ORDER BY ORDINAL_POSITION
         """
-        cursor = self.connection.cursor()
+        cursor = self._get_connection(config).cursor()
         cursor.execute(query, (schema, table))
 
         columns = []
@@ -128,6 +187,7 @@ class MySQLExtractor(BaseExtractor):
         self,
         schema: str,
         table: str,
+        config: ExtractionConfig = None,
     ) -> List[str]:
         """Detect primary key from information_schema."""
         query = """
@@ -138,7 +198,7 @@ class MySQLExtractor(BaseExtractor):
             AND CONSTRAINT_NAME = 'PRIMARY'
             ORDER BY ORDINAL_POSITION
         """
-        cursor = self.connection.cursor()
+        cursor = self._get_connection(config).cursor()
         try:
             cursor.execute(query, (schema, table))
             pk_cols = [row[0] for row in cursor.fetchall()]

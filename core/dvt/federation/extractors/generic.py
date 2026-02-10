@@ -26,6 +26,54 @@ class GenericExtractor(BaseExtractor):
     # Handles all adapter types as fallback
     adapter_types = ["*"]
 
+    def _get_connection(self, config: ExtractionConfig = None) -> Any:
+        """Get connection for generic extractor.
+
+        The generic extractor requires a connection to be provided either
+        directly or via connection_config. This is a fallback that raises
+        a helpful error if no connection is available.
+        """
+        if self.connection is not None:
+            return self.connection
+        if self._lazy_connection is not None:
+            return self._lazy_connection
+
+        conn_config = None
+        if config and config.connection_config:
+            conn_config = config.connection_config
+        elif self.connection_config:
+            conn_config = self.connection_config
+
+        if not conn_config:
+            raise ValueError(
+                "GenericExtractor requires a connection. "
+                "Either provide a connection directly or ensure connection_config "
+                "is available. For database-specific extractors with lazy connection "
+                "support, use the appropriate extractor (e.g., PostgresExtractor, "
+                "SnowflakeExtractor)."
+            )
+
+        # Try to use auth handler if adapter type is known
+        adapter_type = conn_config.get("type", "")
+        if adapter_type:
+            try:
+                from dvt.federation.auth import get_auth_handler
+
+                handler = get_auth_handler(adapter_type)
+                kwargs = handler.get_native_connection_kwargs(conn_config)
+                # This would require knowing which driver to use
+                raise ValueError(
+                    f"GenericExtractor cannot create lazy connections for adapter "
+                    f"type '{adapter_type}'. Use the database-specific extractor instead."
+                )
+            except Exception:
+                pass
+
+        raise ValueError(
+            "No connection provided to GenericExtractor. "
+            "Please provide a connection when initializing the extractor."
+        )
+
     def extract(
         self,
         config: ExtractionConfig,
@@ -47,7 +95,7 @@ class GenericExtractor(BaseExtractor):
 
         query = self.build_export_query(config)
 
-        cursor = self.connection.cursor()
+        cursor = self._get_connection(config).cursor()
         cursor.execute(query)
 
         columns = [desc[0] for desc in cursor.description]
@@ -79,13 +127,14 @@ class GenericExtractor(BaseExtractor):
         schema: str,
         table: str,
         predicates: Optional[List[str]] = None,
+        config: ExtractionConfig = None,
     ) -> int:
         """Get row count using COUNT(*)."""
         query = f"SELECT COUNT(*) FROM {schema}.{table}"
         if predicates:
             query += f" WHERE {' AND '.join(predicates)}"
 
-        cursor = self.connection.cursor()
+        cursor = self._get_connection(config).cursor()
         cursor.execute(query)
         count = cursor.fetchone()[0]
         cursor.close()
@@ -95,6 +144,7 @@ class GenericExtractor(BaseExtractor):
         self,
         schema: str,
         table: str,
+        config: ExtractionConfig = None,
     ) -> List[Dict[str, str]]:
         """Get column names by querying a single row.
 
@@ -104,7 +154,7 @@ class GenericExtractor(BaseExtractor):
         # Query one row to get column names
         query = f"SELECT * FROM {schema}.{table} LIMIT 1"
 
-        cursor = self.connection.cursor()
+        cursor = self._get_connection(config).cursor()
         try:
             cursor.execute(query)
             if cursor.description:
@@ -124,6 +174,7 @@ class GenericExtractor(BaseExtractor):
         self,
         schema: str,
         table: str,
+        config: ExtractionConfig = None,
     ) -> List[str]:
         """Try to detect primary key.
 
@@ -138,7 +189,7 @@ class GenericExtractor(BaseExtractor):
                 AND constraint_name = 'PRIMARY'
                 ORDER BY ordinal_position
             """
-            cursor = self.connection.cursor()
+            cursor = self._get_connection(config).cursor()
             cursor.execute(query, (schema, table))
             pk_cols = [row[0] for row in cursor.fetchall()]
             cursor.close()
@@ -155,7 +206,7 @@ class GenericExtractor(BaseExtractor):
                 AND constraint_name = 'PRIMARY'
                 ORDER BY ordinal_position
             """
-            cursor = self.connection.cursor()
+            cursor = self._get_connection(config).cursor()
             cursor.execute(query, (schema, table))
             pk_cols = [row[0] for row in cursor.fetchall()]
             cursor.close()

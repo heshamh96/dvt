@@ -7,7 +7,7 @@ Falls back to Spark JDBC if COPY fails.
 
 import time
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from dvt.federation.extractors.base import (
     BaseExtractor,
@@ -24,6 +24,50 @@ class DuckDBExtractor(BaseExtractor):
     """
 
     adapter_types = ["duckdb"]
+
+    def _get_connection(self, config: ExtractionConfig = None) -> Any:
+        """Get or create a DuckDB database connection.
+
+        If self.connection is None but connection_config is available,
+        creates a new connection using duckdb.
+
+        Args:
+            config: Optional extraction config with connection_config
+
+        Returns:
+            DuckDB database connection
+        """
+        if self.connection is not None:
+            return self.connection
+
+        if self._lazy_connection is not None:
+            return self._lazy_connection
+
+        conn_config = None
+        if config and config.connection_config:
+            conn_config = config.connection_config
+        elif self.connection_config:
+            conn_config = self.connection_config
+
+        if not conn_config:
+            raise ValueError(
+                "No connection provided and no connection_config available. "
+                "Either provide a connection to the extractor or include "
+                "connection_config in ExtractionConfig."
+            )
+
+        try:
+            import duckdb
+        except ImportError:
+            raise ImportError(
+                "duckdb is required for DuckDB extraction. "
+                "Install with: pip install duckdb"
+            )
+
+        # DuckDB connection is typically just a path to the database file
+        database = conn_config.get("database") or conn_config.get("path", ":memory:")
+        self._lazy_connection = duckdb.connect(database)
+        return self._lazy_connection
 
     def extract(self, config: ExtractionConfig, output_path: Path) -> ExtractionResult:
         """Extract data from DuckDB to Parquet using COPY."""
@@ -45,12 +89,12 @@ class DuckDBExtractor(BaseExtractor):
         copy_sql = (
             f"COPY ({query}) TO '{output_path}' (FORMAT 'parquet', COMPRESSION 'zstd')"
         )
-        cursor = self.connection.cursor()
+        cursor = self._get_connection(config).cursor()
         cursor.execute(copy_sql)
         cursor.close()
 
         # Get row count
-        count_cursor = self.connection.cursor()
+        count_cursor = self._get_connection(config).cursor()
         count_cursor.execute(f"SELECT COUNT(*) FROM ({query})")
         row_count = count_cursor.fetchone()[0]
         count_cursor.close()
@@ -93,27 +137,33 @@ class DuckDBExtractor(BaseExtractor):
         if config.predicates:
             query += f" WHERE {' AND '.join(config.predicates)}"
 
-        cursor = self.connection.cursor()
+        cursor = self._get_connection(config).cursor()
         cursor.execute(query)
         hashes = {row[0]: row[1] for row in cursor.fetchall()}
         cursor.close()
         return hashes
 
     def get_row_count(
-        self, schema: str, table: str, predicates: Optional[List[str]] = None
+        self,
+        schema: str,
+        table: str,
+        predicates: Optional[List[str]] = None,
+        config: ExtractionConfig = None,
     ) -> int:
         query = f"SELECT COUNT(*) FROM {schema}.{table}"
         if predicates:
             query += f" WHERE {' AND '.join(predicates)}"
-        cursor = self.connection.cursor()
+        cursor = self._get_connection(config).cursor()
         cursor.execute(query)
         count = cursor.fetchone()[0]
         cursor.close()
         return count
 
-    def get_columns(self, schema: str, table: str) -> List[Dict[str, str]]:
+    def get_columns(
+        self, schema: str, table: str, config: ExtractionConfig = None
+    ) -> List[Dict[str, str]]:
         query = f"DESCRIBE {schema}.{table}"
-        cursor = self.connection.cursor()
+        cursor = self._get_connection(config).cursor()
         cursor.execute(query)
         columns = [{"name": row[0], "type": row[1]} for row in cursor.fetchall()]
         cursor.close()

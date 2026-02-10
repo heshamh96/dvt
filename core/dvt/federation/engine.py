@@ -712,8 +712,8 @@ class FederationEngine:
 
     def _get_default_target(self) -> str:
         """Get default target from profile."""
-        if hasattr(self.config, "target"):
-            return self.config.target
+        if hasattr(self.config, "target_name") and self.config.target_name:
+            return self.config.target_name
         return "default"
 
     def _get_dialect_for_target(self, target: str) -> str:
