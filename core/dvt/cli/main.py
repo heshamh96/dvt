@@ -183,6 +183,8 @@ def cli(ctx, **kwargs):
 @cli.command("build")
 @click.pass_context
 @global_flags
+@p.bucket_param
+@p.compute
 @p.empty
 @p.event_time_start
 @p.event_time_end
@@ -229,6 +231,8 @@ def build(ctx, **kwargs):
 @click.pass_context
 @global_flags
 @p.clean_project_files_only
+@p.clean_bucket
+@p.clean_older_than
 @p.profiles_dir
 @p.project_dir
 @p.target_path
@@ -238,7 +242,13 @@ def build(ctx, **kwargs):
 @requires.unset_profile
 @requires.project
 def clean(ctx, **kwargs):
-    """Delete all folders in the clean-targets list (usually the dbt_packages and target directories.)"""
+    """Delete all folders in the clean-targets list and DVT staging files.
+
+    By default, cleans both dbt artifacts (target/, dbt_packages/) and DVT staging buckets.
+
+    Use --bucket to clean only a specific staging bucket (skips dbt clean).
+    Use --older-than to clean only files older than a duration (e.g., '24h', '7d').
+    """
     from dvt.task.clean import CleanTask
 
     with CleanTask(ctx.obj["flags"], ctx.obj["project"]) as task:
@@ -589,6 +599,8 @@ def parse(ctx, **kwargs):
 @cli.command("run")
 @click.pass_context
 @global_flags
+@p.bucket_param
+@p.compute
 @p.exclude
 @p.full_refresh
 @p.profiles_dir

@@ -12,7 +12,9 @@ from dbt_common.exceptions import DbtInternalError
 from dbt_common.ui import green
 
 
-def _load_compute_config(compute_name: Optional[str], profiles_dir: Optional[str] = None) -> Dict[str, Any]:
+def _load_compute_config(
+    compute_name: Optional[str], profiles_dir: Optional[str] = None
+) -> Dict[str, Any]:
     """Load compute configuration from computes.yml.
 
     Args:
@@ -78,27 +80,50 @@ class SeedTask(RunTask):
         # Initialize Spark session ONCE before any seeds run
         # All seed threads will share this session
         from dvt.federation.spark_manager import SparkManager
+        from dvt.config.user_config import load_buckets_for_profile
 
-        compute_name = getattr(self.args, "COMPUTE", None) or getattr(self.args, "compute", None)
+        compute_name = getattr(self.args, "COMPUTE", None) or getattr(
+            self.args, "compute", None
+        )
         compute_config = _load_compute_config(compute_name)
 
-        # Create and store the singleton instance with the compute config
-        SparkManager._instance = SparkManager(compute_config)
+        # Load bucket configs for cloud storage credentials
+        profile_name = self.config.profile_name
+        profile_buckets = load_buckets_for_profile(profile_name)
+        bucket_configs = profile_buckets.get("buckets", {}) if profile_buckets else {}
+
+        # Initialize SparkManager singleton with compute and bucket configs
+        SparkManager.initialize(
+            config=compute_config,
+            bucket_configs=bucket_configs,
+        )
+
+        # Create Spark session
         app_name = f"DVT-Seed-{compute_name or 'default'}"
-        SparkManager._instance.get_or_create_session(app_name)
+        SparkManager.get_instance().get_or_create_session(app_name)
 
         try:
             return super().run()
         finally:
-            # Clean up Spark session to prevent resource leaks
+            # Clean up adapter connections
             try:
-                SparkManager.get_instance().stop_session()
+                from dvt.federation.adapter_manager import AdapterManager
+
+                AdapterManager.cleanup()
+            except Exception:
+                pass  # Ignore cleanup errors
+
+            # Clean up Spark session and reset singleton
+            try:
+                SparkManager.reset()
             except Exception:
                 pass  # Ignore cleanup errors
 
     def get_node_selector(self):
         if self.manifest is None or self.graph is None:
-            raise DbtInternalError("manifest and graph must be set to get perform node selection")
+            raise DbtInternalError(
+                "manifest and graph must be set to get perform node selection"
+            )
         return ResourceTypeSelector(
             graph=self.graph,
             manifest=self.manifest,
@@ -111,8 +136,12 @@ class SeedTask(RunTask):
         from dvt.task.spark_seed import SparkSeedRunner
 
         # Log compute/target info
-        compute_name = getattr(self.args, "COMPUTE", None) or getattr(self.args, "compute", None)
-        target_name = getattr(self.args, "TARGET", None) or getattr(self.args, "target", None)
+        compute_name = getattr(self.args, "COMPUTE", None) or getattr(
+            self.args, "compute", None
+        )
+        target_name = getattr(self.args, "TARGET", None) or getattr(
+            self.args, "target", None
+        )
 
         info_parts = ["🚀 Spark seed"]
         if compute_name:

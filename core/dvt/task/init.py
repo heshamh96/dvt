@@ -11,7 +11,8 @@ import yaml
 import dvt.config
 import dbt_common.clients.system
 from dvt.adapters.factory import get_include_paths, load_plugin
-from dvt.config.profile import read_profile
+
+# read_profile import removed - check_if_profile_exists now handles empty profiles.yml gracefully
 from dvt.contracts.util import Identifier as ProjectName
 from dvt.events.types import (
     ConfigFolderDirectory,
@@ -28,15 +29,17 @@ from dvt.events.types import (
 from dvt.config.user_config import (
     append_profile_to_buckets_yml,
     append_profile_to_computes_yml,
+    append_profile_to_profiles_yml,
     create_default_buckets_yml,
     create_default_computes_yml,
+    create_default_profiles_yml,
     create_dvt_data_dir,
     init_mdm_db,
 )
-from dvt.constants import DBT_PROJECT_FILE_NAME
+from dvt.constants import DBT_PROJECT_FILE_NAME, DVT_PROJECT_FILE_NAME
 from dvt.config.project import get_project_yml_path
 from dvt.flags import get_flags
-from dvt.task.base import BaseTask, move_to_nearest_project_dir
+from dvt.task.base import BaseTask
 from dvt.version import _get_adapter_plugin_names
 from dbt_common.events.functions import fire_event
 from dbt_common.exceptions import DbtRuntimeError
@@ -68,7 +71,9 @@ class InitTask(BaseTask):
 
         fire_event(StarterProjectPath(dir=starter_project_directory))
         shutil.copytree(
-            starter_project_directory, project_name, ignore=shutil.ignore_patterns(*IGNORE_FILES)
+            starter_project_directory,
+            project_name,
+            ignore=shutil.ignore_patterns(*IGNORE_FILES),
         )
 
     def create_profiles_dir(self, profiles_dir: str) -> bool:
@@ -81,17 +86,31 @@ class InitTask(BaseTask):
         return False
 
     def create_dvt_user_config(self, profiles_dir: str) -> None:
-        """Create DVT user-level config: computes.yml, buckets.yml, data/, and mdm.duckdb in the profiles dir."""
+        """Create DVT user-level config files in the profiles dir.
+
+        Creates header-only templates for:
+        - profiles.yml (database connections)
+        - computes.yml (Spark compute engines)
+        - buckets.yml (staging buckets)
+        - data/ directory and mdm.duckdb
+        """
         profiles_path = Path(str(profiles_dir))
         if not profiles_path.exists():
             return
         dvt_home = profiles_path.resolve()
+        # Create profiles.yml header if it doesn't exist
+        profiles_yml_path = dvt_home / "profiles.yml"
+        if create_default_profiles_yml(profiles_yml_path):
+            fire_event(ConfigFolderDirectory(dir=str(profiles_yml_path.parent)))
+        # Create computes.yml header if it doesn't exist
         computes_path = dvt_home / "computes.yml"
         if create_default_computes_yml(computes_path):
             fire_event(ConfigFolderDirectory(dir=str(computes_path.parent)))
+        # Create buckets.yml header if it doesn't exist
         buckets_path = dvt_home / "buckets.yml"
         if create_default_buckets_yml(buckets_path):
             fire_event(ConfigFolderDirectory(dir=str(buckets_path.parent)))
+        # Create data directory and MDM database
         create_dvt_data_dir(str(dvt_home))
         init_mdm_db(str(dvt_home))
 
@@ -112,7 +131,9 @@ class InitTask(BaseTask):
             sample_profile_name = list(yaml.safe_load(sample_profile).keys())[0]
             # Use a regex to replace the name of the sample_profile with
             # that of the project without losing any comments from the sample
-            sample_profile = re.sub(f"^{sample_profile_name}:", f"{profile_name}:", sample_profile)
+            sample_profile = re.sub(
+                f"^{sample_profile_name}:", f"{profile_name}:", sample_profile
+            )
             profiles_filepath = Path(get_flags().PROFILES_DIR) / Path("profiles.yml")
             if profiles_filepath.exists():
                 with open(profiles_filepath, "a") as f:
@@ -121,10 +142,14 @@ class InitTask(BaseTask):
                 with open(profiles_filepath, "w") as f:
                     f.write(sample_profile)
                 fire_event(
-                    ProfileWrittenWithSample(name=profile_name, path=str(profiles_filepath))
+                    ProfileWrittenWithSample(
+                        name=profile_name, path=str(profiles_filepath)
+                    )
                 )
 
-    def generate_target_from_input(self, profile_template: dict, target: dict = {}) -> dict:
+    def generate_target_from_input(
+        self, profile_template: dict, target: dict = {}
+    ) -> dict:
         """Generate a target configuration from profile_template and user input."""
         profile_template_local = copy.deepcopy(profile_template)
         for key, value in profile_template_local.items():
@@ -132,7 +157,7 @@ class InitTask(BaseTask):
                 choice_type = key[8:].replace("_", " ")
                 option_list = list(value.keys())
                 prompt_msg = (
-                    "\n".join([f"[{n+1}] {v}" for n, v in enumerate(option_list)])
+                    "\n".join([f"[{n + 1}] {v}" for n, v in enumerate(option_list)])
                     + f"\nDesired {choice_type} option (enter a number)"
                 )
                 numeric_choice = click.prompt(prompt_msg, type=click.INT)
@@ -165,24 +190,36 @@ class InitTask(BaseTask):
             dbt_project = yaml.safe_load(f)
         return dbt_project["profile"]
 
-    def write_profile(self, profile: dict, profile_name: str):
-        """Given a profile, write it to the current project's profiles.yml.
-        This will overwrite any profile with a matching name."""
-        # Create the profile directory if it doesn't exist
+    def write_profile(self, profile: dict, profile_name: str) -> bool:
+        """Append a profile to profiles.yml if it doesn't already exist.
+
+        Skips silently if the profile already exists (consistent with computes/buckets).
+
+        Returns True if profile was written, False if skipped.
+        """
         profiles_filepath = Path(get_flags().PROFILES_DIR) / Path("profiles.yml")
 
-        profiles = {profile_name: profile}
-
+        profiles = {}
         if profiles_filepath.exists():
             with open(profiles_filepath, "r") as f:
                 profiles = yaml.safe_load(f) or {}
-                profiles[profile_name] = profile
 
-        # Write the profiles dictionary to a brand-new or pre-existing file
+        # Skip if profile already exists
+        if profile_name in profiles:
+            return False
+
+        # Add the new profile
+        profiles[profile_name] = profile
+
+        # Write all profiles back to file
         with open(profiles_filepath, "w") as f:
             yaml.dump(profiles, f)
 
-    def create_profile_from_profile_template(self, profile_template: dict, profile_name: str):
+        return True
+
+    def create_profile_from_profile_template(
+        self, profile_template: dict, profile_name: str
+    ):
         """Create and write a profile using the supplied profile_template."""
         initial_target = profile_template.get("fixed", {})
         prompts = profile_template.get("prompts", {})
@@ -216,12 +253,27 @@ class InitTask(BaseTask):
 
     def check_if_profile_exists(self, profile_name: str) -> bool:
         """
-        Validate that the specified profile exists. Can't use the regular profile validation
-        routine because it assumes the project file exists
+        Check if the specified profile exists in profiles.yml.
+
+        Returns False if:
+        - profiles.yml doesn't exist
+        - profiles.yml is empty or has only comments
+        - profile_name is not in profiles.yml
+
+        Returns True only if profile_name exists as an actual (uncommented) profile.
         """
-        profiles_dir = get_flags().PROFILES_DIR
-        raw_profiles = read_profile(profiles_dir)
-        return profile_name in raw_profiles
+        profiles_file = Path(get_flags().PROFILES_DIR) / "profiles.yml"
+        if not profiles_file.exists():
+            return False
+        try:
+            with open(profiles_file, "r") as f:
+                data = yaml.safe_load(f)
+            # yaml.safe_load returns None for empty/comment-only files
+            if not data or not isinstance(data, dict):
+                return False
+            return profile_name in data
+        except Exception:
+            return False
 
     def check_if_can_write_profile(self, profile_name: Optional[str] = None) -> bool:
         """Using either a provided profile name or that specified in dbt_project.yml,
@@ -249,7 +301,9 @@ class InitTask(BaseTask):
         self.create_profile_from_profile_template(profile_template, profile_name)
         profiles_filepath = Path(get_flags().PROFILES_DIR) / Path("profiles.yml")
         fire_event(
-            ProfileWrittenWithProjectTemplateYAML(name=profile_name, path=str(profiles_filepath))
+            ProfileWrittenWithProjectTemplateYAML(
+                name=profile_name, path=str(profiles_filepath)
+            )
         )
 
     def ask_for_adapter_choice(self) -> str:
@@ -261,7 +315,7 @@ class InitTask(BaseTask):
 
         prompt_msg = (
             "Which database would you like to use?\n"
-            + "\n".join([f"[{n+1}] {v}" for n, v in enumerate(available_adapters)])
+            + "\n".join([f"[{n + 1}] {v}" for n, v in enumerate(available_adapters)])
             + "\n\n(Don't see the one you want? https://docs.getdbt.com/docs/available-adapters)"
             + "\n\nEnter a number"
         )
@@ -269,9 +323,14 @@ class InitTask(BaseTask):
         return available_adapters[numeric_choice - 1]
 
     def setup_profile(self, profile_name: str) -> None:
-        """Set up a new profile for a project"""
+        """Set up a new profile for a project.
+
+        Skips silently if the profile already exists in profiles.yml
+        (consistent with computes.yml and buckets.yml behavior).
+        """
         fire_event(SettingUpProfile())
-        if not self.check_if_can_write_profile(profile_name=profile_name):
+        # Check if profile already exists - skip silently if so
+        if self.check_if_profile_exists(profile_name):
             return
         # If a profile_template.yml exists in the project root, that effectively
         # overrides the profile_template.yml for the given target.
@@ -301,7 +360,9 @@ class InitTask(BaseTask):
         while not ProjectName.is_valid(name) or name in internal_package_names:
             if name:
                 click.echo(name + " is not a valid project name.")
-            name = click.prompt("Enter a name for your project (letters, digits, underscore)")
+            name = click.prompt(
+                "Enter a name for your project (letters, digits, underscore)"
+            )
 
         return name
 
@@ -309,7 +370,9 @@ class InitTask(BaseTask):
         self.copy_starter_repo(project_name)
         os.chdir(project_name)
         with open(DBT_PROJECT_FILE_NAME, "r") as f:
-            content = f"{f.read()}".format(project_name=project_name, profile_name=profile_name)
+            content = f"{f.read()}".format(
+                project_name=project_name, profile_name=profile_name
+            )
         with open(DBT_PROJECT_FILE_NAME, "w") as f:
             f.write(content)
         fire_event(
@@ -320,17 +383,29 @@ class InitTask(BaseTask):
             )
         )
 
+    def _is_in_project_directory(self) -> bool:
+        """Check if the CURRENT directory contains a dbt/dvt project file.
+
+        Unlike default_project_dir() which searches parents and children,
+        this only checks the current working directory. This is intentional
+        for 'dvt init' - we want to know if we're literally inside a project,
+        not if there's a project nearby.
+        """
+        cwd = Path.cwd()
+        return (cwd / DBT_PROJECT_FILE_NAME).is_file() or (
+            cwd / DVT_PROJECT_FILE_NAME
+        ).is_file()
+
     def run(self):
         """Entry point for the init task."""
         profiles_dir = get_flags().PROFILES_DIR
         self.create_profiles_dir(profiles_dir)
         self.create_dvt_user_config(profiles_dir)
 
-        try:
-            move_to_nearest_project_dir(self.args.project_dir)
-            in_project = True
-        except dbt_common.exceptions.DbtRuntimeError:
-            in_project = False
+        # Check if we're currently inside a project directory
+        # Note: We check the CURRENT directory only, not parents or children.
+        # This is different from other commands which use default_project_dir().
+        in_project = self._is_in_project_directory()
 
         if in_project:
             # If --profile was specified, it means use an existing profile, which is not
@@ -341,12 +416,19 @@ class InitTask(BaseTask):
                 )
 
             # When dvt init is run inside an existing project,
-            # just setup the user's profile.
-            if not self.args.skip_profile_setup:
-                profile_name = self.get_profile_name_from_current_project()
+            # set up profiles/computes/buckets templates.
+            profile_name = self.get_profile_name_from_current_project()
+            profiles_dir = str(get_flags().PROFILES_DIR)
+            # Always append computes/buckets templates for the profile
+            append_profile_to_computes_yml(profile_name, profiles_dir)
+            append_profile_to_buckets_yml(profile_name, profiles_dir)
+            # Interactive or non-interactive profile setup
+            if self.args.skip_profile_setup:
+                # Add commented template to profiles.yml
+                append_profile_to_profiles_yml(profile_name, profiles_dir)
+            else:
+                # Interactive: ask user for adapter and credentials
                 self.setup_profile(profile_name)
-                append_profile_to_computes_yml(profile_name, str(get_flags().PROFILES_DIR))
-                append_profile_to_buckets_yml(profile_name, str(get_flags().PROFILES_DIR))
         else:
             # When dvt init is run outside of an existing project,
             # create a new project and set up the user's profile.
@@ -356,22 +438,32 @@ class InitTask(BaseTask):
                 fire_event(ProjectNameAlreadyExists(name=project_name))
                 return
 
+            profiles_dir = str(get_flags().PROFILES_DIR)
+
             # If the user specified an existing profile to use, use it instead of generating a new one
             user_profile_name = self.args.profile
             if user_profile_name:
                 if not self.check_if_profile_exists(user_profile_name):
                     raise DbtRuntimeError(
-                        msg="Could not find profile named '{}'".format(user_profile_name)
+                        msg="Could not find profile named '{}'".format(
+                            user_profile_name
+                        )
                     )
                 self.create_new_project(project_name, user_profile_name)
+                # Append computes/buckets for the existing profile
+                append_profile_to_computes_yml(user_profile_name, profiles_dir)
+                append_profile_to_buckets_yml(user_profile_name, profiles_dir)
             else:
                 profile_name = project_name
-                # Create the profile after creating the project to avoid leaving a random profile
-                # if the former fails.
+                # Create the project first to avoid leaving orphan profile if it fails
                 self.create_new_project(project_name, profile_name)
-
-                # Ask for adapter only if skip_profile_setup flag is not provided
-                if not self.args.skip_profile_setup:
+                # Always append computes/buckets templates for the profile
+                append_profile_to_computes_yml(profile_name, profiles_dir)
+                append_profile_to_buckets_yml(profile_name, profiles_dir)
+                # Interactive or non-interactive profile setup
+                if self.args.skip_profile_setup:
+                    # Add commented template to profiles.yml
+                    append_profile_to_profiles_yml(profile_name, profiles_dir)
+                else:
+                    # Interactive: ask user for adapter and credentials
                     self.setup_profile(profile_name)
-                    append_profile_to_computes_yml(profile_name, str(get_flags().PROFILES_DIR))
-                    append_profile_to_buckets_yml(profile_name, str(get_flags().PROFILES_DIR))

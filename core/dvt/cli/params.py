@@ -77,6 +77,23 @@ clean_project_files_only = _create_option_and_track_env_var(
     default=True,
 )
 
+# DVT clean: bucket-specific cleaning options
+clean_bucket = _create_option_and_track_env_var(
+    "--bucket",
+    envvar=None,
+    help="Clean only the specified staging bucket (skip dbt clean). Use with --older-than to clean old files only.",
+    default=None,
+    type=click.STRING,
+)
+
+clean_older_than = _create_option_and_track_env_var(
+    "--older-than",
+    envvar=None,
+    help="Only clean files older than duration, e.g., '24h', '7d' (skip dbt clean). Can be combined with --bucket.",
+    default=None,
+    type=click.STRING,
+)
+
 compile_docs = _create_option_and_track_env_var(
     "--compile/--no-compile",
     envvar=None,
@@ -328,7 +345,9 @@ indirect_selection = _create_option_and_track_env_var(
     "--indirect-selection",
     envvar="DBT_INDIRECT_SELECTION",
     help="Choose which tests to select that are adjacent to selected resources. Eager is most inclusive, cautious is most exclusive, and buildable is in between. Empty includes no tests at all.",
-    type=click.Choice(["eager", "cautious", "buildable", "empty"], case_sensitive=False),
+    type=click.Choice(
+        ["eager", "cautious", "buildable", "empty"], case_sensitive=False
+    ),
     default="eager",
 )
 
@@ -637,6 +656,14 @@ compute = _create_option_and_track_env_var(
     "-c",
     envvar=None,
     help="Which compute engine to use (from computes.yml). Defaults to project's default compute.",
+)
+
+# DVT: Bucket selection for federation staging
+bucket_param = _create_option_and_track_env_var(
+    "--bucket",
+    "-b",
+    envvar=None,
+    help="Which staging bucket to use for federation (from buckets.yml). Defaults to project's default bucket.",
 )
 
 show_limit = _create_option_and_track_env_var(

@@ -11,6 +11,7 @@ from typing import AbstractSet, Any, Dict, Iterable, List, Optional, Set, Tuple,
 from dvt import tracking, utils
 from dvt.adapters.base import BaseAdapter, BaseRelation
 from dvt.adapters.capability import Capability
+from dvt.adapters.factory import get_adapter
 from dvt.adapters.events.types import FinishedRunningStats
 from dvt.adapters.exceptions import MissingMaterializationError
 from dvt.artifacts.resources import Hook
@@ -58,6 +59,12 @@ from dbt_common.events.functions import fire_event, get_invocation_id
 from dbt_common.events.types import Formatting
 from dbt_common.exceptions import DbtValidationError
 from dbt_common.invocation import get_invocation_started_at
+
+# DVT Federation imports
+from dvt.federation.resolver import ExecutionPath, FederationResolver, ResolvedExecution
+from dvt.federation.engine import FederationEngine
+from dvt.federation.spark_manager import SparkManager
+from dvt.config.user_config import load_computes_for_profile, load_buckets_for_profile
 
 
 @functools.total_ordering
@@ -118,7 +125,11 @@ def _get_adapter_info(adapter, run_model_result) -> Dict[str, Any]:
     """Each adapter returns a dataclass with a flexible dictionary for
     adapter-specific fields. Only the non-'model_adapter_details' fields
     are guaranteed cross adapter."""
-    return asdict(adapter.get_adapter_run_info(run_model_result.node.config)) if adapter else {}
+    return (
+        asdict(adapter.get_adapter_run_info(run_model_result.node.config))
+        if adapter
+        else {}
+    )
 
 
 def track_model_run(index, num_nodes, run_model_result, adapter=None):
@@ -163,7 +174,9 @@ def track_model_run(index, num_nodes, run_model_result, adapter=None):
 
 
 # make sure that we got an ok result back from a materialization
-def _validate_materialization_relations_dict(inp: Dict[Any, Any], model) -> List[BaseRelation]:
+def _validate_materialization_relations_dict(
+    inp: Dict[Any, Any], model
+) -> List[BaseRelation]:
     try:
         relations_value = inp["relations"]
     except KeyError:
@@ -271,7 +284,9 @@ class ModelRunner(CompileRunner):
         if isinstance(result, str):
             msg = (
                 'The materialization ("{}") did not explicitly return a '
-                "list of relations to add to the cache.".format(str(model.get_materialization()))
+                "list of relations to add to the cache.".format(
+                    str(model.get_materialization())
+                )
             )
             raise CompilationError(msg, node=model)
 
@@ -313,19 +328,26 @@ class ModelRunner(CompileRunner):
 
         if materialization_macro is None:
             raise MissingMaterializationError(
-                materialization=model.get_materialization(), adapter_type=self.adapter.type()
+                materialization=model.get_materialization(),
+                adapter_type=self.adapter.type(),
             )
 
         if "config" not in context:
             raise DbtInternalError(
-                "Invalid materialization context generated, missing config: {}".format(context)
+                "Invalid materialization context generated, missing config: {}".format(
+                    context
+                )
             )
         context_config = context["config"]
 
         mat_has_supported_langs = hasattr(materialization_macro, "supported_languages")
-        model_lang_supported = model.language in materialization_macro.supported_languages
+        model_lang_supported = (
+            model.language in materialization_macro.supported_languages
+        )
         if mat_has_supported_langs and not model_lang_supported:
-            str_langs = [str(lang) for lang in materialization_macro.supported_languages]
+            str_langs = [
+                str(lang) for lang in materialization_macro.supported_languages
+            ]
             raise DbtValidationError(
                 f'Materialization "{materialization_macro.name}" only supports languages {str_langs}; '
                 f'got "{model.language}"'
@@ -333,7 +355,169 @@ class ModelRunner(CompileRunner):
 
         hook_ctx = self.adapter.pre_model_hook(context_config)
 
-        return self._execute_model(hook_ctx, context_config, model, context, materialization_macro)
+        return self._execute_model(
+            hook_ctx, context_config, model, context, materialization_macro
+        )
+
+
+class FederationModelRunner(CompileRunner):
+    """Runner for models that require cross-target federation.
+
+    This runner executes models via the FederationEngine when the model
+    has dependencies on sources/models from different targets than its
+    own target.
+
+    The execution path is:
+    1. Compile (Jinja resolution) - handled by parent CompileRunner
+    2. Extract sources to staging (with predicate pushdown)
+    3. Transform in Spark (SQLGlot translation)
+    4. Load to target (via bucket or JDBC)
+    """
+
+    def __init__(
+        self,
+        config: RuntimeConfig,
+        adapter: BaseAdapter,
+        node: ModelNode,
+        node_index: int,
+        num_nodes: int,
+        resolution: ResolvedExecution,
+        manifest: Manifest,
+    ):
+        super().__init__(config, adapter, node, node_index, num_nodes)
+        self.resolution = resolution
+        self.manifest = manifest
+        self._federation_engine: Optional[FederationEngine] = None
+
+    def get_node_representation(self) -> str:
+        display_quote_policy = {
+            "database": False,
+            "schema": False,
+            "identifier": False,
+        }
+        relation = self.adapter.Relation.create_from(
+            self.config, self.node, quote_policy=display_quote_policy
+        )
+        if self.node.database == self.config.credentials.database:
+            relation = relation.include(database=False)
+        return str(relation)
+
+    def describe_node(self) -> str:
+        upstream_targets = ", ".join(sorted(self.resolution.upstream_targets))
+        return (
+            f"{self.node.language} federation model {self.get_node_representation()} "
+            f"[{upstream_targets}] -> {self.resolution.target}"
+        )
+
+    def print_start_line(self):
+        fire_event(
+            LogStartLine(
+                description=self.describe_node(),
+                index=self.node_index,
+                total=self.num_nodes,
+                node_info=self.node.node_info,
+            )
+        )
+
+    def print_result_line(self, result):
+        description = self.describe_node()
+        group = group_lookup.get(self.node.unique_id)
+        if result.status == NodeStatus.Error:
+            status = result.status
+            level = EventLevel.ERROR
+        else:
+            status = result.message
+            level = EventLevel.INFO
+        fire_event(
+            LogModelResult(
+                description=description,
+                status=status,
+                index=self.node_index,
+                total=self.num_nodes,
+                execution_time=result.execution_time,
+                node_info=self.node.node_info,
+                group=group,
+            ),
+            level=level,
+        )
+
+    def before_execute(self) -> None:
+        self.print_start_line()
+
+    def after_execute(self, result) -> None:
+        track_model_run(self.node_index, self.num_nodes, result, adapter=self.adapter)
+        self.print_result_line(result)
+
+    def execute(self, model: ModelNode, manifest: Manifest) -> RunResult:
+        """Execute model via federation engine.
+
+        Note: model.compiled_code has Jinja resolved (from compile phase).
+        """
+        # Log materialization coercion warning if needed
+        if self.resolution.requires_materialization_coercion:
+            fire_event(
+                LogModelResult(
+                    description=(
+                        f"Materialization coerced: {self.resolution.original_materialization} "
+                        f"-> {self.resolution.coerced_materialization} "
+                        f"(cross-target federation cannot create views)"
+                    ),
+                    status="WARN",
+                    index=self.node_index,
+                    total=self.num_nodes,
+                    execution_time=0,
+                    node_info=model.node_info,
+                    group=group_lookup.get(model.unique_id),
+                ),
+                level=EventLevel.WARN,
+            )
+
+        # Create federation engine
+        def on_progress(msg: str) -> None:
+            # Log progress to console for visibility
+            print(f"  {msg}")
+
+        engine = FederationEngine(
+            runtime_config=self.config,
+            manifest=manifest,
+            on_progress=on_progress,
+        )
+
+        # Execute via federation
+        result = engine.execute(
+            model=model,
+            resolution=self.resolution,
+            compiled_sql=model.compiled_code,
+        )
+
+        # Build RunResult from federation result
+        if result.get("success", False):
+            return RunResult(
+                node=model,
+                status=RunStatus.Success,
+                timing=[],
+                thread_id=threading.current_thread().name,
+                execution_time=result.get("execution_time", 0),
+                message=result.get("message", "OK"),
+                adapter_response={
+                    "federation": True,
+                    "method": result.get("load_method"),
+                },
+                failures=0,
+                batch_results=None,
+            )
+        else:
+            return RunResult(
+                node=model,
+                status=RunStatus.Error,
+                timing=[],
+                thread_id=threading.current_thread().name,
+                execution_time=result.get("execution_time", 0),
+                message=result.get("message", "FAILED"),
+                adapter_response={"federation": True, "error": result.get("error")},
+                failures=1,
+                batch_results=None,
+            )
 
 
 class MicrobatchBatchRunner(ModelRunner):
@@ -680,7 +864,9 @@ class MicrobatchModelRunner(ModelRunner):
 
         # # If retrying, propagate previously successful batches into final result, even thoguh they were not run in this invocation
         if self.node.previous_batch_results is not None:
-            result.batch_results.successful += self.node.previous_batch_results.successful
+            result.batch_results.successful += (
+                self.node.previous_batch_results.successful
+            )
 
     def _update_result_with_unfinished_batches(
         self, result: RunResult, batches: Dict[int, BatchType]
@@ -690,7 +876,9 @@ class MicrobatchModelRunner(ModelRunner):
 
         if result.batch_results:
             # build list of finished batches
-            batches_finished = batches_finished.union(set(result.batch_results.successful))
+            batches_finished = batches_finished.union(
+                set(result.batch_results.successful)
+            )
             batches_finished = batches_finished.union(set(result.batch_results.failed))
         else:
             # instantiate `batch_results` if it was `None`
@@ -836,6 +1024,11 @@ class RunTask(CompileTask):
         super().__init__(args, config, manifest)
         self.batch_map = batch_map
 
+        # DVT Federation support
+        self._resolved_executions: Dict[str, ResolvedExecution] = {}
+        self._spark_initialized: bool = False
+        self._federation_count: int = 0
+
     def raise_on_first_error(self) -> bool:
         return False
 
@@ -924,7 +1117,9 @@ class RunTask(CompileTask):
                 relation_exists = batch_runner.relation_exists
         else:
             batch_results.append(
-                batch_runner._build_failed_run_batch_result(node_copy, batches[batch_idx])
+                batch_runner._build_failed_run_batch_result(
+                    node_copy, batches[batch_idx]
+                )
             )
 
         return relation_exists
@@ -947,7 +1142,10 @@ class RunTask(CompileTask):
         return hooks
 
     def safe_run_hooks(
-        self, adapter: BaseAdapter, hook_type: RunHookType, extra_context: Dict[str, Any]
+        self,
+        adapter: BaseAdapter,
+        hook_type: RunHookType,
+        extra_context: Dict[str, Any],
     ) -> RunStatus:
         ordered_hooks = self.get_hooks_by_type(hook_type)
 
@@ -977,11 +1175,12 @@ class RunTask(CompileTask):
                             adapter, hook, hook.index, num_hooks, extra_context
                         )
 
-                    started_at = timing[0].started_at or datetime.now(timezone.utc).replace(
-                        tzinfo=None
-                    )
+                    started_at = timing[0].started_at or datetime.now(
+                        timezone.utc
+                    ).replace(tzinfo=None)
                     hook.update_event_status(
-                        started_at=started_at.isoformat(), node_status=RunningStatus.Started
+                        started_at=started_at.isoformat(),
+                        node_status=RunningStatus.Started,
                     )
 
                     fire_event(
@@ -996,9 +1195,9 @@ class RunTask(CompileTask):
                     with collect_timing_info("execute", timing.append):
                         status, message = get_execution_status(sql, adapter)
 
-                    finished_at = timing[1].completed_at or datetime.now(timezone.utc).replace(
-                        tzinfo=None
-                    )
+                    finished_at = timing[1].completed_at or datetime.now(
+                        timezone.utc
+                    ).replace(tzinfo=None)
                     hook.update_event_status(finished_at=finished_at.isoformat())
                     execution_time = (finished_at - started_at).total_seconds()
                     failures = 0 if status == RunStatus.Success else 1
@@ -1067,7 +1266,9 @@ class RunTask(CompileTask):
                     if isinstance(node, ModelNode):
                         node.previous_batch_results = self.batch_map[uid]
 
-    def before_run(self, adapter: BaseAdapter, selected_uids: AbstractSet[str]) -> RunStatus:
+    def before_run(
+        self, adapter: BaseAdapter, selected_uids: AbstractSet[str]
+    ) -> RunStatus:
         with adapter.connection_named("master"):
             self.defer_to_manifest()
             required_schemas = self.get_model_schemas(adapter, selected_uids)
@@ -1075,8 +1276,115 @@ class RunTask(CompileTask):
             self.populate_adapter_cache(adapter, required_schemas)
             self.populate_microbatch_batches(selected_uids)
             group_lookup.init(self.manifest, selected_uids)
+
+            # DVT: Pre-resolve federation execution paths
+            self._resolve_federation_paths(selected_uids)
+
+            # DVT: Initialize Spark if federation is needed
+            if self._federation_count > 0:
+                self._initialize_spark_for_federation()
+
             run_hooks_status = self.safe_run_hooks(adapter, RunHookType.Start, {})
             return run_hooks_status
+
+    def _resolve_federation_paths(self, selected_uids: AbstractSet[str]) -> None:
+        """Pre-resolve execution paths for all selected models.
+
+        This determines which models need federation vs adapter pushdown.
+        Called before execution to enable:
+        - Execution plan summary logging
+        - Spark initialization only when needed
+        """
+        if self.manifest is None:
+            return
+
+        resolver = FederationResolver(
+            manifest=self.manifest,
+            runtime_config=self.config,
+            args=self.args,
+        )
+
+        self._resolved_executions = resolver.resolve_all(list(selected_uids))
+
+        # Count federation models
+        self._federation_count = sum(
+            1
+            for r in self._resolved_executions.values()
+            if r.execution_path == ExecutionPath.SPARK_FEDERATION
+        )
+
+        pushdown_count = len(self._resolved_executions) - self._federation_count
+
+        # Log execution plan summary
+        if self._resolved_executions:
+            fire_event(
+                Formatting(
+                    msg=f"Execution plan: {pushdown_count} models via pushdown, "
+                    f"{self._federation_count} models via federation"
+                )
+            )
+
+    def _initialize_spark_for_federation(self) -> None:
+        """Initialize Spark for federation operations.
+
+        Called once before execution if any models require federation.
+        The Spark session is shared across all federation models.
+        """
+        if self._spark_initialized:
+            return
+
+        try:
+            # Load compute config
+            profile_name = (
+                self.config.profile_name
+                if hasattr(self.config, "profile_name")
+                else "default"
+            )
+            profiles_dir = getattr(self.args, "profiles_dir", None)
+
+            compute_config = {}
+            bucket_configs = {}
+
+            try:
+                computes = load_computes_for_profile(profile_name, profiles_dir)
+                if computes:
+                    target_compute = computes.get("target", "local_spark")
+                    all_computes = computes.get("computes", {})
+                    compute_config = all_computes.get(target_compute, {})
+            except Exception:
+                pass
+
+            try:
+                buckets = load_buckets_for_profile(profile_name, profiles_dir)
+                if buckets:
+                    bucket_configs = buckets.get("buckets", {})
+            except Exception:
+                pass
+
+            # Initialize SparkManager singleton
+            SparkManager.initialize(
+                config=compute_config,
+                bucket_configs=bucket_configs,
+            )
+
+            # Create session now (will be reused by all runners)
+            SparkManager.get_instance().get_or_create_session("DVT-Run")
+
+            self._spark_initialized = True
+
+            fire_event(
+                Formatting(
+                    msg=f"Initialized Spark session for federation "
+                    f"({self._federation_count} models)"
+                )
+            )
+
+        except Exception as e:
+            fire_event(
+                Formatting(
+                    msg=f"Warning: Could not initialize Spark for federation: {e}"
+                )
+            )
 
     def after_run(self, adapter, results) -> None:
         # in on-run-end hooks, provide the value 'database_schemas', which is a
@@ -1094,7 +1402,9 @@ class RunTask(CompileTask):
         extras = {
             "schemas": list({s for _, s in database_schema_set}),
             "results": [
-                r for r in results if r.thread_id != "main" or r.status == RunStatus.Error
+                r
+                for r in results
+                if r.thread_id != "main" or r.status == RunStatus.Error
             ],  # exclude that didn't fail to preserve backwards compatibility
             "database_schemas": list(database_schema_set),
         }
@@ -1116,10 +1426,37 @@ class RunTask(CompileTask):
             print_run_end_messages(self.node_results, keyboard_interrupt=True)
 
             raise
+        finally:
+            # DVT: Cleanup Spark if it was initialized
+            self._cleanup_spark_for_federation()
+
+    def _cleanup_spark_for_federation(self) -> None:
+        """Cleanup Spark and adapters after run completes.
+
+        Resets the SparkManager singleton and cleans up adapter connections
+        if they were initialized during federation.
+        """
+        # Cleanup adapter connections from AdapterManager
+        try:
+            from dvt.federation.adapter_manager import AdapterManager
+
+            AdapterManager.cleanup()
+        except Exception:
+            pass  # Ignore cleanup errors
+
+        # Reset SparkManager
+        if self._spark_initialized:
+            try:
+                SparkManager.reset()
+                self._spark_initialized = False
+            except Exception:
+                pass  # Ignore cleanup errors
 
     def get_node_selector(self) -> ResourceTypeSelector:
         if self.manifest is None or self.graph is None:
-            raise DbtInternalError("manifest and graph must be set to get perform node selection")
+            raise DbtInternalError(
+                "manifest and graph must be set to get perform node selection"
+            )
         return ResourceTypeSelector(
             graph=self.graph,
             manifest=self.manifest,
@@ -1129,16 +1466,58 @@ class RunTask(CompileTask):
 
     def get_runner_type(self, node) -> Optional[Type[BaseRunner]]:
         if self.manifest is None:
-            raise DbtInternalError("manifest must be set prior to calling get_runner_type")
+            raise DbtInternalError(
+                "manifest must be set prior to calling get_runner_type"
+            )
+
+        # DVT: Check if this model requires federation
+        if node.unique_id in self._resolved_executions:
+            resolution = self._resolved_executions[node.unique_id]
+            if resolution.execution_path == ExecutionPath.SPARK_FEDERATION:
+                # Federation models use FederationModelRunner
+                # Note: We return None here because get_runner() will create
+                # the FederationModelRunner with the resolution
+                return None  # Signal to use get_runner override
 
         if (
             node.config.materialized == "incremental"
             and node.config.incremental_strategy == "microbatch"
-            and self.manifest.use_microbatch_batches(project_name=self.config.project_name)
+            and self.manifest.use_microbatch_batches(
+                project_name=self.config.project_name
+            )
         ):
             return MicrobatchModelRunner
         else:
             return ModelRunner
+
+    def get_runner(self, node) -> BaseRunner:
+        """Get the appropriate runner for a node.
+
+        DVT override to support FederationModelRunner.
+        """
+        # Get adapter instance (same pattern as parent GraphRunnableTask.get_runner)
+        adapter = get_adapter(self.config)
+
+        # Check if this is a federation model
+        if node.unique_id in self._resolved_executions:
+            resolution = self._resolved_executions[node.unique_id]
+            if resolution.execution_path == ExecutionPath.SPARK_FEDERATION:
+                return FederationModelRunner(
+                    config=self.config,
+                    adapter=adapter,
+                    node=node,
+                    node_index=self.run_count,
+                    num_nodes=self.num_nodes,
+                    resolution=resolution,
+                    manifest=self.manifest,
+                )
+
+        # Default behavior from parent
+        runner_type = self.get_runner_type(node)
+        if runner_type is None:
+            # Fallback to ModelRunner if get_runner_type returned None
+            runner_type = ModelRunner
+        return runner_type(self.config, adapter, node, self.run_count, self.num_nodes)
 
     def task_end_messages(self, results) -> None:
         if results:

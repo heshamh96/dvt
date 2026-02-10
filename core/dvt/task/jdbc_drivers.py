@@ -4,7 +4,8 @@ Adapter–JDBC relationship: maps each dbt adapter type to the JDBC driver(s) re
 for Spark federation (reading/writing to that target via JDBC).
 
 This is the canonical mapping: when a profile uses adapter X, sync downloads the
-related JDBC jar(s) so Spark can connect to that database during cross-target runs.
+related JDBC jar(s) to ~/.dvt/.spark_jars/ so Spark can connect to that database
+during cross-target runs.
 
 Supported adapters and JARs (used by sync; all URLs verified):
 
@@ -34,6 +35,7 @@ Supported adapters and JARs (used by sync; all URLs verified):
 
 Not in registry: spark (compute engine, no JDBC), bigquery (Spark connector), dremio (not on Maven Central).
 """
+
 from pathlib import Path
 from typing import Callable, List, Optional, Tuple
 
@@ -108,12 +110,20 @@ ADAPTER_TO_JDBC_DRIVERS: dict[str, list[tuple[str, str, str]]] = {
     "db2": [
         ("com.ibm.db2", "jcc", "11.5.9.0"),
     ],
+    "hive": [
+        # Apache Hive JDBC driver (standalone uber jar)
+        ("org.apache.hive", "hive-jdbc", "3.1.3"),
+    ],
+    # impala: Cloudera Impala JDBC not on Maven Central; requires manual download
+    # See: https://www.cloudera.com/downloads/connectors/impala/jdbc.html
     # spark: no JDBC driver (Spark is the compute engine)
     # bigquery: typically uses Spark BigQuery connector, not JDBC; omit or add later if needed
 }
 
 
-def get_jdbc_drivers_for_adapters(adapter_types: List[str]) -> List[Tuple[str, str, str]]:
+def get_jdbc_drivers_for_adapters(
+    adapter_types: List[str],
+) -> List[Tuple[str, str, str]]:
     """
     Return the list of JDBC driver Maven coordinates (groupId, artifactId, version)
     that relate to the given dbt adapter types. Used by sync to know which jars to download.
@@ -133,7 +143,10 @@ def get_jdbc_drivers_for_adapters(adapter_types: List[str]) -> List[Tuple[str, s
 
 
 def _maven_jar_url(group_id: str, artifact_id: str, version: str) -> str:
-    path = group_id.replace(".", "/") + f"/{artifact_id}/{version}/{artifact_id}-{version}.jar"
+    path = (
+        group_id.replace(".", "/")
+        + f"/{artifact_id}/{version}/{artifact_id}-{version}.jar"
+    )
     return "https://repo1.maven.org/maven2/" + path
 
 

@@ -57,7 +57,9 @@ class SourcePatcher:
         self.patches_used: Dict[SourceKey, Set[str]] = {}
         self.sources: Dict[str, SourceDefinition] = {}
         self._deprecations: Set[Any] = set()
-        self._warned_source_connections: Set[str] = set()  # DVT: Track sources already warned
+        self._warned_source_connections: Set[str] = (
+            set()
+        )  # DVT: Track sources already warned
 
     # This method calls the 'parse_source' method which takes
     # the UnpatchedSourceDefinitions in the manifest and combines them
@@ -193,7 +195,9 @@ class SourcePatcher:
         if (
             parsed_source.freshness
             and not parsed_source.loaded_at_field
-            and not get_adapter(self.root_project).supports(Capability.TableLastModifiedMetadata)
+            and not get_adapter(self.root_project).supports(
+                Capability.TableLastModifiedMetadata
+            )
         ):
             # Metadata-based freshness is being used by default for this node,
             # but is not available through the configured adapter, so warn the
@@ -211,7 +215,9 @@ class SourcePatcher:
         return parsed_source
 
     # Use the SchemaGenericTestParser to parse the source tests
-    def get_generic_test_parser_for(self, package_name: str) -> "SchemaGenericTestParser":
+    def get_generic_test_parser_for(
+        self, package_name: str
+    ) -> "SchemaGenericTestParser":
         if package_name in self.generic_test_parsers:
             generic_test_parser = self.generic_test_parsers[package_name]
         else:
@@ -223,8 +229,12 @@ class SourcePatcher:
             self.generic_test_parsers[package_name] = generic_test_parser
         return generic_test_parser
 
-    def get_source_tests(self, target: UnpatchedSourceDefinition) -> Iterable[GenericTestNode]:
-        is_root_project = True if self.root_project.project_name == target.package_name else False
+    def get_source_tests(
+        self, target: UnpatchedSourceDefinition
+    ) -> Iterable[GenericTestNode]:
+        is_root_project = (
+            True if self.root_project.project_name == target.package_name else False
+        )
         target.validate_data_tests(is_root_project)
         for data_test, column in target.get_tests():
             yield self.parse_source_test(
@@ -262,7 +272,9 @@ class SourcePatcher:
             column_name = None
         else:
             column_name = column.name
-            should_quote = column.quote or (column.quote is None and target.quote_columns)
+            should_quote = column.quote or (
+                column.quote is None and target.quote_columns
+            )
             if should_quote:
                 column_name = get_adapter(self.root_project).quote(column_name)
 
@@ -287,7 +299,9 @@ class SourcePatcher:
         )
         return node
 
-    def _generate_source_config(self, target: UnpatchedSourceDefinition, rendered: bool):
+    def _generate_source_config(
+        self, target: UnpatchedSourceDefinition, rendered: bool
+    ):
         generator: BaseContextConfigGenerator
         if rendered:
             generator = ContextConfigGenerator(self.root_project)
@@ -352,24 +366,28 @@ class SourcePatcher:
     ) -> None:
         """Validate that source has a 'connection' property (DVT federation support).
 
-        For DVT federation to work correctly, sources must specify which profile
+        For DVT federation to work correctly, sources MUST specify which profile
         target they connect to. This enables the federation resolver to determine
         execution paths for cross-target queries.
 
-        Emits a warning if connection is missing (for backward compatibility with dbt).
-        Only warns once per source name.
+        Raises:
+            ParsingError: If source is missing the required 'connection' property.
         """
         if source.connection is None:
-            # Only warn once per source name
-            source_key = f"{file_path}:{source.name}"
-            if source_key not in self._warned_source_connections:
-                self._warned_source_connections.add(source_key)
-                msg = (
-                    f"Warning: Source '{source.name}' in {file_path} is missing 'connection'. "
-                    f"DVT recommends specifying which target the source connects to.\n"
-                )
-                sys.stderr.write(yellow(msg))
-                sys.stderr.flush()
+            raise ParsingError(
+                f"Source '{source.name}' in '{file_path}' is missing required 'connection' property.\n\n"
+                f"DVT requires all sources to specify which target they connect to.\n"
+                f"This enables federation to determine execution paths for cross-target queries.\n\n"
+                f"To fix this, add 'connection' to your source definition:\n\n"
+                f"sources:\n"
+                f"  - name: {source.name}\n"
+                f"    connection: <target_name>  # Required: specifies which profile target to use\n"
+                f"    tables:\n"
+                f"      - name: <table_name>\n\n"
+                f"The 'connection' value should match a target name from your profiles.yml.\n"
+                f"For example, if you have targets 'postgres_prod' and 'snowflake_dw',\n"
+                f"set connection: postgres_prod or connection: snowflake_dw."
+            )
 
     def warn_unused(self) -> None:
         unused_tables: Dict[SourceKey, Optional[Set[str]]] = {}
@@ -401,11 +419,13 @@ class SourcePatcher:
             patch = self.manifest.source_patches[key]
             patch_name = f"{patch.overrides}.{patch.name}"
             if table_names is None:
-                unused_tables_formatted.append(f"  - Source {patch_name} (in {patch.path})")
+                unused_tables_formatted.append(
+                    f"  - Source {patch_name} (in {patch.path})"
+                )
             else:
                 for table_name in sorted(table_names):
                     unused_tables_formatted.append(
-                        f"  - Source table {patch_name}.{table_name} " f"(in {patch.path})"
+                        f"  - Source table {patch_name}.{table_name} (in {patch.path})"
                     )
         return unused_tables_formatted
 
@@ -459,7 +479,9 @@ class SourcePatcher:
             raise ParsingError(
                 "Cannot specify both loaded_at_field and loaded_at_query at table level."
             )
-        if (target.source.loaded_at_field or target.source.config.get("loaded_at_field")) and (
+        if (
+            target.source.loaded_at_field or target.source.config.get("loaded_at_field")
+        ) and (
             target.source.loaded_at_query or target.source.config.get("loaded_at_query")
         ):
             raise ParsingError(
@@ -491,24 +513,33 @@ class SourcePatcher:
             if target.table.loaded_at_field_present:
                 loaded_at_query = None
             else:
-                loaded_at_query = target.source.loaded_at_query or target.source.config.get(
-                    "loaded_at_query"
+                loaded_at_query = (
+                    target.source.loaded_at_query
+                    or target.source.config.get("loaded_at_query")
                 )
 
         return loaded_at_field, loaded_at_query
 
-    def calculate_meta_from_raw_target(self, target: UnpatchedSourceDefinition) -> Dict[str, Any]:
+    def calculate_meta_from_raw_target(
+        self, target: UnpatchedSourceDefinition
+    ) -> Dict[str, Any]:
         source_meta = target.source.meta or {}
         source_config_meta = target.source.config.get("meta", {})
-        source_config_meta = source_config_meta if isinstance(source_config_meta, dict) else {}
+        source_config_meta = (
+            source_config_meta if isinstance(source_config_meta, dict) else {}
+        )
 
         table_meta = target.table.meta or {}
         table_config_meta = target.table.config.get("meta", {})
-        table_config_meta = table_config_meta if isinstance(table_config_meta, dict) else {}
+        table_config_meta = (
+            table_config_meta if isinstance(table_config_meta, dict) else {}
+        )
 
         return {**source_meta, **source_config_meta, **table_meta, **table_config_meta}
 
-    def calculate_tags_from_raw_target(self, target: UnpatchedSourceDefinition) -> List[str]:
+    def calculate_tags_from_raw_target(
+        self, target: UnpatchedSourceDefinition
+    ) -> List[str]:
         source_tags = target.source.tags or []
         source_config_tags = self._get_config_tags(
             target.source.config.get("tags", []), target.source.name
@@ -520,7 +551,11 @@ class SourcePatcher:
         )
 
         return sorted(
-            set(itertools.chain(source_tags, source_config_tags, table_tags, table_config_tags))
+            set(
+                itertools.chain(
+                    source_tags, source_config_tags, table_tags, table_config_tags
+                )
+            )
         )
 
     def _get_config_tags(self, tags: Any, source_name: str) -> List[str]:
@@ -575,7 +610,9 @@ def merge_source_freshness(
             merged_error_after = merge_freshness_time_thresholds(
                 base.error_after, update.error_after
             )
-            merged_warn_after = merge_freshness_time_thresholds(base.warn_after, update.warn_after)
+            merged_warn_after = merge_freshness_time_thresholds(
+                base.warn_after, update.warn_after
+            )
 
             merged_freshness_obj.error_after = merged_error_after
             merged_freshness_obj.warn_after = merged_warn_after

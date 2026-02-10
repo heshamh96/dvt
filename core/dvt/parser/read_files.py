@@ -72,7 +72,8 @@ def load_source_file(
         old_source_file = saved_files[source_file.file_id]
         if (
             source_file.path.modification_time != 0.0
-            and old_source_file.path.modification_time == source_file.path.modification_time
+            and old_source_file.path.modification_time
+            == source_file.path.modification_time
         ):
             source_file.checksum = old_source_file.checksum
             source_file.dfy = old_source_file.dfy
@@ -121,10 +122,19 @@ def validate_yaml(file_path, dct):
                     raise ParsingError(msg)
 
 
+# Binary seed formats that cannot be read as text
+BINARY_SEED_FORMATS = {".parquet", ".orc"}
+
+
 # Special processing for big seed files
 def load_seed_source_file(match: FilePath, project_name) -> SourceFile:
-    if match.seed_too_large():
+    # Check if this is a binary format (Parquet, ORC)
+    extension = os.path.splitext(match.absolute_path)[1].lower()
+    is_binary = extension in BINARY_SEED_FORMATS
+
+    if match.seed_too_large() or is_binary:
         # We don't want to calculate a hash of this file. Use the path.
+        # For binary formats, we can't read the contents as text.
         source_file = SourceFile.big_seed(match)
     else:
         file_contents = load_file_contents(match.absolute_path, strip=True)
@@ -138,7 +148,9 @@ def load_seed_source_file(match: FilePath, project_name) -> SourceFile:
 
 # Use the FilesystemSearcher to get a bunch of FilePaths, then turn
 # them into a bunch of FileSource objects
-def get_source_files(project, paths, extension, parse_file_type, saved_files, ignore_spec):
+def get_source_files(
+    project, paths, extension, parse_file_type, saved_files, ignore_spec
+):
     # file path list
     fp_list = filesystem_search(project, paths, extension, ignore_spec)
     # file block list
@@ -153,14 +165,18 @@ def get_source_files(project, paths, extension, parse_file_type, saved_files, ig
                 path = pathlib.Path(fp.relative_path)
                 if path.parts[0] in ["generic", "fixtures"]:
                     continue
-            file = load_source_file(fp, parse_file_type, project.project_name, saved_files)
+            file = load_source_file(
+                fp, parse_file_type, project.project_name, saved_files
+            )
             # only append the list if it has contents. added to fix #3568
             if file:
                 fb_list.append(file)
     return fb_list
 
 
-def read_files_for_parser(project, files, parse_ft, file_type_info, saved_files, ignore_spec):
+def read_files_for_parser(
+    project, files, parse_ft, file_type_info, saved_files, ignore_spec
+):
     dirs = file_type_info["paths"]
     parser_files = []
     for extension in file_type_info["extensions"]:
@@ -179,7 +195,9 @@ def generate_dbt_ignore_spec(project_root):
     ignore_spec = None
     if os.path.exists(ignore_file_path):
         with open(ignore_file_path) as f:
-            ignore_spec = pathspec.PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, f)
+            ignore_spec = pathspec.PathSpec.from_lines(
+                pathspec.patterns.GitWildMatchPattern, f
+            )
     return ignore_spec
 
 
@@ -267,7 +285,11 @@ class ReadFilesFromDiff:
             if file_id in self.files:
                 self.files.pop(file_id)
             else:
-                fire_event(InputFileDiffError(category="deleted file not found", file_id=file_id))
+                fire_event(
+                    InputFileDiffError(
+                        category="deleted file not found", file_id=file_id
+                    )
+                )
 
         # Now we do the changes
         for input_file in self.file_diff.changed:
@@ -320,7 +342,9 @@ class ReadFilesFromDiff:
             if searched_path in file_type_lookup["paths"]:
                 parse_ft_for_path = file_type_lookup["paths"][searched_path]
             if len(parse_ft_for_extension) == 0 or len(parse_ft_for_path) == 0:
-                fire_event(InputFileDiffError(category="not a project file", file_id=file_id))
+                fire_event(
+                    InputFileDiffError(category="not a project file", file_id=file_id)
+                )
                 continue
             parse_ft_set = parse_ft_for_extension.intersection(parse_ft_for_path)
             if (
@@ -418,7 +442,7 @@ def get_file_types_for_project(project):
         },
         ParseFileType.Seed: {
             "paths": project.seed_paths,
-            "extensions": [".csv"],
+            "extensions": [".csv", ".parquet", ".json", ".jsonl", ".orc"],
             "parser": "SeedParser",
         },
         ParseFileType.Documentation: {

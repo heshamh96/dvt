@@ -112,7 +112,7 @@ class LogDbtProfileError(ErrorLevel):
         return "A011"
 
     def message(self) -> str:
-        msg = "Encountered an error while reading profiles:\n" f"  ERROR: {str(self.exc)}"
+        msg = f"Encountered an error while reading profiles:\n  ERROR: {str(self.exc)}"
         if self.profiles:
             msg += "Defined profiles:\n"
             for profile in self.profiles:
@@ -275,7 +275,9 @@ class PackageRedirectDeprecation(WarnLevel):
         )
 
         if require_event_names_in_deprecations():
-            return line_wrap_message(_deprecation_tag(description, self.__class__.__name__))
+            return line_wrap_message(
+                _deprecation_tag(description, self.__class__.__name__)
+            )
         else:
             return line_wrap_message(deprecation_tag_less_strict(description))
 
@@ -292,7 +294,9 @@ class PackageInstallPathDeprecation(WarnLevel):
         """
 
         if require_event_names_in_deprecations():
-            return line_wrap_message(_deprecation_tag(description, self.__class__.__name__))
+            return line_wrap_message(
+                _deprecation_tag(description, self.__class__.__name__)
+            )
         else:
             return line_wrap_message(deprecation_tag_less_strict(description))
 
@@ -308,7 +312,9 @@ class ConfigSourcePathDeprecation(WarnLevel):
         )
 
         if require_event_names_in_deprecations():
-            return line_wrap_message(_deprecation_tag(description, self.__class__.__name__))
+            return line_wrap_message(
+                _deprecation_tag(description, self.__class__.__name__)
+            )
         else:
             return line_wrap_message(deprecation_tag_less_strict(description))
 
@@ -324,7 +330,9 @@ class ConfigDataPathDeprecation(WarnLevel):
         )
 
         if require_event_names_in_deprecations():
-            return line_wrap_message(_deprecation_tag(description, self.__class__.__name__))
+            return line_wrap_message(
+                _deprecation_tag(description, self.__class__.__name__)
+            )
         else:
             return line_wrap_message(deprecation_tag_less_strict(description))
 
@@ -344,7 +352,9 @@ class MetricAttributesRenamed(WarnLevel):
         )
 
         if require_event_names_in_deprecations():
-            return line_wrap_message(_deprecation_tag(description, self.__class__.__name__))
+            return line_wrap_message(
+                _deprecation_tag(description, self.__class__.__name__)
+            )
         else:
             return deprecation_tag_less_strict(description)
 
@@ -363,7 +373,9 @@ class ExposureNameDeprecation(WarnLevel):
         )
 
         if require_event_names_in_deprecations():
-            return line_wrap_message(_deprecation_tag(description, self.__class__.__name__))
+            return line_wrap_message(
+                _deprecation_tag(description, self.__class__.__name__)
+            )
         else:
             return line_wrap_message(deprecation_tag_less_strict(description))
 
@@ -400,7 +412,9 @@ class EnvironmentVariableRenamed(WarnLevel):
         )
 
         if require_event_names_in_deprecations():
-            return line_wrap_message(_deprecation_tag(description, self.__class__.__name__))
+            return line_wrap_message(
+                _deprecation_tag(description, self.__class__.__name__)
+            )
         else:
             return line_wrap_message(deprecation_tag_less_strict(description))
 
@@ -421,7 +435,9 @@ class ConfigLogPathDeprecation(WarnLevel):
         )
 
         if require_event_names_in_deprecations():
-            return line_wrap_message(_deprecation_tag(description, self.__class__.__name__))
+            return line_wrap_message(
+                _deprecation_tag(description, self.__class__.__name__)
+            )
         else:
             return line_wrap_message(deprecation_tag_less_strict(description))
 
@@ -442,7 +458,9 @@ class ConfigTargetPathDeprecation(WarnLevel):
         )
 
         if require_event_names_in_deprecations():
-            return line_wrap_message(_deprecation_tag(description, self.__class__.__name__))
+            return line_wrap_message(
+                _deprecation_tag(description, self.__class__.__name__)
+            )
         else:
             return line_wrap_message(deprecation_tag_less_strict(description))
 
@@ -461,7 +479,9 @@ class TestsConfigDeprecation(WarnLevel):
         )
 
         if require_event_names_in_deprecations():
-            return line_wrap_message(_deprecation_tag(description, self.__class__.__name__))
+            return line_wrap_message(
+                _deprecation_tag(description, self.__class__.__name__)
+            )
         else:
             return line_wrap_message(deprecation_tag_less_strict(description))
 
@@ -495,7 +515,9 @@ class SpacesInResourceNameDeprecation(DynamicLevel):
             description = warning_tag(description)
 
         if require_event_names_in_deprecations():
-            return line_wrap_message(_deprecation_tag(description, self.__class__.__name__))
+            return line_wrap_message(
+                _deprecation_tag(description, self.__class__.__name__)
+            )
         else:
             return line_wrap_message(description)
 
@@ -513,7 +535,9 @@ class ResourceNamesWithSpacesDeprecation(WarnLevel):
         description += " For more information: https://docs.getdbt.com/reference/global-configs/legacy-behaviors"
 
         if require_event_names_in_deprecations():
-            return line_wrap_message(_deprecation_tag(description, self.__class__.__name__))
+            return line_wrap_message(
+                _deprecation_tag(description, self.__class__.__name__)
+            )
         else:
             return line_wrap_message(warning_tag(description))
 
@@ -526,7 +550,9 @@ class PackageMaterializationOverrideDeprecation(WarnLevel):
         description = f"Installed package '{self.package_name}' is overriding the built-in materialization '{self.materialization_name}'. Overrides of built-in materializations from installed packages will be deprecated in future versions of dvt. For more information: https://docs.getdbt.com/reference/global-configs/legacy-behaviors"
 
         if require_event_names_in_deprecations():
-            return line_wrap_message(_deprecation_tag(description, self.__class__.__name__))
+            return line_wrap_message(
+                _deprecation_tag(description, self.__class__.__name__)
+            )
         else:
             return line_wrap_message(warning_tag(description))
 
@@ -539,7 +565,9 @@ class SourceFreshnessProjectHooksNotRun(WarnLevel):
         description = "In a future version of dvt, the `source freshness` command will start running `on-run-start` and `on-run-end` hooks by default. For more information: https://docs.getdbt.com/reference/global-configs/legacy-behaviors"
 
         if require_event_names_in_deprecations():
-            return line_wrap_message(_deprecation_tag(description, self.__class__.__name__))
+            return line_wrap_message(
+                _deprecation_tag(description, self.__class__.__name__)
+            )
         else:
             return line_wrap_message(warning_tag(description))
 
@@ -552,7 +580,9 @@ class MFTimespineWithoutYamlConfigurationDeprecation(WarnLevel):
         description = "Time spines without YAML configuration are in the process of deprecation. Please add YAML configuration for your 'metricflow_time_spine' model. See documentation on MetricFlow time spines: https://docs.getdbt.com/docs/build/metricflow-time-spine and behavior change documentation: https://docs.getdbt.com/reference/global-configs/behavior-changes."
 
         if require_event_names_in_deprecations():
-            return line_wrap_message(_deprecation_tag(description, self.__class__.__name__))
+            return line_wrap_message(
+                _deprecation_tag(description, self.__class__.__name__)
+            )
         else:
             return line_wrap_message(warning_tag(description))
 
@@ -565,7 +595,9 @@ class MFCumulativeTypeParamsDeprecation(WarnLevel):
         description = "Cumulative fields `type_params.window` and `type_params.grain_to_date` have been moved and will soon be deprecated. Please nest those values under `type_params.cumulative_type_params.window` and `type_params.cumulative_type_params.grain_to_date`. See documentation on behavior changes: https://docs.getdbt.com/reference/global-configs/behavior-changes."
 
         if require_event_names_in_deprecations():
-            return line_wrap_message(_deprecation_tag(description, self.__class__.__name__))
+            return line_wrap_message(
+                _deprecation_tag(description, self.__class__.__name__)
+            )
         else:
             return line_wrap_message(warning_tag(description))
 
@@ -578,7 +610,9 @@ class MicrobatchMacroOutsideOfBatchesDeprecation(WarnLevel):
         description = "The use of a custom microbatch macro outside of batched execution is deprecated. To use it with batched execution, set `flags.require_batched_execution_for_custom_microbatch_strategy` to `True` in `dbt_project.yml`. In the future this will be the default behavior."
 
         if require_event_names_in_deprecations():
-            return line_wrap_message(_deprecation_tag(description, self.__class__.__name__))
+            return line_wrap_message(
+                _deprecation_tag(description, self.__class__.__name__)
+            )
         else:
             return line_wrap_message(warning_tag(description))
 
@@ -657,9 +691,7 @@ class DeprecationsSummary(WarnLevel):
     def message(self) -> str:
         description = "Summary of encountered deprecations:"
         for summary in self.summaries:
-            description += (
-                f"\n\n- {summary.event_name}: {pluralize(summary.occurrences, 'occurrence')}"
-            )
+            description += f"\n\n- {summary.event_name}: {pluralize(summary.occurrences, 'occurrence')}"
 
         if self.show_all_hint:
             description += "\n\nTo see all deprecation instances instead of just the first occurrence of each, run command again with the `--show-all-deprecations` flag. You may also need to run with `--no-partial-parse` as some deprecations are only encountered during parsing."
@@ -696,7 +728,9 @@ class WEOIncludeExcludeDeprecation(WarnLevel):
         if self.found_exclude:
             found_keys.append("`exclude`")
 
-        description = f"Found {' and '.join(found_keys)} in `warn_error_options` specification."
+        description = (
+            f"Found {' and '.join(found_keys)} in `warn_error_options` specification."
+        )
         if self.found_include:
             description += " Please use `error` instead of `include`."
         if self.found_exclude:
@@ -719,9 +753,7 @@ class ModulesItertoolsUsageDeprecation(WarnLevel):
         return "D034"
 
     def message(self) -> str:
-        description = (
-            "Usage of itertools modules is deprecated. Please use the built-in functions instead."
-        )
+        description = "Usage of itertools modules is deprecated. Please use the built-in functions instead."
         return line_wrap_message(_deprecation_tag(description, self.__class__.__name__))
 
 
@@ -1136,13 +1168,18 @@ class UpcomingReferenceDeprecation(WarnLevel):
         return "I066"
 
     def message(self) -> str:
-        ref_model_version = ".v" + self.ref_model_version if self.ref_model_version else ""
+        ref_model_version = (
+            ".v" + self.ref_model_version if self.ref_model_version else ""
+        )
         msg = (
             f"While compiling '{self.model_name}': Found a reference to {self.ref_model_name}{ref_model_version}, "
             f"which is slated for deprecation on '{self.ref_model_deprecation_date}'. "
         )
 
-        if self.ref_model_version and self.ref_model_version != self.ref_model_latest_version:
+        if (
+            self.ref_model_version
+            and self.ref_model_version != self.ref_model_latest_version
+        ):
             coda = (
                 f"A new version of '{self.ref_model_name}' is available. Try it out: "
                 f"{{{{ ref('{self.ref_model_package}', '{self.ref_model_name}', "
@@ -1158,13 +1195,18 @@ class DeprecatedReference(WarnLevel):
         return "I067"
 
     def message(self) -> str:
-        ref_model_version = ".v" + self.ref_model_version if self.ref_model_version else ""
+        ref_model_version = (
+            ".v" + self.ref_model_version if self.ref_model_version else ""
+        )
         msg = (
             f"While compiling '{self.model_name}': Found a reference to {self.ref_model_name}{ref_model_version}, "
             f"which was deprecated on '{self.ref_model_deprecation_date}'. "
         )
 
-        if self.ref_model_version and self.ref_model_version != self.ref_model_latest_version:
+        if (
+            self.ref_model_version
+            and self.ref_model_version != self.ref_model_latest_version
+        ):
             coda = (
                 f"A new version of '{self.ref_model_name}' is available. Migrate now: "
                 f"{{{{ ref('{self.ref_model_package}', '{self.ref_model_name}', "
@@ -1535,7 +1577,9 @@ class DepsFoundDuplicatePackage(InfoLevel):
         return "M033"
 
     def message(self) -> str:
-        return f"Found duplicate package in packages.yml, removing: {self.removed_package}"
+        return (
+            f"Found duplicate package in packages.yml, removing: {self.removed_package}"
+        )
 
 
 class DepsScrubbedPackageName(WarnLevel):
@@ -1665,7 +1709,9 @@ class LogStartLine(InfoLevel):
 
     def message(self) -> str:
         msg = f"START {self.description}"
-        return format_fancy_output_line(msg=msg, status="RUN", index=self.index, total=self.total)
+        return format_fancy_output_line(
+            msg=msg, status="RUN", index=self.index, total=self.total
+        )
 
 
 class LogModelResult(DynamicLevel):
@@ -1708,7 +1754,9 @@ class LogSnapshotResult(DynamicLevel):
             info = "OK snapshotted"
             status = green(self.result_message)
 
-        msg = "{info} {description}".format(info=info, description=self.description, **self.cfg)
+        msg = "{info} {description}".format(
+            info=info, description=self.description, **self.cfg
+        )
         return format_fancy_output_line(
             msg=msg,
             status=status,
@@ -1808,7 +1856,9 @@ class LogCancelLine(ErrorLevel):
 
     def message(self) -> str:
         msg = f"CANCEL query {self.conn_name}"
-        return format_fancy_output_line(msg=msg, status=red("CANCEL"), index=None, total=None)
+        return format_fancy_output_line(
+            msg=msg, status=red("CANCEL"), index=None, total=None
+        )
 
 
 class DefaultSelector(InfoLevel):
@@ -2004,7 +2054,9 @@ class CompiledNode(InfoLevel):
             if self.is_inline:
                 return json.dumps({"compiled": self.compiled}, indent=2)
             else:
-                return json.dumps({"node": self.node_name, "compiled": self.compiled}, indent=2)
+                return json.dumps(
+                    {"node": self.node_name, "compiled": self.compiled}, indent=2
+                )
         else:
             if self.quiet:
                 return self.compiled
@@ -2130,7 +2182,7 @@ class InternalErrorOnRun(DebugLevel):
 the error persists, open an issue at https://github.com/dvt-labs/dvt-core
 """.strip()
 
-        return f"{red(prefix)}\n" f"{str(self.exc).strip()}\n\n" f"{internal_error_string}"
+        return f"{red(prefix)}\n{str(self.exc).strip()}\n\n{internal_error_string}"
 
 
 class GenericExceptionOnRun(ErrorLevel):
@@ -2286,9 +2338,7 @@ class StatsLine(InfoLevel):
         return "Z023"
 
     def message(self) -> str:
-        stats_line = (
-            "Done. PASS={pass} WARN={warn} ERROR={error} SKIP={skip} NO-OP={noop} TOTAL={total}"
-        )
+        stats_line = "Done. PASS={pass} WARN={warn} ERROR={error} SKIP={skip} NO-OP={noop} TOTAL={total}"
         return stats_line.format(**self.stats)
 
 
@@ -2346,7 +2396,9 @@ class EndOfRunSummary(InfoLevel):
                 f"Completed with {error_plural}, {partial_success_plural}, and {warn_plural}:"
             )
         elif self.num_partial_success > 0:
-            message = yellow(f"Completed with {partial_success_plural} and {warn_plural}")
+            message = yellow(
+                f"Completed with {partial_success_plural} and {warn_plural}"
+            )
         elif self.num_warnings > 0:
             message = yellow(f"Completed with {warn_plural}:")
         else:
@@ -2535,3 +2587,260 @@ class ArtifactUploadSkipped(DebugLevel):
 
     def message(self) -> str:
         return f"Artifacts skipped for command : {self.msg}"
+
+
+# =======================================================
+# F - Federation (DVT-specific)
+# =======================================================
+
+
+class FederationPathResolved(InfoLevel):
+    """Logged when federation resolver determines execution path for a model."""
+
+    def code(self) -> str:
+        return "F001"
+
+    def message(self) -> str:
+        path_display = (
+            "FEDERATION" if self.execution_path == "spark_federation" else "PUSHDOWN"
+        )
+        return f"Resolved {self.model_name}: {path_display} (target={self.target})"
+
+
+class FederationSparkInitialized(InfoLevel):
+    """Logged when Spark session is initialized for federation."""
+
+    def code(self) -> str:
+        return "F002"
+
+    def message(self) -> str:
+        return f"Initialized Spark session for federation ({self.num_models} models require federation)"
+
+
+class FederationSparkShutdown(DebugLevel):
+    """Logged when Spark session is shut down after federation."""
+
+    def code(self) -> str:
+        return "F003"
+
+    def message(self) -> str:
+        return "Spark session shutdown complete"
+
+
+class FederationSourceExtractStart(InfoLevel):
+    """Logged when starting to extract a source for federation."""
+
+    def code(self) -> str:
+        return "F010"
+
+    def message(self) -> str:
+        return (
+            f"Extracting source {self.source_name}.{self.table_name} from {self.target}"
+        )
+
+
+class FederationSourceExtractComplete(InfoLevel):
+    """Logged when source extraction completes."""
+
+    def code(self) -> str:
+        return "F011"
+
+    def message(self) -> str:
+        rows_info = f" ({self.row_count} rows)" if self.row_count else ""
+        return f"Extracted {self.source_name}.{self.table_name}{rows_info} in {self.elapsed:.2f}s"
+
+
+class FederationSourceExtractSkipped(DebugLevel):
+    """Logged when source extraction is skipped (already cached)."""
+
+    def code(self) -> str:
+        return "F012"
+
+    def message(self) -> str:
+        return f"Skipped extraction for {self.source_name}.{self.table_name} (cached, reason: {self.reason})"
+
+
+class FederationSourceExtractError(ErrorLevel):
+    """Logged when source extraction fails."""
+
+    def code(self) -> str:
+        return "F013"
+
+    def message(self) -> str:
+        return f"Failed to extract {self.source_name}.{self.table_name}: {self.error}"
+
+
+class FederationPredicatePushdown(DebugLevel):
+    """Logged when predicates are pushed down to source extraction."""
+
+    def code(self) -> str:
+        return "F014"
+
+    def message(self) -> str:
+        predicates = ", ".join(self.predicates) if self.predicates else "none"
+        return f"Pushdown for {self.source_name}: predicates=[{predicates}], limit={self.limit}"
+
+
+class FederationTempViewRegistered(DebugLevel):
+    """Logged when a temp view is registered in Spark."""
+
+    def code(self) -> str:
+        return "F020"
+
+    def message(self) -> str:
+        return f"Registered Spark temp view: {self.view_name}"
+
+
+class FederationTempViewCleanup(DebugLevel):
+    """Logged when temp views are cleaned up."""
+
+    def code(self) -> str:
+        return "F021"
+
+    def message(self) -> str:
+        return f"Cleaned up {self.view_count} temp view(s) for model {self.model_name}"
+
+
+class FederationSQLTranslation(DebugLevel):
+    """Logged when SQL is translated to Spark dialect."""
+
+    def code(self) -> str:
+        return "F030"
+
+    def message(self) -> str:
+        return f"Translated SQL from {self.source_dialect} to Spark for model {self.model_name}"
+
+
+class FederationSQLTranslationError(ErrorLevel):
+    """Logged when SQL translation fails."""
+
+    def code(self) -> str:
+        return "F031"
+
+    def message(self) -> str:
+        return f"SQL translation failed for {self.model_name}: {self.error}"
+
+
+class FederationExecutionStart(InfoLevel):
+    """Logged when federation execution starts for a model."""
+
+    def code(self) -> str:
+        return "F040"
+
+    def message(self) -> str:
+        sources_info = f" ({self.num_sources} sources)" if self.num_sources else ""
+        return f"Starting federation for {self.model_name}{sources_info}"
+
+
+class FederationExecutionComplete(InfoLevel):
+    """Logged when federation execution completes."""
+
+    def code(self) -> str:
+        return "F041"
+
+    def message(self) -> str:
+        return f"Federation complete for {self.model_name} in {self.elapsed:.2f}s"
+
+
+class FederationExecutionError(ErrorLevel):
+    """Logged when federation execution fails."""
+
+    def code(self) -> str:
+        return "F042"
+
+    def message(self) -> str:
+        return red(f"Federation failed for {self.model_name}: {self.error}")
+
+
+class FederationWriteStart(DebugLevel):
+    """Logged when starting to write federation results to target."""
+
+    def code(self) -> str:
+        return "F050"
+
+    def message(self) -> str:
+        return (
+            f"Writing federation results to {self.target}.{self.schema}.{self.relation}"
+        )
+
+
+class FederationWriteComplete(DebugLevel):
+    """Logged when federation write completes."""
+
+    def code(self) -> str:
+        return "F051"
+
+    def message(self) -> str:
+        rows_info = f" ({self.row_count} rows)" if self.row_count else ""
+        return f"Wrote{rows_info} to {self.target}.{self.schema}.{self.relation} in {self.elapsed:.2f}s"
+
+
+class FederationWriteError(ErrorLevel):
+    """Logged when federation write fails."""
+
+    def code(self) -> str:
+        return "F052"
+
+    def message(self) -> str:
+        return f"Failed to write to {self.target}: {self.error}"
+
+
+class FederationMaterializationCoercion(WarnLevel):
+    """Logged when materialization is coerced due to cross-target federation."""
+
+    def code(self) -> str:
+        return "F060"
+
+    def message(self) -> str:
+        return warning_tag(
+            f"Model {self.model_name}: materialization coerced from '{self.original}' to "
+            f"'{self.coerced}' (cross-target federation cannot create views)"
+        )
+
+
+class FederationIncrementalExtract(InfoLevel):
+    """Logged when performing incremental extraction."""
+
+    def code(self) -> str:
+        return "F070"
+
+    def message(self) -> str:
+        return (
+            f"Incremental extraction for {self.source_name}: "
+            f"{self.new_rows} new, {self.changed_rows} changed, {self.deleted_rows} deleted"
+        )
+
+
+class FederationSchemaChange(WarnLevel):
+    """Logged when source schema has changed since last extraction."""
+
+    def code(self) -> str:
+        return "F071"
+
+    def message(self) -> str:
+        return warning_tag(
+            f"Schema changed for {self.source_name}.{self.table_name}, performing full extraction"
+        )
+
+
+class FederationBucketOperation(DebugLevel):
+    """Logged for bucket staging operations."""
+
+    def code(self) -> str:
+        return "F080"
+
+    def message(self) -> str:
+        return f"Bucket {self.operation}: {self.bucket_name}/{self.path}"
+
+
+class FederationSummary(InfoLevel):
+    """Logged at end of run with federation statistics."""
+
+    def code(self) -> str:
+        return "F099"
+
+    def message(self) -> str:
+        return (
+            f"Federation summary: {self.federation_models} federated, "
+            f"{self.pushdown_models} pushdown, {self.sources_extracted} sources extracted"
+        )

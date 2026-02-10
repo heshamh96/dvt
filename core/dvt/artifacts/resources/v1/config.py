@@ -62,7 +62,9 @@ class NodeAndTestConfig(BaseConfig):
     )
     tags: Union[List[str], str] = field(
         default_factory=list_str,
-        metadata=metas(ShowBehavior.Hide, MergeBehavior.Append, CompareBehavior.Exclude),
+        metadata=metas(
+            ShowBehavior.Hide, MergeBehavior.Append, CompareBehavior.Exclude
+        ),
     )
     meta: Dict[str, Any] = field(
         default_factory=dict,
@@ -127,6 +129,22 @@ class NodeConfig(NodeAndTestConfig):
     )
     event_time: Any = None
     concurrent_batches: Any = None
+
+    # DVT: Federation configuration
+    # These override profile defaults for this specific model
+    # Priority: CLI flag > model config > profiles.yml/computes.yml/buckets.yml default
+    target: Optional[str] = field(
+        default=None,
+        metadata=metas(MergeBehavior.Clobber, CompareBehavior.Exclude),
+    )
+    compute: Optional[str] = field(
+        default=None,
+        metadata=metas(MergeBehavior.Clobber, CompareBehavior.Exclude),
+    )
+    bucket: Optional[str] = field(
+        default=None,
+        metadata=metas(MergeBehavior.Clobber, CompareBehavior.Exclude),
+    )
 
     def __post_init__(self):
         # we validate that node_color has a suitable value to prevent dbt-docs from crashing
@@ -228,7 +246,9 @@ class TestConfig(NodeAndTestConfig):
         if self.store_failures_as is None:
             self.store_failures_as = get_store_failures_as_map[self.store_failures]
         else:
-            self.store_failures = get_store_failures_map.get(self.store_failures_as, True)
+            self.store_failures = get_store_failures_map.get(
+                self.store_failures_as, True
+            )
 
         return self
 
@@ -257,7 +277,9 @@ class TestConfig(NodeAndTestConfig):
 
     @classmethod
     def validate(cls, data):
-        if data.get("severity") and not re.match(SEVERITY_PATTERN, data.get("severity")):
+        if data.get("severity") and not re.match(
+            SEVERITY_PATTERN, data.get("severity")
+        ):
             raise ValidationError(
                 f"Severity must be either 'warn' or 'error'. Got '{data.get('severity')}'"
             )

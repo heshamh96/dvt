@@ -6,6 +6,7 @@ dvt sync: install adapters, pyspark, and JDBC drivers for the current project's 
 - Installs dbt-<adapter> per profile target type; relates each adapter type to JDBC driver(s) and downloads those JARs for Spark federation.
 - Reads active target from computes.yml, installs only that pyspark version (uninstalls others).
 """
+
 import os
 import re
 import subprocess
@@ -17,10 +18,17 @@ import yaml
 
 from dvt.cli.flags import Flags
 from dvt.config.project import project_yml_path_if_exists
-from dvt.config.user_config import get_dvt_home, get_jdbc_drivers_dir
+from dvt.config.user_config import (
+    get_bucket_dependencies,
+    get_dvt_home,
+    get_spark_jars_dir,
+)
 from dvt.task.base import BaseTask, get_nearest_project_dir
 from dvt.task.jdbc_drivers import download_jdbc_jars, get_jdbc_drivers_for_adapters
-from dvt.task.native_connectors import get_native_connectors_for_adapters, sync_native_connectors
+from dvt.task.native_connectors import (
+    get_native_connectors_for_adapters,
+    sync_native_connectors,
+)
 from dbt_common.clients.system import load_file_contents
 from dbt_common.events.functions import fire_event
 from dbt_common.exceptions import DbtRuntimeError
@@ -39,18 +47,66 @@ def _sync_log(msg: str) -> None:
     fire_event(DebugCmdOut(msg=msg))
 
 
-def _find_project_env(project_root: Path) -> Optional[Path]:
-    """Return path to Python env inside project dir only (.venv, venv, env). Does not look in parent dirs."""
+def _is_valid_env(candidate: Path) -> bool:
+    """Check if a directory is a valid Python virtual environment.
+
+    Args:
+        candidate: Path to check
+
+    Returns:
+        True if the directory contains a valid Python interpreter
+    """
+    if not candidate.is_dir():
+        return False
+    # Check for Unix python
+    if (candidate / "bin" / "python").exists():
+        return True
+    # Check for Windows python
+    if (candidate / "Scripts" / "python.exe").exists():
+        return True
+    return False
+
+
+def _find_project_env(project_root: Path, cwd: Optional[Path] = None) -> Optional[Path]:
+    """Return path to Python env by searching multiple locations.
+
+    Search order:
+    1. Inside project_root (.venv, venv, env)
+    2. Inside cwd if different from project_root (for --project-dir usage)
+    3. Parent directory of project_root (common pattern: trial_root/.venv + trial_root/project/)
+
+    Args:
+        project_root: The project directory containing dbt_project.yml
+        cwd: Current working directory (optional, for when running with --project-dir)
+
+    Returns:
+        Path to valid Python environment, or None if not found
+    """
     project_root = Path(project_root).resolve()
+
+    # 1. Check inside project directory first
     for name in IN_PROJECT_ENV_NAMES:
         candidate = project_root / name
-        if candidate.is_dir():
-            py = candidate / "bin" / "python"
-            if py.exists():
+        if _is_valid_env(candidate):
+            return candidate
+
+    # 2. Check current working directory (if different from project)
+    if cwd:
+        cwd = Path(cwd).resolve()
+        if cwd != project_root:
+            for name in IN_PROJECT_ENV_NAMES:
+                candidate = cwd / name
+                if _is_valid_env(candidate):
+                    return candidate
+
+    # 3. Check parent of project directory (one level up)
+    parent = project_root.parent
+    if parent != project_root:  # Avoid infinite loop at filesystem root
+        for name in IN_PROJECT_ENV_NAMES:
+            candidate = parent / name
+            if _is_valid_env(candidate):
                 return candidate
-            py_win = candidate / "Scripts" / "python.exe"
-            if py_win.exists():
-                return candidate
+
     return None
 
 
@@ -66,27 +122,47 @@ def _get_env_python(env_path: Path) -> Path:
 
 
 def _run_pip(env_python: Path, args: List[str]) -> bool:
-    """Run python -m pip with args. Return True on success."""
+    """Run python -m pip with args. Streams output to terminal. Return True on success."""
     cmd = [str(env_python), "-m", "pip"] + args
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        # Stream stdout to terminal for progress visibility
+        # Capture stderr separately to check for errors
+        result = subprocess.run(
+            cmd,
+            stdout=None,  # Inherit from parent (shows in terminal)
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=300,
+        )
         if result.returncode != 0:
-            sys.stderr.write(result.stderr or "")
+            if result.stderr:
+                sys.stderr.write(result.stderr)
             return False
         return True
+    except subprocess.TimeoutExpired:
+        sys.stderr.write("pip failed: timed out after 300 seconds\n")
+        return False
     except Exception as e:
         sys.stderr.write(f"pip failed: {e}\n")
         return False
 
 
 def _run_uv_pip(env_path: Path, args: List[str], timeout: int = 300) -> bool:
-    """Run uv pip with --python pointing to env. Return True on success."""
+    """Run uv pip with --python pointing to env. Streams output to terminal. Return True on success."""
     env_python = _get_env_python(env_path)
     cmd = ["uv", "pip", "install", "--python", str(env_python)] + args
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        # Stream stdout to terminal for progress visibility
+        result = subprocess.run(
+            cmd,
+            stdout=None,  # Inherit from parent (shows in terminal)
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=timeout,
+        )
         if result.returncode != 0:
-            sys.stderr.write(result.stderr or "")
+            if result.stderr:
+                sys.stderr.write(result.stderr)
             return False
         return True
     except FileNotFoundError:
@@ -100,16 +176,27 @@ def _run_uv_pip(env_path: Path, args: List[str], timeout: int = 300) -> bool:
 
 
 def _run_uv_pip_uninstall(env_path: Path, packages: List[str]) -> bool:
-    """Run uv pip uninstall with --python pointing to env. Return True on success."""
+    """Run uv pip uninstall with --python pointing to env. Streams output to terminal. Return True on success."""
     env_python = _get_env_python(env_path)
     cmd = ["uv", "pip", "uninstall", "--python", str(env_python)] + packages
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        # Stream stdout to terminal for progress visibility
+        result = subprocess.run(
+            cmd,
+            stdout=None,  # Inherit from parent (shows in terminal)
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=60,
+        )
         if result.returncode != 0:
-            sys.stderr.write(result.stderr or "")
+            if result.stderr:
+                sys.stderr.write(result.stderr)
             return False
         return True
     except FileNotFoundError:
+        return False
+    except subprocess.TimeoutExpired:
+        sys.stderr.write("uv pip uninstall failed: timed out after 60 seconds\n")
         return False
     except Exception as e:
         sys.stderr.write(f"uv pip uninstall failed: {e}\n")
@@ -181,7 +268,9 @@ def _get_adapter_types_from_profile(profiles_dir: Path, profile_name: str) -> Li
     return list(types)
 
 
-def _get_computes_for_profile(computes_path: Path, profile_name: str) -> Optional[Dict[str, Any]]:
+def _get_computes_for_profile(
+    computes_path: Path, profile_name: str
+) -> Optional[Dict[str, Any]]:
     """
     Load computes.yml. New structure: top-level keys are profile names;
     each value is { target: <name>, computes: { <name>: { type, version?, master?, config? } } }.
@@ -196,7 +285,9 @@ def _get_computes_for_profile(computes_path: Path, profile_name: str) -> Optiona
     return profile_block
 
 
-def _get_active_pyspark_version(computes_path: Path, profile_name: str) -> Optional[str]:
+def _get_active_pyspark_version(
+    computes_path: Path, profile_name: str
+) -> Optional[str]:
     """
     Return the pyspark version for the active target of the given profile.
     Active target is profile_block['target']; compute config is profile_block['computes'][target].
@@ -276,7 +367,7 @@ def _detect_java_version() -> Optional[str]:
                 return version_str
 
         # Fallback: try to extract any number that looks like a major version
-        numbers = re.findall(r'\b(\d+)\.\d+', output)
+        numbers = re.findall(r"\b(\d+)\.\d+", output)
         if numbers:
             major = numbers[0]
             # If it's "1", check for Java 8 pattern
@@ -291,7 +382,9 @@ def _detect_java_version() -> Optional[str]:
     return None
 
 
-def _check_java_compatibility(spark_version: str, java_version: Optional[str]) -> Tuple[bool, Optional[str]]:
+def _check_java_compatibility(
+    spark_version: str, java_version: Optional[str]
+) -> Tuple[bool, Optional[str]]:
     """
     Check if Java version is compatible with Spark version.
     Returns (is_compatible, warning_message).
@@ -321,14 +414,16 @@ def _print_java_installation_instructions(required_versions: List[str]) -> None:
     _sync_log(yellow("☕ Java Installation Instructions"))
     _sync_log(yellow("=" * 70))
     _sync_log("")
-    _sync_log(f"Required Java versions: {yellow(', '.join(f'Java {v}' for v in required_versions))}")
+    _sync_log(
+        f"Required Java versions: {yellow(', '.join(f'Java {v}' for v in required_versions))}"
+    )
     _sync_log("")
 
     # Mac instructions
     _sync_log(green("🍎 macOS:"))
     _sync_log("  Option 1: Homebrew (recommended)")
     for v in required_versions:
-        _sync_log(f'    brew install openjdk@{v}')
+        _sync_log(f"    brew install openjdk@{v}")
     _sync_log("    Then link: brew link --overwrite openjdk@<version>")
     _sync_log("")
     _sync_log("  Option 2: SDKMAN")
@@ -339,20 +434,22 @@ def _print_java_installation_instructions(required_versions: List[str]) -> None:
     _sync_log("  Option 3: Manual download")
     _sync_log("    Download from: https://adoptium.net/")
     _sync_log("    Extract and set JAVA_HOME:")
-    _sync_log('    export JAVA_HOME="/Library/Java/JavaVirtualMachines/jdk-<version>.jdk/Contents/Home"')
+    _sync_log(
+        '    export JAVA_HOME="/Library/Java/JavaVirtualMachines/jdk-<version>.jdk/Contents/Home"'
+    )
     _sync_log("")
 
     # Linux instructions
     _sync_log(green("🐧 Linux:"))
     _sync_log("  Option 1: apt (Debian/Ubuntu)")
     for v in required_versions:
-        _sync_log(f'    sudo apt update && sudo apt install openjdk-{v}-jdk')
+        _sync_log(f"    sudo apt update && sudo apt install openjdk-{v}-jdk")
     _sync_log("")
     _sync_log("  Option 2: yum/dnf (RHEL/CentOS/Fedora)")
     for v in required_versions:
-        _sync_log(f'    sudo yum install java-{v}-openjdk-devel')
+        _sync_log(f"    sudo yum install java-{v}-openjdk-devel")
     _sync_log("    # or for newer Fedora:")
-    _sync_log(f'    sudo dnf install java-{v}-openjdk-devel')
+    _sync_log(f"    sudo dnf install java-{v}-openjdk-devel")
     _sync_log("")
     _sync_log("  Option 3: SDKMAN")
     _sync_log('    curl -s "https://get.sdkman.io" | bash')
@@ -378,17 +475,23 @@ class SyncTask(BaseTask):
         super().__init__(args)
         self.project_dir: Optional[Path] = None
         self.env_path: Optional[Path] = None
-        self.profiles_dir = Path(args.PROFILES_DIR) if args.PROFILES_DIR else get_dvt_home()
+        self.profiles_dir = (
+            Path(args.PROFILES_DIR) if args.PROFILES_DIR else get_dvt_home()
+        )
 
     def run(self):
         _sync_log("dvt sync: starting...")
         java_warnings: List[str] = []  # Collect Java compatibility warnings
         # Use explicit project_dir from flags, or default (cwd/parents) so CLI and programmatic use both work
-        project_dir_arg = getattr(self.args, "project_dir", None) or getattr(self.args, "PROJECT_DIR", None)
+        project_dir_arg = getattr(self.args, "project_dir", None) or getattr(
+            self.args, "PROJECT_DIR", None
+        )
         try:
             self.project_dir = get_nearest_project_dir(project_dir_arg)
         except DbtRuntimeError:
-            msg = red("❌ Not in a DVT project. Run from a directory with dbt_project.yml (or use --project-dir).")
+            msg = red(
+                "❌ Not in a DVT project. Run from a directory with dbt_project.yml (or use --project-dir)."
+            )
             _sync_log(msg)
             return None, False
 
@@ -404,12 +507,21 @@ class SyncTask(BaseTask):
                 return None, False
             _get_env_python(env_path)  # validate
         else:
-            env_path = _find_project_env(project_root)
+            env_path = _find_project_env(project_root, cwd=Path.cwd())
         if env_path is None:
             try:
                 prompt_msg = (
-                    "No virtual environment found in project. Enter absolute path to your Python env folder\n"
-                    "(e.g. /path/to/.venv or, from trial root, \"$(pwd)/.venv\"): "
+                    "\n⚠️  No Python virtual environment detected.\n\n"
+                    "DVT searched for common environment folders (.venv, venv, env) in:\n"
+                    "  • Project directory\n"
+                    "  • Current working directory\n"
+                    "  • Parent directory of project\n\n"
+                    "If your environment has a different name or location, enter the full path below.\n"
+                    "Examples:\n"
+                    "  • /path/to/myproject/.venv\n"
+                    "  • /home/user/.virtualenvs/myproject\n"
+                    "  • /path/to/conda/envs/myenv\n\n"
+                    "Path to environment (or press Ctrl+C to cancel): "
                 )
                 sys.stdout.write(prompt_msg)
                 sys.stdout.flush()
@@ -421,12 +533,14 @@ class SyncTask(BaseTask):
                         return None, False
                     _get_env_python(env_path)  # validate
                 else:
-                    _sync_log('No path provided. Sync skipped. Use --python-env "/path/to/venv" (quote paths with spaces).')
+                    _sync_log(
+                        'No path provided. Sync skipped. Use --python-env "/path/to/env" to specify your environment.'
+                    )
                     return None, False
             except EOFError:
                 _sync_log(
                     "No path provided (non-interactive). Sync skipped. "
-                    'Run in a terminal to be prompted, or pass: --python-env "$(pwd)/.venv" (use quotes).'
+                    'Use --python-env "/path/to/env" to specify your environment.'
                 )
                 return None, False
         self.env_path = env_path
@@ -444,17 +558,25 @@ class SyncTask(BaseTask):
         require_adapters = _get_require_adapters(project_root)
 
         # 3) Install adapters
+        pkg_manager = _detect_package_manager(env_python)
         for adapter_type in adapter_types:
             spec = require_adapters.get(adapter_type)
             pkg = f"dbt-{adapter_type}"
             if spec:
                 # spec may be ">=1.0.0" or "1.2.0"; pip needs "dbt-postgres>=1.0.0" or "dbt-postgres==1.2.0"
-                pkg_spec = f"{pkg}{spec}" if any(spec.startswith(c) for c in ("=", ">", "<", "~", "!")) else f"{pkg}=={spec}"
+                pkg_spec = (
+                    f"{pkg}{spec}"
+                    if any(spec.startswith(c) for c in ("=", ">", "<", "~", "!"))
+                    else f"{pkg}=={spec}"
+                )
             else:
                 pkg_spec = pkg
             _sync_log(f"📥 Installing {pkg_spec} ...")
-            if _detect_package_manager(env_python) == "uv":
+            if pkg_manager == "uv":
                 ok = _run_uv_pip(env_path, [pkg_spec])
+                if not ok:
+                    _sync_log(yellow("  ⚠️  uv failed, falling back to pip..."))
+                    ok = _run_pip(env_python, ["install", pkg_spec])
             else:
                 ok = _run_pip(env_python, ["install", pkg_spec])
             if not ok:
@@ -463,49 +585,70 @@ class SyncTask(BaseTask):
         # 4) Pyspark: single version from active target; use canonical ~/.dvt/computes.yml
         # so the project's profile block is used (not a local computes.yml from another profile).
         computes_path = get_dvt_home(None) / "computes.yml"
-        pyspark_version = _get_active_pyspark_version(computes_path, profile_name) if computes_path.exists() else None
+        pyspark_version = (
+            _get_active_pyspark_version(computes_path, profile_name)
+            if computes_path.exists()
+            else None
+        )
         if pyspark_version:
             # Check Java compatibility before installing pyspark
             java_version = _detect_java_version()
-            is_compatible, warning = _check_java_compatibility(pyspark_version, java_version)
+            is_compatible, warning = _check_java_compatibility(
+                pyspark_version, java_version
+            )
             if not is_compatible and warning:
                 java_warnings.append(warning)
             _sync_log("🔄 Uninstalling other pyspark versions ...")
-            if _detect_package_manager(env_python) == "uv":
-                _run_uv_pip_uninstall(env_path, ["pyspark"])
+            if pkg_manager == "uv":
+                ok = _run_uv_pip_uninstall(env_path, ["pyspark"])
+                if not ok:
+                    _sync_log(yellow("  ⚠️  uv failed, falling back to pip..."))
+                    _run_pip(env_python, ["uninstall", "pyspark", "-y"])
             else:
                 _run_pip(env_python, ["uninstall", "pyspark", "-y"])
             _sync_log(f"📥 Installing pyspark=={pyspark_version} ...")
             # Pyspark download can be slow; use 10 min timeout for uv pip install
-            if _detect_package_manager(env_python) == "uv":
-                ok = _run_uv_pip(env_path, [f"pyspark=={pyspark_version}"], timeout=600)
+            pyspark_pkg = f"pyspark=={pyspark_version}"
+            if pkg_manager == "uv":
+                ok = _run_uv_pip(env_path, [pyspark_pkg], timeout=600)
+                if not ok:
+                    _sync_log(yellow("  ⚠️  uv failed, falling back to pip..."))
+                    ok = _run_pip(env_python, ["install", pyspark_pkg])
             else:
-                ok = _run_pip(env_python, ["install", f"pyspark=={pyspark_version}"])
+                ok = _run_pip(env_python, ["install", pyspark_pkg])
             if not ok:
                 _sync_log(red(f"❌ Failed to install pyspark=={pyspark_version}"))
         else:
-            _sync_log("No pyspark version in computes.yml for this profile; skipping pyspark install.")
+            _sync_log(
+                "No pyspark version in computes.yml for this profile; skipping pyspark install."
+            )
 
         # 5) JDBC drivers: relate profile adapters to JDBC jars and download for federation.
-        # Always use canonical DVT home (~/.dvt/.jdbc_jars) so jars are in one place (e.g. trial
+        # Always use canonical DVT home (~/.dvt/.spark_jars) so jars are in one place (e.g. trial
         # folders with local profiles.yml would otherwise put jars in project dir).
-        jdbc_dir = get_jdbc_drivers_dir(None)
+        jdbc_dir = get_spark_jars_dir(None)
         drivers = get_jdbc_drivers_for_adapters(adapter_types)
         if drivers:
-            _sync_log(f"🔌 Syncing JDBC drivers for adapters: {', '.join(adapter_types)}")
+            _sync_log(
+                f"🔌 Syncing JDBC drivers for adapters: {', '.join(adapter_types)}"
+            )
             download_jdbc_jars(
                 drivers,
                 jdbc_dir,
                 on_event=lambda msg: _sync_log(msg),
             )
         else:
-            _sync_log("ℹ️  No JDBC drivers required for these adapters (or adapters not in registry).")
+            _sync_log(
+                "ℹ️  No JDBC drivers required for these adapters (or adapters not in registry)."
+            )
 
         # 6) Native connectors: download Spark native connectors for Snowflake, BigQuery, Redshift
         # These enable optimized data transfer using cloud storage staging.
         native_connectors = get_native_connectors_for_adapters(adapter_types)
         if native_connectors:
-            _sync_log(f"🚀 Syncing native connectors for: {', '.join([c.adapter for c in native_connectors])}")
+            _sync_log(
+                f"🚀 Syncing native connectors for: {', '.join([c.adapter for c in native_connectors])}"
+            )
             native_results = sync_native_connectors(
                 adapter_types,
                 profiles_dir=None,  # Use canonical ~/.dvt
@@ -513,9 +656,66 @@ class SyncTask(BaseTask):
             )
             for adapter, success in native_results.items():
                 if not success:
-                    _sync_log(yellow(f"  ⚠️  Native connector for {adapter} failed to download"))
+                    _sync_log(
+                        yellow(
+                            f"  ⚠️  Native connector for {adapter} failed to download"
+                        )
+                    )
         else:
-            _sync_log("ℹ️  No native connectors available for these adapters (JDBC will be used).")
+            _sync_log(
+                "ℹ️  No native connectors available for these adapters (JDBC will be used)."
+            )
+
+        # 7) Cloud storage dependencies: install based on bucket types in buckets.yml
+        bucket_deps = get_bucket_dependencies(None)  # Use canonical ~/.dvt
+        if bucket_deps:
+            _sync_log(
+                f"☁️  Installing cloud storage dependencies for bucket types: {', '.join(bucket_deps.keys())}"
+            )
+            for bucket_type, package_name in bucket_deps.items():
+                _sync_log(
+                    f"📥 Installing {package_name} (for {bucket_type} buckets)..."
+                )
+                if pkg_manager == "uv":
+                    ok = _run_uv_pip(env_path, [package_name])
+                    if not ok:
+                        _sync_log(yellow("  ⚠️  uv failed, falling back to pip..."))
+                        ok = _run_pip(env_python, ["install", package_name])
+                else:
+                    ok = _run_pip(env_python, ["install", package_name])
+                if not ok:
+                    _sync_log(red(f"❌ Failed to install {package_name}"))
+        else:
+            _sync_log(
+                "ℹ️  No cloud storage dependencies needed (using local filesystem or HDFS buckets)."
+            )
+
+        # 8) Cloud storage connector JARs: download Hadoop connectors for Spark
+        # These enable Spark to read/write directly to S3, GCS, Azure
+        from dvt.task.cloud_connectors import (
+            get_bucket_types_from_config,
+            download_cloud_jars,
+            detect_hadoop_version,
+        )
+
+        cloud_bucket_types = get_bucket_types_from_config(None)  # Use canonical ~/.dvt
+        if cloud_bucket_types:
+            hadoop_ver = detect_hadoop_version()
+            _sync_log(
+                f"☁️  Syncing cloud connector JARs for: {', '.join(cloud_bucket_types)} (Hadoop {hadoop_ver})"
+            )
+            spark_jars_dir = get_spark_jars_dir(None)
+            downloaded = download_cloud_jars(
+                cloud_bucket_types,
+                spark_jars_dir,
+                on_event=lambda msg: _sync_log(msg),
+            )
+            if downloaded > 0:
+                _sync_log(f"  {downloaded} cloud connector JAR(s) ready")
+        else:
+            _sync_log(
+                "ℹ️  No cloud connector JARs needed (no S3/GCS/Azure buckets configured)."
+            )
 
         # Show Java warnings and installation instructions if any
         if java_warnings:

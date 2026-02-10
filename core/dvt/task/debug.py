@@ -25,7 +25,7 @@ from dvt.config.user_config import (
     COMPUTES_PATH,
     DVT_HOME,
     MDM_DB_PATH,
-    get_jdbc_drivers_dir,
+    get_spark_jars_dir,
     get_native_connectors_dir,
     load_buckets_config,
     load_buckets_for_profile,
@@ -46,14 +46,14 @@ from dbt_common.ui import green, red, yellow
 # Table Formatting Helpers
 # ============================================================
 
-TABLE_WIDTH = 60
+TABLE_WIDTH = 100
 # ANSI escape code pattern for stripping color codes when calculating visible length
-ANSI_ESCAPE = re.compile(r'\x1b\[[0-9;]*m')
+ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
 
 
 def _visible_len(text: str) -> int:
     """Return visible length of string (excluding ANSI escape codes)."""
-    return len(ANSI_ESCAPE.sub('', text))
+    return len(ANSI_ESCAPE.sub("", text))
 
 
 def _truncate(text: str, max_len: int) -> str:
@@ -82,12 +82,12 @@ def _pad_cell(text: str, width: int) -> str:
     visible = _visible_len(text)
     if visible >= width:
         # Need to truncate - but be careful with ANSI codes
-        stripped = ANSI_ESCAPE.sub('', text)
+        stripped = ANSI_ESCAPE.sub("", text)
         if len(stripped) > width:
-            return stripped[:width - 3] + "..."
+            return stripped[: width - 3] + "..."
         return text
     padding = width - visible
-    return text + ' ' * padding
+    return text + " " * padding
 
 
 def _table_row(cols: List[str], widths: List[int], marker: str = "│") -> str:
@@ -105,6 +105,7 @@ def _table_separator(widths: List[int]) -> str:
 def _status_icon(ok: bool) -> str:
     """Return colored status icon."""
     return green("✓") if ok else red("✗")
+
 
 ONLY_PROFILE_MESSAGE = """
 A project file (dbt_project.yml or dvt_project.yml) was not found in this directory.
@@ -246,7 +247,9 @@ class DebugTask(BaseTask):
         if not os.path.exists(self.project_path):
             fire_event(
                 DebugCmdOut(
-                    msg=yellow("\n⚠️  No project file found. Run from the project directory or use --project-dir.")
+                    msg=yellow(
+                        "\n⚠️  No project file found. Run from the project directory or use --project-dir."
+                    )
                 )
             )
 
@@ -314,7 +317,8 @@ class DebugTask(BaseTask):
                 run_status=RunStatus.Error,
                 details=details,
                 summary_message=(
-                    summary_message + f"Profile loading failed for the following reason:"
+                    summary_message
+                    + f"Profile loading failed for the following reason:"
                     f"\n{details}"
                     f"\n"
                 ),
@@ -352,7 +356,9 @@ class DebugTask(BaseTask):
         if self.raw_profile_data:
             profiles = [k for k in self.raw_profile_data if k != "config"]
             if project_profile is None:
-                summary_message = "Could not load project file (dbt_project.yml or dvt_project.yml)\n"
+                summary_message = (
+                    "Could not load project file (dbt_project.yml or dvt_project.yml)\n"
+                )
             elif len(profiles) == 0:
                 summary_message = "The profiles.yml has no profiles\n"
             elif len(profiles) == 1:
@@ -432,7 +438,7 @@ class DebugTask(BaseTask):
                 run_status=RunStatus.Error,
                 details=str(exc),
                 summary_message=(
-                    f"Project loading failed for the following reason:" f"\n{str(exc)}" f"\n"
+                    f"Project loading failed for the following reason:\n{str(exc)}\n"
                 ),
             )
         else:
@@ -512,10 +518,26 @@ class DebugTask(BaseTask):
         fire_event(DebugCmdOut(msg=_table_header("Configuration")))
 
         rows = [
-            ("DVT Home", str(dvt_dir).replace(str(Path.home()), "~"), Path(dvt_dir).exists()),
-            ("profiles.yml", str(profiles_path).replace(str(Path.home()), "~"), profiles_path.exists()),
-            ("computes.yml", str(computes_path).replace(str(Path.home()), "~"), computes_path.exists()),
-            ("buckets.yml", str(buckets_path).replace(str(Path.home()), "~"), buckets_path.exists()),
+            (
+                "DVT Home",
+                str(dvt_dir).replace(str(Path.home()), "~"),
+                Path(dvt_dir).exists(),
+            ),
+            (
+                "profiles.yml",
+                str(profiles_path).replace(str(Path.home()), "~"),
+                profiles_path.exists(),
+            ),
+            (
+                "computes.yml",
+                str(computes_path).replace(str(Path.home()), "~"),
+                computes_path.exists(),
+            ),
+            (
+                "buckets.yml",
+                str(buckets_path).replace(str(Path.home()), "~"),
+                buckets_path.exists(),
+            ),
         ]
 
         # Add project row
@@ -527,16 +549,51 @@ class DebugTask(BaseTask):
             rows.append(("Project", "not found", False))
 
         for label, value, exists in rows:
-            fire_event(DebugCmdOut(msg=_table_row([label, _truncate(value, 40), _status_icon(exists)], widths)))
+            fire_event(
+                DebugCmdOut(
+                    msg=_table_row(
+                        [label, _truncate(value, 40), _status_icon(exists)], widths
+                    )
+                )
+            )
 
         fire_event(DebugCmdOut(msg=_table_footer()))
+
+    def _get_profile_adapter_types(self, profile_name: Optional[str] = None) -> set:
+        """Extract unique adapter types from profile targets.
+
+        Args:
+            profile_name: Specific profile to check.
+
+        Returns:
+            Set of adapter type strings (e.g., {'databricks', 'snowflake'})
+        """
+        adapter_types: set = set()
+
+        if not self.raw_profile_data or not profile_name:
+            return adapter_types
+
+        profile = self.raw_profile_data.get(profile_name)
+        if not isinstance(profile, dict):
+            return adapter_types
+
+        outputs = profile.get("outputs") or {}
+        for target_config in outputs.values():
+            if isinstance(target_config, dict):
+                adapter_type = target_config.get("type")
+                if adapter_type:
+                    adapter_types.add(adapter_type)
+
+        return adapter_types
 
     def _debug_targets_for_profile(self, profile_name: Optional[str]) -> None:
         """Display targets for the current project's profile as compact table."""
         if not profile_name:
             fire_event(DebugCmdOut(msg=""))
             fire_event(DebugCmdOut(msg=_table_header("Targets")))
-            fire_event(DebugCmdOut(msg=_table_row(["No project found"], [TABLE_WIDTH - 4])))
+            fire_event(
+                DebugCmdOut(msg=_table_row(["No project found"], [TABLE_WIDTH - 4]))
+            )
             fire_event(DebugCmdOut(msg=_table_footer()))
             return self._debug_all_targets()
 
@@ -544,15 +601,31 @@ class DebugTask(BaseTask):
             load_status = self._load_profile()
             if load_status.run_status != RunStatus.Success or not self.raw_profile_data:
                 fire_event(DebugCmdOut(msg=""))
-                fire_event(DebugCmdOut(msg=_table_header("Targets", f"profile: {profile_name}")))
-                fire_event(DebugCmdOut(msg=_table_row(["No profiles.yml found"], [TABLE_WIDTH - 4])))
+                fire_event(
+                    DebugCmdOut(
+                        msg=_table_header("Targets", f"profile: {profile_name}")
+                    )
+                )
+                fire_event(
+                    DebugCmdOut(
+                        msg=_table_row(["No profiles.yml found"], [TABLE_WIDTH - 4])
+                    )
+                )
                 fire_event(DebugCmdOut(msg=_table_footer()))
                 return
 
         if profile_name not in self.raw_profile_data:
             fire_event(DebugCmdOut(msg=""))
-            fire_event(DebugCmdOut(msg=_table_header("Targets", f"profile: {profile_name}")))
-            fire_event(DebugCmdOut(msg=_table_row([f"Profile '{profile_name}' not found"], [TABLE_WIDTH - 4])))
+            fire_event(
+                DebugCmdOut(msg=_table_header("Targets", f"profile: {profile_name}"))
+            )
+            fire_event(
+                DebugCmdOut(
+                    msg=_table_row(
+                        [f"Profile '{profile_name}' not found"], [TABLE_WIDTH - 4]
+                    )
+                )
+            )
             fire_event(DebugCmdOut(msg=_table_footer()))
             return
 
@@ -564,8 +637,14 @@ class DebugTask(BaseTask):
         outputs = profile.get("outputs") or {}
         if not outputs:
             fire_event(DebugCmdOut(msg=""))
-            fire_event(DebugCmdOut(msg=_table_header("Targets", f"profile: {profile_name}")))
-            fire_event(DebugCmdOut(msg=_table_row(["No targets configured"], [TABLE_WIDTH - 4])))
+            fire_event(
+                DebugCmdOut(msg=_table_header("Targets", f"profile: {profile_name}"))
+            )
+            fire_event(
+                DebugCmdOut(
+                    msg=_table_row(["No targets configured"], [TABLE_WIDTH - 4])
+                )
+            )
             fire_event(DebugCmdOut(msg=_table_footer()))
             return
 
@@ -574,11 +653,21 @@ class DebugTask(BaseTask):
 
         # Build table
         fire_event(DebugCmdOut(msg=""))
-        fire_event(DebugCmdOut(msg=_table_header("Targets", f"profile: {profile_name} ─ default: {active_target}")))
+        fire_event(
+            DebugCmdOut(
+                msg=_table_header(
+                    "Targets", f"profile: {profile_name} ─ default: {active_target}"
+                )
+            )
+        )
 
-        # Column widths: Name(13), Type(10), Host(18), Status(11)
-        widths = [13, 10, 18, 11]
-        fire_event(DebugCmdOut(msg=_table_row(["Name", "Type", "Host/Account", "Status"], widths)))
+        # Column widths: Name(18), Type(14), Host(42), Status(14)
+        widths = [18, 14, 42, 14]
+        fire_event(
+            DebugCmdOut(
+                msg=_table_row(["Name", "Type", "Host/Account", "Status"], widths)
+            )
+        )
         fire_event(DebugCmdOut(msg=_table_separator(widths)))
 
         for target_name, target_config in outputs.items():
@@ -586,10 +675,15 @@ class DebugTask(BaseTask):
                 continue
             is_active = target_name == active_target
             name_display = f"{target_name} →" if is_active else target_name
-            adapter_type = target_config.get('type', 'N/A')
+            adapter_type = target_config.get("type", "N/A")
 
             # Get host/account
-            host = target_config.get('host') or target_config.get('account') or target_config.get('database') or "N/A"
+            host = (
+                target_config.get("host")
+                or target_config.get("account")
+                or target_config.get("database")
+                or "N/A"
+            )
 
             # Test connection
             try:
@@ -610,13 +704,25 @@ class DebugTask(BaseTask):
                 else:
                     status = red("✗ error")
 
-            fire_event(DebugCmdOut(msg=_table_row([name_display, adapter_type, _truncate(str(host), 18), status], widths)))
+            fire_event(
+                DebugCmdOut(
+                    msg=_table_row(
+                        [name_display, adapter_type, _truncate(str(host), 42), status],
+                        widths,
+                    )
+                )
+            )
 
         fire_event(DebugCmdOut(msg=_table_footer()))
 
         if missing_adapters:
             adapters_list = ", ".join(sorted(missing_adapters))
-            fire_event(DebugCmdOut(msg=red(f"❌ Missing adapters: {adapters_list}") + yellow(" → Run 'dvt sync'")))
+            fire_event(
+                DebugCmdOut(
+                    msg=red(f"❌ Missing adapters: {adapters_list}")
+                    + yellow(" → Run 'dvt sync'")
+                )
+            )
 
     def _debug_all_targets(self) -> None:
         """Display ALL targets from ALL profiles as compact tables."""
@@ -625,13 +731,18 @@ class DebugTask(BaseTask):
             if load_status.run_status != RunStatus.Success or not self.raw_profile_data:
                 fire_event(DebugCmdOut(msg=""))
                 fire_event(DebugCmdOut(msg=_table_header("Targets", "all profiles")))
-                fire_event(DebugCmdOut(msg=_table_row(["No profiles.yml found"], [TABLE_WIDTH - 4])))
+                fire_event(
+                    DebugCmdOut(
+                        msg=_table_row(["No profiles.yml found"], [TABLE_WIDTH - 4])
+                    )
+                )
                 fire_event(DebugCmdOut(msg=_table_footer()))
                 return
 
         renderer = ProfileRenderer(self.cli_vars)
         missing_adapters: set = set()
-        widths = [13, 10, 18, 11]
+        # Column widths: Name(18), Type(14), Host(42), Status(14)
+        widths = [18, 14, 42, 14]
 
         for profile_name, profile in self.raw_profile_data.items():
             if profile_name == "config" or not isinstance(profile, dict):
@@ -644,8 +755,18 @@ class DebugTask(BaseTask):
             active_target = profile.get("target", "dev")
 
             fire_event(DebugCmdOut(msg=""))
-            fire_event(DebugCmdOut(msg=_table_header("Targets", f"profile: {profile_name} ─ default: {active_target}")))
-            fire_event(DebugCmdOut(msg=_table_row(["Name", "Type", "Host/Account", "Status"], widths)))
+            fire_event(
+                DebugCmdOut(
+                    msg=_table_header(
+                        "Targets", f"profile: {profile_name} ─ default: {active_target}"
+                    )
+                )
+            )
+            fire_event(
+                DebugCmdOut(
+                    msg=_table_row(["Name", "Type", "Host/Account", "Status"], widths)
+                )
+            )
             fire_event(DebugCmdOut(msg=_table_separator(widths)))
 
             for target_name, target_config in outputs.items():
@@ -653,8 +774,13 @@ class DebugTask(BaseTask):
                     continue
                 is_active = target_name == active_target
                 name_display = f"{target_name} →" if is_active else target_name
-                adapter_type = target_config.get('type', 'N/A')
-                host = target_config.get('host') or target_config.get('account') or target_config.get('database') or "N/A"
+                adapter_type = target_config.get("type", "N/A")
+                host = (
+                    target_config.get("host")
+                    or target_config.get("account")
+                    or target_config.get("database")
+                    or "N/A"
+                )
 
                 try:
                     prof = Profile.from_raw_profile_info(
@@ -667,20 +793,40 @@ class DebugTask(BaseTask):
                     status = green("✓ OK") if err is None else red("✗ error")
                 except Exception as e:
                     err_str = str(e)
-                    if "No module named" in err_str or "Could not find adapter" in err_str:
+                    if (
+                        "No module named" in err_str
+                        or "Could not find adapter" in err_str
+                    ):
                         status = red("✗ missing")
                         if adapter_type and adapter_type != "N/A":
                             missing_adapters.add(adapter_type)
                     else:
                         status = red("✗ error")
 
-                fire_event(DebugCmdOut(msg=_table_row([name_display, adapter_type, _truncate(str(host), 18), status], widths)))
+                fire_event(
+                    DebugCmdOut(
+                        msg=_table_row(
+                            [
+                                name_display,
+                                adapter_type,
+                                _truncate(str(host), 42),
+                                status,
+                            ],
+                            widths,
+                        )
+                    )
+                )
 
             fire_event(DebugCmdOut(msg=_table_footer()))
 
         if missing_adapters:
             adapters_list = ", ".join(sorted(missing_adapters))
-            fire_event(DebugCmdOut(msg=red(f"❌ Missing adapters: {adapters_list}") + yellow(" → Run 'dvt sync'")))
+            fire_event(
+                DebugCmdOut(
+                    msg=red(f"❌ Missing adapters: {adapters_list}")
+                    + yellow(" → Run 'dvt sync'")
+                )
+            )
 
     def _debug_single_target(self, target_name: str) -> None:
         """Debug a specific target by name (searches all profiles)."""
@@ -714,9 +860,20 @@ class DebugTask(BaseTask):
             fire_event(DebugCmdOut(msg=f"  Active: {'Yes' if is_active else 'No'}"))
             fire_event(DebugCmdOut(msg=f"  Type: {target_config.get('type', 'N/A')}"))
 
-            for key in ("host", "port", "database", "schema", "account", "user", "warehouse", "role"):
+            for key in (
+                "host",
+                "port",
+                "database",
+                "schema",
+                "account",
+                "user",
+                "warehouse",
+                "role",
+            ):
                 if key in target_config and target_config[key] is not None:
-                    fire_event(DebugCmdOut(msg=f"  {key.capitalize()}: {target_config[key]}"))
+                    fire_event(
+                        DebugCmdOut(msg=f"  {key.capitalize()}: {target_config[key]}")
+                    )
 
             # Test connection
             fire_event(DebugCmdOut(msg="\n  Testing connection..."))
@@ -736,44 +893,84 @@ class DebugTask(BaseTask):
             except Exception as e:
                 fire_event(DebugCmdOut(msg="  Connection: " + red(f"✗ {str(e)[:60]}")))
                 if "No module named" in str(e) or "Could not find adapter" in str(e):
-                    fire_event(DebugCmdOut(msg=yellow("  💡 Tip: Run 'dvt sync' to install the adapter.")))
+                    fire_event(
+                        DebugCmdOut(
+                            msg=yellow(
+                                "  💡 Tip: Run 'dvt sync' to install the adapter."
+                            )
+                        )
+                    )
 
         if not found:
-            fire_event(DebugCmdOut(msg=f"  Target '{target_name}' not found in any profile."))
+            fire_event(
+                DebugCmdOut(msg=f"  Target '{target_name}' not found in any profile.")
+            )
 
     def _debug_computes_for_profile(self, profile_name: Optional[str]) -> None:
         """Display computes for the current project's profile as compact table."""
         if not profile_name:
             fire_event(DebugCmdOut(msg=""))
             fire_event(DebugCmdOut(msg=_table_header("Computes")))
-            fire_event(DebugCmdOut(msg=_table_row(["No project found"], [TABLE_WIDTH - 4])))
+            fire_event(
+                DebugCmdOut(msg=_table_row(["No project found"], [TABLE_WIDTH - 4]))
+            )
             fire_event(DebugCmdOut(msg=_table_footer()))
             return self._debug_all_computes()
 
-        computes_path = Path(self.profiles_dir) / "computes.yml" if self.profiles_dir else COMPUTES_PATH
+        computes_path = (
+            Path(self.profiles_dir) / "computes.yml"
+            if self.profiles_dir
+            else COMPUTES_PATH
+        )
 
         if not computes_path.exists():
             fire_event(DebugCmdOut(msg=""))
-            fire_event(DebugCmdOut(msg=_table_header("Computes", f"profile: {profile_name}")))
-            fire_event(DebugCmdOut(msg=_table_row(["No computes.yml (using default local Spark)"], [TABLE_WIDTH - 4])))
+            fire_event(
+                DebugCmdOut(msg=_table_header("Computes", f"profile: {profile_name}"))
+            )
+            fire_event(
+                DebugCmdOut(
+                    msg=_table_row(
+                        ["No computes.yml (using default local Spark)"],
+                        [TABLE_WIDTH - 4],
+                    )
+                )
+            )
             fire_event(DebugCmdOut(msg=_table_footer()))
             self._check_pyspark_status()
             return
 
         try:
-            raw = load_yaml_text(dbt_common.clients.system.load_file_contents(str(computes_path)))
+            raw = load_yaml_text(
+                dbt_common.clients.system.load_file_contents(str(computes_path))
+            )
             raw = raw or {}
         except Exception as e:
             fire_event(DebugCmdOut(msg=""))
-            fire_event(DebugCmdOut(msg=_table_header("Computes", f"profile: {profile_name}")))
-            fire_event(DebugCmdOut(msg=_table_row([f"Error: {str(e)[:40]}"], [TABLE_WIDTH - 4])))
+            fire_event(
+                DebugCmdOut(msg=_table_header("Computes", f"profile: {profile_name}"))
+            )
+            fire_event(
+                DebugCmdOut(
+                    msg=_table_row([f"Error: {str(e)[:40]}"], [TABLE_WIDTH - 4])
+                )
+            )
             fire_event(DebugCmdOut(msg=_table_footer()))
             return
 
         if profile_name not in raw:
             fire_event(DebugCmdOut(msg=""))
-            fire_event(DebugCmdOut(msg=_table_header("Computes", f"profile: {profile_name}")))
-            fire_event(DebugCmdOut(msg=_table_row(["Profile not in computes.yml (using default)"], [TABLE_WIDTH - 4])))
+            fire_event(
+                DebugCmdOut(msg=_table_header("Computes", f"profile: {profile_name}"))
+            )
+            fire_event(
+                DebugCmdOut(
+                    msg=_table_row(
+                        ["Profile not in computes.yml (using default)"],
+                        [TABLE_WIDTH - 4],
+                    )
+                )
+            )
             fire_event(DebugCmdOut(msg=_table_footer()))
             self._check_pyspark_status()
             return
@@ -781,8 +978,14 @@ class DebugTask(BaseTask):
         profile_block = raw[profile_name]
         if not isinstance(profile_block, dict) or "computes" not in profile_block:
             fire_event(DebugCmdOut(msg=""))
-            fire_event(DebugCmdOut(msg=_table_header("Computes", f"profile: {profile_name}")))
-            fire_event(DebugCmdOut(msg=_table_row(["No computes configured"], [TABLE_WIDTH - 4])))
+            fire_event(
+                DebugCmdOut(msg=_table_header("Computes", f"profile: {profile_name}"))
+            )
+            fire_event(
+                DebugCmdOut(
+                    msg=_table_row(["No computes configured"], [TABLE_WIDTH - 4])
+                )
+            )
             fire_event(DebugCmdOut(msg=_table_footer()))
             self._check_pyspark_status()
             return
@@ -792,11 +995,21 @@ class DebugTask(BaseTask):
 
         # Build table
         fire_event(DebugCmdOut(msg=""))
-        fire_event(DebugCmdOut(msg=_table_header("Computes", f"profile: {profile_name} ─ default: {active_compute}")))
+        fire_event(
+            DebugCmdOut(
+                msg=_table_header(
+                    "Computes", f"profile: {profile_name} ─ default: {active_compute}"
+                )
+            )
+        )
 
         # Column widths: Name(12), Type(8), Master(14), Version(10), Status(8)
         widths = [12, 8, 14, 10, 8]
-        fire_event(DebugCmdOut(msg=_table_row(["Name", "Type", "Master", "Version", "Status"], widths)))
+        fire_event(
+            DebugCmdOut(
+                msg=_table_row(["Name", "Type", "Master", "Version", "Status"], widths)
+            )
+        )
         fire_event(DebugCmdOut(msg=_table_separator(widths)))
 
         for compute_name, cfg in all_computes.items():
@@ -805,34 +1018,64 @@ class DebugTask(BaseTask):
 
             is_active = compute_name == active_compute
             name_display = f"{compute_name} →" if is_active else compute_name
-            compute_type = cfg.get('type', 'spark')
-            master = cfg.get('master', 'local[*]')
-            version = cfg.get('version', '-')
+            compute_type = cfg.get("type", "spark")
+            master = cfg.get("master", "local[*]")
+            version = cfg.get("version", "-")
 
-            fire_event(DebugCmdOut(msg=_table_row([name_display, compute_type, _truncate(master, 14), str(version), green("✓")], widths)))
+            fire_event(
+                DebugCmdOut(
+                    msg=_table_row(
+                        [
+                            name_display,
+                            compute_type,
+                            _truncate(master, 14),
+                            str(version),
+                            green("✓"),
+                        ],
+                        widths,
+                    )
+                )
+            )
 
         fire_event(DebugCmdOut(msg=_table_footer()))
         self._check_pyspark_status()
 
     def _debug_all_computes(self) -> None:
         """Display ALL computes from computes.yml as compact tables."""
-        computes_path = Path(self.profiles_dir) / "computes.yml" if self.profiles_dir else COMPUTES_PATH
+        computes_path = (
+            Path(self.profiles_dir) / "computes.yml"
+            if self.profiles_dir
+            else COMPUTES_PATH
+        )
 
         if not computes_path.exists():
             fire_event(DebugCmdOut(msg=""))
             fire_event(DebugCmdOut(msg=_table_header("Computes", "all profiles")))
-            fire_event(DebugCmdOut(msg=_table_row(["No computes.yml (using default local Spark)"], [TABLE_WIDTH - 4])))
+            fire_event(
+                DebugCmdOut(
+                    msg=_table_row(
+                        ["No computes.yml (using default local Spark)"],
+                        [TABLE_WIDTH - 4],
+                    )
+                )
+            )
             fire_event(DebugCmdOut(msg=_table_footer()))
             self._check_pyspark_status()
             return
 
         try:
-            raw = load_yaml_text(dbt_common.clients.system.load_file_contents(str(computes_path)))
+            raw = load_yaml_text(
+                dbt_common.clients.system.load_file_contents(str(computes_path))
+            )
             raw = raw or {}
         except Exception as e:
             fire_event(DebugCmdOut(msg=""))
             fire_event(DebugCmdOut(msg=_table_header("Computes", "all profiles")))
-            fire_event(DebugCmdOut(msg=_table_row([f"Error: {str(e)[:40]}"], [TABLE_WIDTH - 4])))
+            fire_event(
+                DebugCmdOut(
+                    msg=_table_row([f"Error: {str(e)[:40]}"], [TABLE_WIDTH - 4])
+                )
+            )
             fire_event(DebugCmdOut(msg=_table_footer()))
             return
 
@@ -846,8 +1089,21 @@ class DebugTask(BaseTask):
             all_computes = profile_block.get("computes") or {}
 
             fire_event(DebugCmdOut(msg=""))
-            fire_event(DebugCmdOut(msg=_table_header("Computes", f"profile: {profile_name} ─ default: {active_compute}")))
-            fire_event(DebugCmdOut(msg=_table_row(["Name", "Type", "Master", "Version", "Status"], widths)))
+            fire_event(
+                DebugCmdOut(
+                    msg=_table_header(
+                        "Computes",
+                        f"profile: {profile_name} ─ default: {active_compute}",
+                    )
+                )
+            )
+            fire_event(
+                DebugCmdOut(
+                    msg=_table_row(
+                        ["Name", "Type", "Master", "Version", "Status"], widths
+                    )
+                )
+            )
             fire_event(DebugCmdOut(msg=_table_separator(widths)))
 
             for compute_name, cfg in all_computes.items():
@@ -856,11 +1112,24 @@ class DebugTask(BaseTask):
 
                 is_active = compute_name == active_compute
                 name_display = f"{compute_name} →" if is_active else compute_name
-                compute_type = cfg.get('type', 'spark')
-                master = cfg.get('master', 'local[*]')
-                version = cfg.get('version', '-')
+                compute_type = cfg.get("type", "spark")
+                master = cfg.get("master", "local[*]")
+                version = cfg.get("version", "-")
 
-                fire_event(DebugCmdOut(msg=_table_row([name_display, compute_type, _truncate(master, 14), str(version), green("✓")], widths)))
+                fire_event(
+                    DebugCmdOut(
+                        msg=_table_row(
+                            [
+                                name_display,
+                                compute_type,
+                                _truncate(master, 14),
+                                str(version),
+                                green("✓"),
+                            ],
+                            widths,
+                        )
+                    )
+                )
 
             fire_event(DebugCmdOut(msg=_table_footer()))
 
@@ -869,14 +1138,20 @@ class DebugTask(BaseTask):
     def _debug_single_compute(self, compute_name: str) -> None:
         """Debug a specific compute by name."""
         fire_event(DebugCmdOut(msg=f"\n--- Compute: {compute_name} ---"))
-        computes_path = Path(self.profiles_dir) / "computes.yml" if self.profiles_dir else COMPUTES_PATH
+        computes_path = (
+            Path(self.profiles_dir) / "computes.yml"
+            if self.profiles_dir
+            else COMPUTES_PATH
+        )
 
         if not computes_path.exists():
             fire_event(DebugCmdOut(msg="  No computes.yml found."))
             return
 
         try:
-            raw = load_yaml_text(dbt_common.clients.system.load_file_contents(str(computes_path)))
+            raw = load_yaml_text(
+                dbt_common.clients.system.load_file_contents(str(computes_path))
+            )
             raw = raw or {}
         except Exception as e:
             fire_event(DebugCmdOut(msg=f"  Error reading computes.yml: {e}"))
@@ -895,7 +1170,9 @@ class DebugTask(BaseTask):
             found = True
             cfg = all_computes[compute_name]
             if not isinstance(cfg, dict):
-                fire_event(DebugCmdOut(msg=f"  Compute '{compute_name}' is misconfigured."))
+                fire_event(
+                    DebugCmdOut(msg=f"  Compute '{compute_name}' is misconfigured.")
+                )
                 continue
 
             active_compute = profile_block.get("target", "default")
@@ -920,15 +1197,26 @@ class DebugTask(BaseTask):
                 self._test_spark_connection(cfg)
 
         if not found:
-            fire_event(DebugCmdOut(msg=f"  Compute '{compute_name}' not found in computes.yml."))
+            fire_event(
+                DebugCmdOut(
+                    msg=f"  Compute '{compute_name}' not found in computes.yml."
+                )
+            )
 
     def _check_pyspark_status(self) -> None:
         """Check and display PySpark installation status inline."""
         try:
             from pyspark.sql import SparkSession  # noqa: F401
+
             fire_event(DebugCmdOut(msg="PySpark: " + green("✓ installed")))
         except ImportError:
-            fire_event(DebugCmdOut(msg="PySpark: " + red("✗ not installed") + yellow(" → Run 'dvt sync'")))
+            fire_event(
+                DebugCmdOut(
+                    msg="PySpark: "
+                    + red("✗ not installed")
+                    + yellow(" → Run 'dvt sync'")
+                )
+            )
 
     def _test_spark_connection(self, cfg: Dict[str, Any]) -> None:
         """Test Spark connection for a compute config."""
@@ -962,9 +1250,15 @@ class DebugTask(BaseTask):
         fire_event(DebugCmdOut(msg="\n--- Manifest ---"))
         manifest_path = Path(self.project_dir) / "target" / "manifest.json"
         fire_event(DebugCmdOut(msg=f"\nManifest Path: {manifest_path}"))
-        fire_event(DebugCmdOut(msg=f"  Exists: {'✓' if manifest_path.exists() else '✗'}"))
+        fire_event(
+            DebugCmdOut(msg=f"  Exists: {'✓' if manifest_path.exists() else '✗'}")
+        )
         if not manifest_path.exists():
-            fire_event(DebugCmdOut(msg="  Run 'dvt compile' or 'dvt parse' to generate manifest."))
+            fire_event(
+                DebugCmdOut(
+                    msg="  Run 'dvt compile' or 'dvt parse' to generate manifest."
+                )
+            )
             return
         try:
             with open(manifest_path) as f:
@@ -979,7 +1273,9 @@ class DebugTask(BaseTask):
             fire_event(DebugCmdOut(msg=f"  Seeds: {len(seeds)}"))
             fire_event(DebugCmdOut(msg=f"  Sources: {len(sources)}"))
             meta = data.get("metadata") or {}
-            fire_event(DebugCmdOut(msg=f"\n  Generated: {meta.get('generated_at', 'Unknown')}"))
+            fire_event(
+                DebugCmdOut(msg=f"\n  Generated: {meta.get('generated_at', 'Unknown')}")
+            )
         except Exception as e:
             fire_event(DebugCmdOut(msg=f"  Error reading manifest: {e}"))
 
@@ -988,20 +1284,32 @@ class DebugTask(BaseTask):
         fire_event(DebugCmdOut(msg=f"\n--- Testing Connection: {target_name} ---"))
         load_status = self._load_profile()
         if load_status.run_status != RunStatus.Success or self.raw_profile_data is None:
-            fire_event(DebugCmdOut(msg="  Could not load profile or profiles.yml not found."))
+            fire_event(
+                DebugCmdOut(msg="  Could not load profile or profiles.yml not found.")
+            )
             return DebugRunStatus.FAIL.value
         try:
-            partial = PartialProject.from_project_root(str(self.project_dir), verify_version=False)
+            partial = PartialProject.from_project_root(
+                str(self.project_dir), verify_version=False
+            )
             renderer = DvtProjectYamlRenderer(None, self.cli_vars)
             profile_name = partial.render_profile_name(renderer)
         except Exception as e:
             fire_event(DebugCmdOut(msg=f"  Could not get project profile name: {e}"))
             return DebugRunStatus.FAIL.value
         if profile_name not in self.raw_profile_data or profile_name == "config":
-            fire_event(DebugCmdOut(msg=f"  Profile '{profile_name}' not in profiles.yml."))
+            fire_event(
+                DebugCmdOut(msg=f"  Profile '{profile_name}' not in profiles.yml.")
+            )
             return DebugRunStatus.FAIL.value
-        if target_name not in (self.raw_profile_data[profile_name].get("outputs") or {}):
-            fire_event(DebugCmdOut(msg=f"  Target '{target_name}' not found in profile '{profile_name}'."))
+        if target_name not in (
+            self.raw_profile_data[profile_name].get("outputs") or {}
+        ):
+            fire_event(
+                DebugCmdOut(
+                    msg=f"  Target '{target_name}' not found in profile '{profile_name}'."
+                )
+            )
             return DebugRunStatus.FAIL.value
         raw_profile = self.raw_profile_data[profile_name]
         renderer = ProfileRenderer(self.cli_vars)
@@ -1034,16 +1342,26 @@ class DebugTask(BaseTask):
         if not profile_name:
             fire_event(DebugCmdOut(msg=""))
             fire_event(DebugCmdOut(msg=_table_header("Buckets")))
-            fire_event(DebugCmdOut(msg=_table_row(["No project found"], [TABLE_WIDTH - 4])))
+            fire_event(
+                DebugCmdOut(msg=_table_row(["No project found"], [TABLE_WIDTH - 4]))
+            )
             fire_event(DebugCmdOut(msg=_table_footer()))
             return self._debug_all_buckets()
 
-        buckets_path = Path(self.profiles_dir) / "buckets.yml" if self.profiles_dir else BUCKETS_PATH
+        buckets_path = (
+            Path(self.profiles_dir) / "buckets.yml"
+            if self.profiles_dir
+            else BUCKETS_PATH
+        )
 
         if not buckets_path.exists():
             fire_event(DebugCmdOut(msg=""))
-            fire_event(DebugCmdOut(msg=_table_header("Buckets", f"profile: {profile_name}")))
-            fire_event(DebugCmdOut(msg=_table_row(["Not configured"], [TABLE_WIDTH - 4])))
+            fire_event(
+                DebugCmdOut(msg=_table_header("Buckets", f"profile: {profile_name}"))
+            )
+            fire_event(
+                DebugCmdOut(msg=_table_row(["Not configured"], [TABLE_WIDTH - 4]))
+            )
             fire_event(DebugCmdOut(msg=_table_footer()))
             return
 
@@ -1052,8 +1370,14 @@ class DebugTask(BaseTask):
         )
         if not profile_buckets:
             fire_event(DebugCmdOut(msg=""))
-            fire_event(DebugCmdOut(msg=_table_header("Buckets", f"profile: {profile_name}")))
-            fire_event(DebugCmdOut(msg=_table_row(["Profile not in buckets.yml"], [TABLE_WIDTH - 4])))
+            fire_event(
+                DebugCmdOut(msg=_table_header("Buckets", f"profile: {profile_name}"))
+            )
+            fire_event(
+                DebugCmdOut(
+                    msg=_table_row(["Profile not in buckets.yml"], [TABLE_WIDTH - 4])
+                )
+            )
             fire_event(DebugCmdOut(msg=_table_footer()))
             return
 
@@ -1062,18 +1386,32 @@ class DebugTask(BaseTask):
 
         if not buckets:
             fire_event(DebugCmdOut(msg=""))
-            fire_event(DebugCmdOut(msg=_table_header("Buckets", f"profile: {profile_name}")))
-            fire_event(DebugCmdOut(msg=_table_row(["No buckets configured"], [TABLE_WIDTH - 4])))
+            fire_event(
+                DebugCmdOut(msg=_table_header("Buckets", f"profile: {profile_name}"))
+            )
+            fire_event(
+                DebugCmdOut(
+                    msg=_table_row(["No buckets configured"], [TABLE_WIDTH - 4])
+                )
+            )
             fire_event(DebugCmdOut(msg=_table_footer()))
             return
 
         # Build table
         fire_event(DebugCmdOut(msg=""))
-        fire_event(DebugCmdOut(msg=_table_header("Buckets", f"profile: {profile_name} ─ default: {default_target}")))
+        fire_event(
+            DebugCmdOut(
+                msg=_table_header(
+                    "Buckets", f"profile: {profile_name} ─ default: {default_target}"
+                )
+            )
+        )
 
         # Column widths: Name(12), Type(6), Bucket(22), Prefix(12)
         widths = [12, 6, 22, 12]
-        fire_event(DebugCmdOut(msg=_table_row(["Name", "Type", "Bucket", "Prefix"], widths)))
+        fire_event(
+            DebugCmdOut(msg=_table_row(["Name", "Type", "Bucket", "Prefix"], widths))
+        )
         fire_event(DebugCmdOut(msg=_table_separator(widths)))
 
         for bucket_name, bucket_cfg in buckets.items():
@@ -1081,26 +1419,46 @@ class DebugTask(BaseTask):
                 continue
             is_default = bucket_name == default_target
             name_display = f"{bucket_name} →" if is_default else bucket_name
-            bucket_type = bucket_cfg.get('type', 'N/A')
-            bucket_path = bucket_cfg.get('bucket', 'N/A')
-            prefix = bucket_cfg.get('prefix', '-')
+            bucket_type = bucket_cfg.get("type", "N/A")
+            bucket_path = bucket_cfg.get("bucket", "N/A")
+            prefix = bucket_cfg.get("prefix", "-")
 
-            fire_event(DebugCmdOut(msg=_table_row([name_display, bucket_type, _truncate(str(bucket_path), 22), _truncate(str(prefix), 12)], widths)))
+            fire_event(
+                DebugCmdOut(
+                    msg=_table_row(
+                        [
+                            name_display,
+                            bucket_type,
+                            _truncate(str(bucket_path), 22),
+                            _truncate(str(prefix), 12),
+                        ],
+                        widths,
+                    )
+                )
+            )
 
         fire_event(DebugCmdOut(msg=_table_footer()))
 
     def _debug_all_buckets(self) -> None:
         """Display ALL buckets from buckets.yml as compact tables."""
-        buckets_path = Path(self.profiles_dir) / "buckets.yml" if self.profiles_dir else BUCKETS_PATH
+        buckets_path = (
+            Path(self.profiles_dir) / "buckets.yml"
+            if self.profiles_dir
+            else BUCKETS_PATH
+        )
 
         if not buckets_path.exists():
             fire_event(DebugCmdOut(msg=""))
             fire_event(DebugCmdOut(msg=_table_header("Buckets", "all profiles")))
-            fire_event(DebugCmdOut(msg=_table_row(["Not configured"], [TABLE_WIDTH - 4])))
+            fire_event(
+                DebugCmdOut(msg=_table_row(["Not configured"], [TABLE_WIDTH - 4]))
+            )
             fire_event(DebugCmdOut(msg=_table_footer()))
             return
 
-        config = load_buckets_config(str(self.profiles_dir) if self.profiles_dir else None)
+        config = load_buckets_config(
+            str(self.profiles_dir) if self.profiles_dir else None
+        )
         if not config:
             fire_event(DebugCmdOut(msg=""))
             fire_event(DebugCmdOut(msg=_table_header("Buckets", "all profiles")))
@@ -1121,8 +1479,19 @@ class DebugTask(BaseTask):
                 continue
 
             fire_event(DebugCmdOut(msg=""))
-            fire_event(DebugCmdOut(msg=_table_header("Buckets", f"profile: {profile_name} ─ default: {default_target}")))
-            fire_event(DebugCmdOut(msg=_table_row(["Name", "Type", "Bucket", "Prefix"], widths)))
+            fire_event(
+                DebugCmdOut(
+                    msg=_table_header(
+                        "Buckets",
+                        f"profile: {profile_name} ─ default: {default_target}",
+                    )
+                )
+            )
+            fire_event(
+                DebugCmdOut(
+                    msg=_table_row(["Name", "Type", "Bucket", "Prefix"], widths)
+                )
+            )
             fire_event(DebugCmdOut(msg=_table_separator(widths)))
 
             for bucket_name, bucket_cfg in buckets.items():
@@ -1130,24 +1499,42 @@ class DebugTask(BaseTask):
                     continue
                 is_default = bucket_name == default_target
                 name_display = f"{bucket_name} →" if is_default else bucket_name
-                bucket_type = bucket_cfg.get('type', 'N/A')
-                bucket_path = bucket_cfg.get('bucket', 'N/A')
-                prefix = bucket_cfg.get('prefix', '-')
+                bucket_type = bucket_cfg.get("type", "N/A")
+                bucket_path = bucket_cfg.get("bucket", "N/A")
+                prefix = bucket_cfg.get("prefix", "-")
 
-                fire_event(DebugCmdOut(msg=_table_row([name_display, bucket_type, _truncate(str(bucket_path), 22), _truncate(str(prefix), 12)], widths)))
+                fire_event(
+                    DebugCmdOut(
+                        msg=_table_row(
+                            [
+                                name_display,
+                                bucket_type,
+                                _truncate(str(bucket_path), 22),
+                                _truncate(str(prefix), 12),
+                            ],
+                            widths,
+                        )
+                    )
+                )
 
             fire_event(DebugCmdOut(msg=_table_footer()))
 
     def _debug_single_bucket(self, bucket_name: str) -> None:
         """Debug a specific bucket by name (searches all profiles)."""
         fire_event(DebugCmdOut(msg=f"\n--- Bucket: {bucket_name} ---"))
-        buckets_path = Path(self.profiles_dir) / "buckets.yml" if self.profiles_dir else BUCKETS_PATH
+        buckets_path = (
+            Path(self.profiles_dir) / "buckets.yml"
+            if self.profiles_dir
+            else BUCKETS_PATH
+        )
 
         if not buckets_path.exists():
             fire_event(DebugCmdOut(msg="  No buckets.yml found."))
             return
 
-        config = load_buckets_config(str(self.profiles_dir) if self.profiles_dir else None)
+        config = load_buckets_config(
+            str(self.profiles_dir) if self.profiles_dir else None
+        )
         if not config:
             fire_event(DebugCmdOut(msg="  Error reading buckets.yml."))
             return
@@ -1182,7 +1569,9 @@ class DebugTask(BaseTask):
             fire_event(DebugCmdOut(msg=f"  Bucket: {bucket_path}"))
             if prefix:
                 fire_event(DebugCmdOut(msg=f"  Prefix: {prefix}"))
-            fire_event(DebugCmdOut(msg=f"  Full Path: {bucket_type}://{bucket_path}/{prefix}"))
+            fire_event(
+                DebugCmdOut(msg=f"  Full Path: {bucket_type}://{bucket_path}/{prefix}")
+            )
 
             # Show additional config (non-credential fields)
             for key in ("region", "storage_integration", "iam_role", "project"):
@@ -1190,55 +1579,104 @@ class DebugTask(BaseTask):
                     fire_event(DebugCmdOut(msg=f"  {key}: {bucket_cfg[key]}"))
 
         if not found:
-            fire_event(DebugCmdOut(msg=f"  Bucket '{bucket_name}' not found in any profile."))
+            fire_event(
+                DebugCmdOut(msg=f"  Bucket '{bucket_name}' not found in any profile.")
+            )
 
     def _debug_native_connectors(self) -> None:
         """Display native connector and JDBC driver availability as compact table."""
-        native_dir = get_native_connectors_dir(str(self.profiles_dir) if self.profiles_dir else None)
-        jdbc_dir = get_jdbc_drivers_dir(str(self.profiles_dir) if self.profiles_dir else None)
+        native_dir = get_native_connectors_dir(
+            str(self.profiles_dir) if self.profiles_dir else None
+        )
+        jdbc_dir = get_spark_jars_dir(
+            str(self.profiles_dir) if self.profiles_dir else None
+        )
 
         fire_event(DebugCmdOut(msg=""))
         fire_event(DebugCmdOut(msg=_table_header("Connectors & Drivers")))
 
-        # Column widths: Component(14), Status(40)
-        widths = [14, 40]
+        # Column widths: Component(20), Status(70)
+        widths = [20, 70]
         fire_event(DebugCmdOut(msg=_table_row(["Component", "Status"], widths)))
         fire_event(DebugCmdOut(msg=_table_separator(widths)))
 
         # Check JDBC drivers directory
-        has_jdbc = jdbc_dir.exists() and any(jdbc_dir.iterdir()) if jdbc_dir.exists() else False
+        has_jdbc = (
+            jdbc_dir.exists() and any(jdbc_dir.iterdir())
+            if jdbc_dir.exists()
+            else False
+        )
         jdbc_status = green("✓ found") if has_jdbc else red("✗ not found")
         fire_event(DebugCmdOut(msg=_table_row(["JDBC Drivers", jdbc_status], widths)))
 
-        # Check native connectors
+        # Get adapter types from current project's profile
+        current_profile = self._get_current_profile_name()
+        profile_adapters = self._get_profile_adapter_types(current_profile)
+
+        # Check native connectors - only for adapters in the profile
+        missing_connectors: list = []
+        from dvt.task.native_connectors import NATIVE_CONNECTORS
+
         if native_dir.exists():
-            from dvt.task.native_connectors import NATIVE_CONNECTORS
-            missing_connectors = []
             for adapter, spec in NATIVE_CONNECTORS.items():
+                # Skip adapters not in profile
+                if adapter not in profile_adapters:
+                    continue
+
                 jar_path = native_dir / spec.jar_name
                 if jar_path.exists():
-                    fire_event(DebugCmdOut(msg=_table_row([adapter, green(f"✓ {_truncate(spec.jar_name, 38)}")], widths)))
+                    fire_event(
+                        DebugCmdOut(
+                            msg=_table_row(
+                                [adapter, green(f"✓ {_truncate(spec.jar_name, 68)}")],
+                                widths,
+                            )
+                        )
+                    )
                 else:
-                    fire_event(DebugCmdOut(msg=_table_row([adapter, red("✗ not found")], widths)))
+                    fire_event(
+                        DebugCmdOut(
+                            msg=_table_row([adapter, red("✗ not found")], widths)
+                        )
+                    )
                     missing_connectors.append(adapter)
         else:
-            fire_event(DebugCmdOut(msg=_table_row(["Native Dir", red("✗ not found")], widths)))
+            # Check if any profile adapter needs native connectors
+            needs_native = bool(profile_adapters & set(NATIVE_CONNECTORS.keys()))
+            if needs_native:
+                fire_event(
+                    DebugCmdOut(
+                        msg=_table_row(["Native Dir", red("✗ not found")], widths)
+                    )
+                )
 
         fire_event(DebugCmdOut(msg=_table_footer()))
 
-        # Show UX tip if anything is missing
-        if not has_jdbc or (native_dir.exists() and missing_connectors):
-            fire_event(DebugCmdOut(msg=yellow("💡 Run 'dvt sync' to download missing drivers")))
+        # Show UX tip only if JDBC missing or relevant connectors missing
+        if not has_jdbc or missing_connectors:
+            fire_event(
+                DebugCmdOut(msg=yellow("💡 Run 'dvt sync' to download missing drivers"))
+            )
 
     def _debug_federation_readiness(self) -> None:
         """Display federation readiness as compact single-row summary table."""
         # Check computes.yml
-        computes_path = Path(self.profiles_dir) / "computes.yml" if self.profiles_dir else COMPUTES_PATH
+        computes_path = (
+            Path(self.profiles_dir) / "computes.yml"
+            if self.profiles_dir
+            else COMPUTES_PATH
+        )
         has_computes = computes_path.exists()
 
-        # Check JDBC drivers
-        jdbc_dir = get_jdbc_drivers_dir(str(self.profiles_dir) if self.profiles_dir else None)
-        has_jdbc = jdbc_dir.exists() and any(jdbc_dir.iterdir()) if jdbc_dir.exists() else False
+        # Check Spark JARs (JDBC drivers, cloud connectors)
+        jdbc_dir = get_spark_jars_dir(
+            str(self.profiles_dir) if self.profiles_dir else None
+        )
+        has_jdbc = (
+            jdbc_dir.exists() and any(jdbc_dir.iterdir())
+            if jdbc_dir.exists()
+            else False
+        )
 
         # Check PySpark
         has_pyspark = self._check_pyspark_installed()
@@ -1246,19 +1684,31 @@ class DebugTask(BaseTask):
         # Check Java
         has_java = self._check_java_installed()
 
-        all_passed = has_computes and has_jdbc and has_pyspark and has_java
+        # Check cloud connector JARs (based on configured buckets)
+        cloud_jar_status, missing_cloud_jars = self._check_cloud_jars()
+
+        all_passed = (
+            has_computes and has_jdbc and has_pyspark and has_java and cloud_jar_status
+        )
 
         fire_event(DebugCmdOut(msg=""))
         fire_event(DebugCmdOut(msg=_table_header("Federation Readiness")))
 
         # Build status row
-        computes_status = f"computes.yml {green('✓')}" if has_computes else f"computes.yml {red('✗')}"
+        computes_status = (
+            f"computes.yml {green('✓')}" if has_computes else f"computes.yml {red('✗')}"
+        )
         jdbc_status = f"JDBC {green('✓')}" if has_jdbc else f"JDBC {red('✗')}"
-        pyspark_status = f"PySpark {green('✓')}" if has_pyspark else f"PySpark {red('✗')}"
+        pyspark_status = (
+            f"PySpark {green('✓')}" if has_pyspark else f"PySpark {red('✗')}"
+        )
         java_status = f"Java {green('✓')}" if has_java else f"Java {red('✗')}"
+        cloud_status = (
+            f"Cloud {green('✓')}" if cloud_jar_status else f"Cloud {red('✗')}"
+        )
         overall = green("READY") if all_passed else red("NOT READY")
 
-        status_line = f"│ {computes_status} │ {jdbc_status} │ {pyspark_status} │ {java_status} │ {overall} │"
+        status_line = f"│ {computes_status} │ {jdbc_status} │ {pyspark_status} │ {java_status} │ {cloud_status} │ {overall} │"
         fire_event(DebugCmdOut(msg=status_line))
         fire_event(DebugCmdOut(msg=_table_footer()))
 
@@ -1272,9 +1722,38 @@ class DebugTask(BaseTask):
             tips.append("PySpark")
         if not has_java:
             tips.append("Java")
+        if missing_cloud_jars:
+            tips.append(f"Cloud JARs ({', '.join(missing_cloud_jars)})")
 
         if tips:
-            fire_event(DebugCmdOut(msg=yellow(f"💡 Missing: {', '.join(tips)} → Run 'dvt sync'")))
+            fire_event(
+                DebugCmdOut(
+                    msg=yellow(f"💡 Missing: {', '.join(tips)} → Run 'dvt sync'")
+                )
+            )
+
+    def _check_cloud_jars(self) -> Tuple[bool, List[str]]:
+        """Check if cloud connector JARs are available for configured buckets.
+
+        Returns:
+            Tuple of (all_available, list_of_missing_bucket_types)
+        """
+        from dvt.task.cloud_connectors import (
+            check_cloud_jars_available,
+            get_bucket_types_from_config,
+        )
+
+        profiles_dir_str = str(self.profiles_dir) if self.profiles_dir else None
+        bucket_types = get_bucket_types_from_config(profiles_dir_str)
+
+        # No cloud buckets configured = passes check
+        if not bucket_types:
+            return True, []
+
+        jar_status = check_cloud_jars_available(bucket_types, profiles_dir_str)
+        missing = [bt for bt, available in jar_status.items() if not available]
+
+        return len(missing) == 0, missing
 
     def _check_pyspark_installed(self) -> bool:
         """Check if PySpark is available."""
@@ -1291,10 +1770,7 @@ class DebugTask(BaseTask):
             import subprocess
 
             result = subprocess.run(
-                ["java", "-version"],
-                capture_output=True,
-                text=True,
-                timeout=5
+                ["java", "-version"], capture_output=True, text=True, timeout=5
             )
             return result.returncode == 0
         except Exception:
@@ -1333,18 +1809,24 @@ class DebugTask(BaseTask):
     def test_configuration(self, profile_status_msg, project_status_msg):
         fire_event(DebugCmdOut(msg="Configuration:"))
         fire_event(DebugCmdOut(msg=f"  profiles.yml file [{profile_status_msg}]"))
-        fire_event(DebugCmdOut(msg=f"  project file (dbt_project.yml) [{project_status_msg}]"))
+        fire_event(
+            DebugCmdOut(msg=f"  project file (dbt_project.yml) [{project_status_msg}]")
+        )
 
         # skip profile stuff if we can't find a profile name
         if self.profile_name is not None:
             fire_event(
                 DebugCmdOut(
-                    msg="  profile: {} [{}]\n".format(self.profile_name, self._profile_found())
+                    msg="  profile: {} [{}]\n".format(
+                        self.profile_name, self._profile_found()
+                    )
                 )
             )
             fire_event(
                 DebugCmdOut(
-                    msg="  target: {} [{}]\n".format(self.target_name, self._target_found())
+                    msg="  target: {} [{}]\n".format(
+                        self.target_name, self._target_found()
+                    )
                 )
             )
 
@@ -1370,7 +1852,9 @@ class DebugTask(BaseTask):
 
     def test_connection(self) -> SubtaskStatus:
         if self.profile is None:
-            fire_event(DebugCmdOut(msg="Connection test skipped since no profile was found"))
+            fire_event(
+                DebugCmdOut(msg="Connection test skipped since no profile was found")
+            )
             return SubtaskStatus(
                 log_msg=red("SKIPPED"),
                 run_status=RunStatus.Skipped,
@@ -1419,4 +1903,6 @@ class DebugTask(BaseTask):
         )
         result = cls.attempt_connection(profile)
         if result is not None:
-            raise dvt.exceptions.DvtProfileError(result, result_type="connection_failure")
+            raise dvt.exceptions.DvtProfileError(
+                result, result_type="connection_failure"
+            )
