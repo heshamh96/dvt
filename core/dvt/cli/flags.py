@@ -50,7 +50,9 @@ DEPRECATED_PARAMS = {
 }
 
 
-DEPRECATED_FLAGS_TO_WARNINGS = {("--models", "--model", "-m"): "model-param-usage-deprecation"}
+DEPRECATED_FLAGS_TO_WARNINGS = {
+    ("--models", "--model", "-m"): "model-param-usage-deprecation"
+}
 
 WHICH_KEY = "which"
 
@@ -70,20 +72,60 @@ def convert_config(config_name, config_value):
 
 
 def args_to_context(args: List[str]) -> Context:
-    """Convert a list of args to a click context with proper hierarchy for dvt commands"""
+    """Convert a list of args to a click context with proper hierarchy for dvt commands.
+
+    In DVT, global flags live on subcommands (not the root cli group).  This
+    function finds the subcommand name in the arg list, reorders the args so
+    the subcommand comes first (as Click expects for groups), and then builds
+    the proper parent (root) -> child (subcommand) context hierarchy.
+    """
     from dvt.cli.main import cli
 
-    cli_ctx = cli.make_context(cli.name, args)
     # Split args if they're a comma separated string.
     if len(args) == 1 and "," in args[0]:
         args = args[0].split(",")
-    sub_command_name, sub_command, args = cli.resolve_command(cli_ctx, args)
+
+    # Find the subcommand name in the args list.  Because DVT puts global flags
+    # on subcommands, callers may place flags before the subcommand name (e.g.
+    # ["--use-colors", "run"]).  We need to extract the subcommand token so
+    # Click's root group can resolve it.
+    #
+    # Scan from the END of the list — the subcommand is typically the last
+    # positional token, and this avoids misidentifying option values like
+    # "debug" (a valid log-level value AND a subcommand name).
+    known_commands = set(cli.commands.keys()) if hasattr(cli, "commands") else set()
+    subcmd_token = None
+    subcmd_idx = None
+    for i in range(len(args) - 1, -1, -1):
+        token = args[i]
+        if not token.startswith("-") and token in known_commands:
+            subcmd_token = token
+            subcmd_idx = i
+            break
+
+    if subcmd_token is not None and subcmd_idx is not None:
+        # Separate subcommand-level flags from root-level args.
+        pre_subcmd_flags = args[:subcmd_idx]
+        post_subcmd_args = args[subcmd_idx + 1 :]
+        # Root context gets only the subcommand name (+ root-level flags if any).
+        root_args = [subcmd_token]
+        # Subcommand context gets the pre-command flags + post-command flags.
+        subcmd_args = pre_subcmd_flags + post_subcmd_args
+    else:
+        root_args = list(args)
+        subcmd_args = []
+
+    cli_ctx = cli.make_context(cli.name, root_args)
+    sub_command_name, sub_command, _leftover = cli.resolve_command(cli_ctx, root_args)
+
     # Handle source and docs group.
     if isinstance(sub_command, Group):
-        sub_command_name, sub_command, args = sub_command.resolve_command(cli_ctx, args)
+        sub_command_name, sub_command, subcmd_args = sub_command.resolve_command(
+            cli_ctx, subcmd_args
+        )
 
     assert isinstance(sub_command, ClickCommand)
-    sub_command_ctx = sub_command.make_context(sub_command_name, args)
+    sub_command_ctx = sub_command.make_context(sub_command_name, subcmd_args)
     sub_command_ctx.parent = cli_ctx
     return sub_command_ctx
 
@@ -93,7 +135,9 @@ class Flags:
     """Primary configuration artifact for running dvt"""
 
     def __init__(
-        self, ctx: Optional[Context] = None, project_flags: Optional[ProjectFlags] = None
+        self,
+        ctx: Optional[Context] = None,
+        project_flags: Optional[ProjectFlags] = None,
     ) -> None:
         # Set the default flags.
         for key, value in FLAGS_DEFAULTS.items():
@@ -107,7 +151,9 @@ class Flags:
         def _get_params_by_source(ctx: Context, source_type: ParameterSource):
             """Generates all params of a given source type."""
             yield from [
-                name for name, source in ctx._parameter_source.items() if source is source_type
+                name
+                for name, source in ctx._parameter_source.items()
+                if source is source_type
             ]
             if ctx.parent:
                 yield from _get_params_by_source(ctx.parent, source_type)
@@ -162,8 +208,12 @@ class Flags:
 
                     # Find param objects for their envvar name.
                     try:
-                        dep_param = [x for x in ctx.command.params if x.name == dep_name][0]
-                        new_param = [x for x in ctx.command.params if x.name == new_name][0]
+                        dep_param = [
+                            x for x in ctx.command.params if x.name == dep_name
+                        ][0]
+                        new_param = [
+                            x for x in ctx.command.params if x.name == new_name
+                        ][0]
                     except IndexError:
                         raise Exception(
                             f"No deprecated param name match in context from {dep_name} to {new_name}"
@@ -194,8 +244,12 @@ class Flags:
                     flags_defaults_list.remove(param_name.upper())
                 # Note: the following determines whether parameter came from click default,
                 # not from FLAGS_DEFAULTS in __init__.
-                is_default = ctx.get_parameter_source(param_name) == ParameterSource.DEFAULT
-                is_envvar = ctx.get_parameter_source(param_name) == ParameterSource.ENVIRONMENT
+                is_default = (
+                    ctx.get_parameter_source(param_name) == ParameterSource.DEFAULT
+                )
+                is_envvar = (
+                    ctx.get_parameter_source(param_name) == ParameterSource.ENVIRONMENT
+                )
 
                 flag_name = (new_name or param_name).upper()
 
@@ -229,12 +283,17 @@ class Flags:
         params_assigned_from_default = set()  # type: Set[str]
         deprecated_env_vars: Dict[str, Callable] = {}
         _assign_params(
-            ctx, params_assigned_from_default, params_assigned_from_user, deprecated_env_vars
+            ctx,
+            params_assigned_from_default,
+            params_assigned_from_user,
+            deprecated_env_vars,
         )
 
         # Set deprecated_env_var_warnings to be fired later after events have been init.
         object.__setattr__(
-            self, "deprecated_env_var_warnings", [x for x in deprecated_env_vars.values()]
+            self,
+            "deprecated_env_var_warnings",
+            [x for x in deprecated_env_vars.values()],
         )
 
         # Get the invoked command flags.
@@ -244,8 +303,13 @@ class Flags:
         invoked_subcommand_name = (
             ctx.invoked_subcommand if hasattr(ctx, "invoked_subcommand") else None
         )
-        if invoked_subcommand_name is not None and getattr(ctx, "info_name", None) != invoked_subcommand_name:
-            invoked_subcommand = getattr(import_module("dvt.cli.main"), invoked_subcommand_name)
+        if (
+            invoked_subcommand_name is not None
+            and getattr(ctx, "info_name", None) != invoked_subcommand_name
+        ):
+            invoked_subcommand = getattr(
+                import_module("dvt.cli.main"), invoked_subcommand_name
+            )
             invoked_subcommand.allow_extra_args = True
             invoked_subcommand.ignore_unknown_options = True
             invoked_subcommand_ctx = invoked_subcommand.make_context(None, sys.argv)
@@ -278,7 +342,9 @@ class Flags:
                     object.__setattr__(
                         self,
                         param_assigned_from_default.upper(),
-                        convert_config(param_assigned_from_default, project_flags_param_value),
+                        convert_config(
+                            param_assigned_from_default, project_flags_param_value
+                        ),
                     )
                     param_assigned_from_default_copy.remove(param_assigned_from_default)
             params_assigned_from_default = param_assigned_from_default_copy
@@ -288,7 +354,9 @@ class Flags:
                 project_level_flag_name,
                 project_level_flag_value,
             ) in project_flags.project_only_flags.items():
-                object.__setattr__(self, project_level_flag_name.upper(), project_level_flag_value)
+                object.__setattr__(
+                    self, project_level_flag_name.upper(), project_level_flag_value
+                )
 
         # Set hard coded flags.
         object.__setattr__(self, "WHICH", invoked_subcommand_name or ctx.info_name)
@@ -326,9 +394,15 @@ class Flags:
                 object.__setattr__(self, name, default)
 
         # Apply the lead/follow relationship between some parameters.
-        self._override_if_set("USE_COLORS", "USE_COLORS_FILE", params_assigned_from_default)
-        self._override_if_set("LOG_LEVEL", "LOG_LEVEL_FILE", params_assigned_from_default)
-        self._override_if_set("LOG_FORMAT", "LOG_FORMAT_FILE", params_assigned_from_default)
+        self._override_if_set(
+            "USE_COLORS", "USE_COLORS_FILE", params_assigned_from_default
+        )
+        self._override_if_set(
+            "LOG_LEVEL", "LOG_LEVEL_FILE", params_assigned_from_default
+        )
+        self._override_if_set(
+            "LOG_FORMAT", "LOG_FORMAT_FILE", params_assigned_from_default
+        )
 
         # Set default LOG_PATH from PROJECT_DIR, if available.
         # Starting in v1.5, if `log-path` is set in `dbt_project.yml`, it will raise a deprecation warning,
@@ -350,15 +424,21 @@ class Flags:
         )
 
         # Handle arguments mutually exclusive with INLINE
-        self._assert_mutually_exclusive(params_assigned_from_default, ["SELECT", "INLINE"])
-        self._assert_mutually_exclusive(params_assigned_from_default, ["SELECTOR", "INLINE"])
+        self._assert_mutually_exclusive(
+            params_assigned_from_default, ["SELECT", "INLINE"]
+        )
+        self._assert_mutually_exclusive(
+            params_assigned_from_default, ["SELECTOR", "INLINE"]
+        )
 
         # Check event_time configs for validity
         self._validate_event_time_configs()
 
         # Support lower cased access for legacy code.
         params = set(
-            x for x in dir(self) if not callable(getattr(self, x)) and not x.startswith("__")
+            x
+            for x in dir(self)
+            if not callable(getattr(self, x)) and not x.startswith("__")
         )
         for param in params:
             object.__setattr__(self, param.lower(), getattr(self, param))
@@ -394,7 +474,9 @@ class Flags:
 
     def _validate_event_time_configs(self) -> None:
         event_time_start: datetime = (
-            getattr(self, "EVENT_TIME_START") if hasattr(self, "EVENT_TIME_START") else None
+            getattr(self, "EVENT_TIME_START")
+            if hasattr(self, "EVENT_TIME_START")
+            else None
         )
         event_time_end: datetime = (
             getattr(self, "EVENT_TIME_END") if hasattr(self, "EVENT_TIME_END") else None
@@ -402,7 +484,6 @@ class Flags:
 
         # only do validations if at least one of `event_time_start` or `event_time_end` are specified
         if event_time_start is not None or event_time_end is not None:
-
             # These `ifs`, combined with the parent `if` make it so that `event_time_start` and
             # `event_time_end` are mutually required
             if event_time_start is None:
@@ -590,4 +671,6 @@ def command_args(command: CliCommand) -> ArgsList:
 
 
 def format_params(params: List[Parameter]) -> ArgsList:
-    return [str(x.name) for x in params if not str(x.name).lower().startswith("deprecated_")]
+    return [
+        str(x.name) for x in params if not str(x.name).lower().startswith("deprecated_")
+    ]

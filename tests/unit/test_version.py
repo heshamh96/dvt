@@ -581,6 +581,7 @@ class TestGetVersionInformation:
 
     def test_file_globbing(self, mocker):
         mocker.patch("dvt.version.__version__", "1.0.0")
+        mocker.patch("dvt.version._get_compute_msg", return_value=None)
         mock_latest_versions(mocker, core_latest="1.0.0")
 
         mocked_spec = mocker.Mock()
@@ -663,6 +664,8 @@ class TestGetVersionInformation:
 
 def mock_versions(mocker, installed="1.0.0", latest=None, plugins={}):
     mocker.patch("dvt.version.__version__", installed)
+    # Suppress the compute section so tests don't depend on installed packages
+    mocker.patch("dvt.version._get_compute_msg", return_value=None)
     mock_latest_versions(mocker, latest, plugins)
     # mock_plugins must be called last to avoid erronously raising an ImportError.
     mock_plugins(mocker, plugins)
@@ -678,7 +681,9 @@ def mock_plugins(mocker, plugins):
     path = "/tmp/dvt/adapters"
     mock_find_spec.return_value.submodule_search_locations = [path]
 
-    mocker.patch("glob.glob").return_value = [f"{path}/{name}/__version__.py" for name in plugins]
+    mocker.patch("glob.glob").return_value = [
+        f"{path}/{name}/__version__.py" for name in plugins
+    ]
 
     def mock_import(*args, **kwargs):
         import_path = args[0]
@@ -715,7 +720,9 @@ def mock_latest_versions(mocker, core_latest=None, plugins={}):
                 plugin_latest = plugins.get(plugin_name)[1]
 
                 if plugin_latest:
-                    mocked_response.json.return_value = {"info": {"version": plugin_latest}}
+                    mocked_response.json.return_value = {
+                        "info": {"version": plugin_latest}
+                    }
 
                 return mocked_response
 

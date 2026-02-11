@@ -90,5 +90,7 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
+    "freezegun>=1.5.5",
+    "hypothesis>=6.151.5",
     "twine>=6.2.0",
 ]

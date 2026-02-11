@@ -36,6 +36,7 @@ Supported adapters and JARs (used by sync; all URLs verified):
 Not in registry: spark (compute engine, no JDBC), bigquery (Spark connector), dremio (not on Maven Central).
 """
 
+import urllib.request
 from pathlib import Path
 from typing import Callable, List, Optional, Tuple
 
@@ -165,8 +166,6 @@ def _download_jar(
         return True
     url = _maven_jar_url(group_id, artifact_id, version)
     try:
-        import urllib.request
-
         req = urllib.request.Request(url, headers={"User-Agent": "DVT-Sync/1.0"})
         with urllib.request.urlopen(req, timeout=120) as resp:
             if resp.status != 200:

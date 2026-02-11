@@ -19,21 +19,24 @@ def get_flags():
 
 def set_from_args(args: Namespace, project_flags):
     global GLOBAL_FLAGS
-    from dvt.cli.flags import Flags, convert_config
-    from dvt.cli.main import cli
+    from dvt.cli.flags import Flags, args_to_context, convert_config
 
     # we set attributes of args after initialize the flags, but project_flags
     # is being read in the Flags constructor, so we need to read it here and pass in
     # to make sure we use the correct project_flags
-    profiles_dir = getattr(args, "PROFILES_DIR", None) or getattr(args, "profiles_dir", None)
-    project_dir = getattr(args, "PROJECT_DIR", None) or getattr(args, "project_dir", None)
+    profiles_dir = getattr(args, "PROFILES_DIR", None) or getattr(
+        args, "profiles_dir", None
+    )
+    project_dir = getattr(args, "PROJECT_DIR", None) or getattr(
+        args, "project_dir", None
+    )
     if profiles_dir and project_dir:
         from dvt.config.project import read_project_flags
 
         project_flags = read_project_flags(project_dir, profiles_dir)
 
     # make a dummy context to get the flags, totally arbitrary
-    ctx = cli.make_context("run", ["run"])
+    ctx = args_to_context(["run"])
     flags = Flags(ctx, project_flags)
     for arg_name, args_param_value in vars(args).items():
         args_param_value = convert_config(arg_name, args_param_value)

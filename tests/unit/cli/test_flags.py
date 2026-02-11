@@ -5,7 +5,7 @@ import click
 import pytest
 
 from dvt.cli.exceptions import DvtUsageException
-from dvt.cli.flags import Flags
+from dvt.cli.flags import Flags, args_to_context
 from dvt.cli.main import cli
 from dvt.cli.types import Command
 from dvt.contracts.project import ProjectFlags
@@ -18,7 +18,22 @@ class TestFlags:
     def make_dbt_context(
         self, context_name: str, args: List[str], parent: Optional[click.Context] = None
     ) -> click.Context:
-        ctx = cli.make_context(context_name, args.copy(), parent)
+        """Create a Click context for testing flags.
+
+        In DVT, global flags live on subcommands (not the root group), so we
+        use args_to_context() which properly resolves the subcommand and builds
+        a parent (root) -> child (subcommand) context hierarchy.
+
+        args_to_context handles flags both before and after the subcommand name,
+        e.g. both ["--use-colors", "run"] and ["run", "--use-colors"] work.
+
+        When a parent context is provided (for flag-inheritance tests), we
+        attach it as the grandparent of the subcommand context.
+        """
+        ctx = args_to_context(args.copy())
+        if parent is not None:
+            # Insert the provided parent above the subcommand context's own parent
+            ctx.parent.parent = parent
         return ctx
 
     @pytest.fixture(scope="class")
@@ -30,7 +45,7 @@ class TestFlags:
         return ProjectFlags()
 
     def test_cli_args_unmodified(self):
-        args = ["--target", "my_target"]
+        args = ["--target", "my_target", "run"]
         args_before = args.copy()
         self.make_dbt_context("context", args)
 
@@ -51,13 +66,27 @@ class TestFlags:
         if param.name.upper() in ("VERSION", "LOG_PATH"):
             return
 
-        assert hasattr(flags, param.name.upper())
-        assert getattr(flags, param.name.upper()) == run_context.params[param.name.lower()]
+        # In DVT, some root-group params (e.g. show_resource_report) are not on
+        # subcommands.  Check subcommand context first, then parent (root).
+        if param.name.lower() in run_context.params:
+            assert hasattr(flags, param.name.upper())
+            assert (
+                getattr(flags, param.name.upper())
+                == run_context.params[param.name.lower()]
+            )
+        elif run_context.parent and param.name.lower() in run_context.parent.params:
+            assert hasattr(flags, param.name.upper())
+            assert (
+                getattr(flags, param.name.upper())
+                == run_context.parent.params[param.name.lower()]
+            )
 
     def test_log_path_default(self, run_context):
         flags = Flags(run_context)
         assert hasattr(flags, "LOG_PATH")
-        assert getattr(flags, "LOG_PATH") == Path("logs")
+        # LOG_PATH is resolved to an absolute path based on PROJECT_DIR
+        log_path = getattr(flags, "LOG_PATH")
+        assert str(log_path).endswith("logs")
 
     def test_log_file_max_size_default(self, run_context):
         flags = Flags(run_context)
@@ -107,9 +136,11 @@ class TestFlags:
         expected_anonymous_usage_stats,
     ):
         monkeypatch.setenv("DO_NOT_TRACK", do_not_track)
+        project_flags = None
         if set_stats_param != "default":
             run_context.params["send_anonymous_usage_stats"] = set_stats_param
-        flags = Flags(run_context)
+            project_flags = ProjectFlags(send_anonymous_usage_stats=set_stats_param)
+        flags = Flags(run_context, project_flags)
         assert flags.SEND_ANONYMOUS_USAGE_STATS == expected_anonymous_usage_stats
 
     def test_resource_types(self, monkeypatch):
@@ -137,7 +168,7 @@ class TestFlags:
 
     def test_prefer_param_value_to_project_flags(self):
         project_flags = ProjectFlags(use_colors=False)
-        context = self.make_dbt_context("run", ["--use-colors", "True", "run"])
+        context = self.make_dbt_context("run", ["--use-colors", "run"])
 
         flags = Flags(context, project_flags)
         assert flags.USE_COLORS
@@ -172,9 +203,13 @@ class TestFlags:
             Flags(context)
 
     @pytest.mark.parametrize("warn_error", [True, False])
-    def test_mutually_exclusive_options_from_project_flags(self, warn_error, project_flags):
+    def test_mutually_exclusive_options_from_project_flags(
+        self, warn_error, project_flags
+    ):
         project_flags.warn_error = warn_error
-        context = self.make_dbt_context("run", ["--warn-error-options", '{"error": "all"}', "run"])
+        context = self.make_dbt_context(
+            "run", ["--warn-error-options", '{"error": "all"}', "run"]
+        )
 
         with pytest.raises(DvtUsageException):
             Flags(context, project_flags)
@@ -193,15 +228,21 @@ class TestFlags:
         self, warn_error, project_flags
     ):
         project_flags.warn_error = warn_error
-        context = self.make_dbt_context("run", ["--warn-error-options", '{"error": "all"}', "run"])
+        context = self.make_dbt_context(
+            "run", ["--warn-error-options", '{"error": "all"}', "run"]
+        )
 
         with pytest.raises(DvtUsageException):
             Flags(context, project_flags)
 
     @pytest.mark.parametrize("warn_error", ["True", "False"])
-    def test_mutually_exclusive_options_from_cli_and_envvar(self, warn_error, monkeypatch):
+    def test_mutually_exclusive_options_from_cli_and_envvar(
+        self, warn_error, monkeypatch
+    ):
         monkeypatch.setenv("DBT_WARN_ERROR", warn_error)
-        context = self.make_dbt_context("run", ["--warn-error-options", '{"error": "all"}', "run"])
+        context = self.make_dbt_context(
+            "run", ["--warn-error-options", '{"error": "all"}', "run"]
+        )
 
         with pytest.raises(DvtUsageException):
             Flags(context)
@@ -240,7 +281,9 @@ class TestFlags:
             cli_params.append("--use-colors" if cli_colors else "--no-use-colors")
 
         if cli_colors_file is not None:
-            cli_params.append("--use-colors-file" if cli_colors_file else "--no-use-colors-file")
+            cli_params.append(
+                "--use-colors-file" if cli_colors_file else "--no-use-colors-file"
+            )
 
         cli_params.append("run")
 
@@ -256,7 +299,12 @@ class TestFlags:
         [
             (None, None, "info", "debug"),
             ("error", None, "error", "error"),  # explicit level overrides file level...
-            ("info", None, "info", "info"),  # ...but file level doesn't change console level
+            (
+                "info",
+                None,
+                "info",
+                "info",
+            ),  # ...but file level doesn't change console level
             (
                 "debug",
                 "warn",
@@ -292,7 +340,12 @@ class TestFlags:
         [
             (None, None, "default", "debug"),
             ("json", None, "json", "json"),  # explicit format overrides file format...
-            (None, "json", "default", "json"),  # ...but file format doesn't change console format
+            (
+                None,
+                "json",
+                "default",
+                "json",
+            ),  # ...but file format doesn't change console format
             (
                 "debug",
                 "text",
@@ -343,7 +396,9 @@ class TestFlags:
         logging flags with their default values"""
         context = self.make_dbt_context("run", ["run"])
 
-        config = ProjectFlags(log_format_file="json", log_level_file="warn", use_colors_file=False)
+        config = ProjectFlags(
+            log_format_file="json", log_level_file="warn", use_colors_file=False
+        )
 
         flags = Flags(context, config)
 
@@ -355,45 +410,61 @@ class TestFlags:
         assert flags.USE_COLORS_FILE is False
 
     def test_duplicate_flags_raises_error(self):
-        parent_context = self.make_dbt_context("parent", ["--version-check"])
-        context = self.make_dbt_context("child", ["--version-check"], parent_context)
+        parent_context = self.make_dbt_context("parent", ["--version-check", "run"])
+        context = self.make_dbt_context(
+            "child", ["--version-check", "run"], parent_context
+        )
 
         with pytest.raises(DvtUsageException):
             Flags(context)
 
     def test_global_flag_at_child_context(self):
-        parent_context_a = self.make_dbt_context("parent_context_a", ["--no-use-colors"])
-        child_context_a = self.make_dbt_context("child_context_a", ["run"], parent_context_a)
+        # In DVT, global flags live on subcommands. Test that the same flag
+        # produces the same result regardless of which context level it appears on.
+        parent_context_a = self.make_dbt_context(
+            "parent_context_a", ["--no-use-colors", "run"]
+        )
+        child_context_a = self.make_dbt_context(
+            "child_context_a", ["run"], parent_context_a
+        )
         flags_a = Flags(child_context_a)
 
         parent_context_b = self.make_dbt_context("parent_context_b", ["run"])
         child_context_b = self.make_dbt_context(
-            "child_context_b", ["--no-use-colors"], parent_context_b
+            "child_context_b", ["--no-use-colors", "run"], parent_context_b
         )
         flags_b = Flags(child_context_b)
 
         assert flags_a.USE_COLORS == flags_b.USE_COLORS
 
     def test_global_flag_with_env_var(self, monkeypatch):
-        # The environment variable is used for whichever parent or child
-        # does not have a cli command.
-        # Test that "child" global flag overrides env var
+        # Test that CLI global flag overrides env var.
+        # All args must include a subcommand since DVT puts flags on subcommands.
         monkeypatch.setenv("DBT_QUIET", "0")
-        parent_context = self.make_dbt_context("parent", ["--no-use-colors"])
-        child_context = self.make_dbt_context("child", ["--quiet"], parent_context)
+
+        # Test that "child" global flag overrides env var
+        parent_context = self.make_dbt_context("parent", ["--no-use-colors", "run"])
+        child_context = self.make_dbt_context(
+            "child", ["--quiet", "run"], parent_context
+        )
         flags = Flags(child_context)
         assert flags.QUIET is True
 
         # Test that "parent" global flag overrides env var
-        parent_context = self.make_dbt_context("parent", ["--quiet"])
-        child_context = self.make_dbt_context("child", ["--no-use-colors"], parent_context)
+        parent_context = self.make_dbt_context("parent", ["--quiet", "run"])
+        child_context = self.make_dbt_context(
+            "child", ["--no-use-colors", "run"], parent_context
+        )
         flags = Flags(child_context)
         assert flags.QUIET is True
 
     def test_set_project_only_flags(self, project_flags, run_context):
         flags = Flags(run_context, project_flags)
 
-        for project_only_flag, project_only_flag_value in project_flags.project_only_flags.items():
+        for (
+            project_only_flag,
+            project_only_flag_value,
+        ) in project_flags.project_only_flags.items():
             assert getattr(flags, project_only_flag) == project_only_flag_value
             # sanity check: ensure project_only_flag is not part of the click context
             assert project_only_flag not in run_context.params

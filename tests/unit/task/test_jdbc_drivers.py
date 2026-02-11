@@ -1,4 +1,5 @@
 """Unit tests for adapter–JDBC driver registry and download (core/dvt/task/jdbc_drivers)."""
+
 from pathlib import Path
 from unittest import mock
 
@@ -53,8 +54,12 @@ class TestGetJdbcDriversForAdapters:
             assert isinstance(drivers, list), f"{adapter} value should be a list"
             assert len(drivers) >= 1, f"{adapter} should have at least one driver"
             for coord in drivers:
-                assert len(coord) == 3, f"{adapter} driver should be (group, artifact, version)"
-                assert all(isinstance(c, str) for c in coord), f"{adapter} coords should be strings"
+                assert len(coord) == 3, (
+                    f"{adapter} driver should be (group, artifact, version)"
+                )
+                assert all(isinstance(c, str) for c in coord), (
+                    f"{adapter} coords should be strings"
+                )
 
 
 class TestDownloadJdbcJars:
@@ -67,7 +72,7 @@ class TestDownloadJdbcJars:
             resp = mock.Mock()
             resp.status = 200
             resp.read.return_value = b"fake jar content"
-            cm = mock.Mock()
+            cm = mock.MagicMock()
             cm.__enter__.return_value = resp
             cm.__exit__.return_value = False
             urlopen.return_value = cm
@@ -126,7 +131,7 @@ class TestDownloadJdbcJars:
             resp = mock.Mock()
             resp.status = 200
             resp.read.return_value = b"jar"
-            cm = mock.Mock()
+            cm = mock.MagicMock()
             cm.__enter__.return_value = resp
             cm.__exit__.return_value = False
             urlopen.return_value = cm

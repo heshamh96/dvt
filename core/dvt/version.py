@@ -61,7 +61,7 @@ def _get_core_msg_lines(
     latest: Optional[semver.VersionSpecifier],
 ) -> Tuple[List[List[str]], str]:
     installed_s = installed.to_version_string(skip_matcher=True)
-    installed_line = ["Installed", installed_s, ""]
+    installed_line = ["installed", installed_s, ""]
     update_info = ""
 
     if latest is None:
@@ -73,7 +73,7 @@ def _get_core_msg_lines(
         return [installed_line], update_info
 
     latest_s = latest.to_version_string(skip_matcher=True)
-    latest_line = ["Latest", latest_s, green("Up to date!")]
+    latest_line = ["latest", latest_s, green("Up to date!")]
 
     if installed > latest:
         latest_line[2] = yellow("Ahead of latest version!")
@@ -110,7 +110,9 @@ def _get_plugins_msg() -> str:
     plugins = []
     display_update_msg = False
     for name, version_s in _get_dbt_plugins_info():
-        compatability_msg, needs_update = _get_plugin_msg_info(name, version_s, installed)
+        compatability_msg, needs_update = _get_plugin_msg_info(
+            name, version_s, installed
+        )
         if needs_update:
             display_update_msg = True
         plugins.append([name, version_s, compatability_msg])
@@ -119,7 +121,7 @@ def _get_plugins_msg() -> str:
         msg_lines.append(_format_single_plugin(plugin, ""))
 
     if not plugins:
-        msg_lines.append("  (none)")
+        pass  # No plugins found; just show the "Plugins:" header
 
     if display_update_msg:
         update_msg = (
