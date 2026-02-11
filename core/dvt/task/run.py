@@ -448,6 +448,45 @@ class FederationModelRunner(CompileRunner):
         track_model_run(self.node_index, self.num_nodes, result, adapter=self.adapter)
         self.print_result_line(result)
 
+    def compile(self, manifest: Manifest):
+        """Compile with target-aware adapter.
+
+        DVT: For federation models targeting a non-default adapter, we compile
+        using the target adapter so that Jinja resolves {{ ref() }} and
+        {{ source() }} with the correct dialect (quoting, relation format).
+        This eliminates the need for post-hoc SQL transpilation.
+
+        If the model targets the default adapter, we fall back to the
+        standard compile path.
+        """
+        if self.resolution.target == self.config.target_name:
+            # Same as default — use standard compilation
+            return super().compile(manifest)
+
+        from dvt.federation.adapter_manager import AdapterManager
+
+        target_adapter = AdapterManager.get_adapter(
+            profile_name=self._get_profile_name(),
+            target_name=self.resolution.target,
+            profiles_dir=self._get_profiles_dir(),
+        )
+        return self.compiler.compile_node(
+            self.node, manifest, {}, adapter=target_adapter
+        )
+
+    def _get_profiles_dir(self) -> Optional[str]:
+        """Get profiles directory from config args."""
+        profiles_dir = getattr(self.config.args, "PROFILES_DIR", None)
+        if not profiles_dir:
+            profiles_dir = getattr(self.config.args, "profiles_dir", None)
+        return str(profiles_dir) if profiles_dir else None
+
+    def _get_profile_name(self) -> str:
+        """Get current profile name."""
+        if hasattr(self.config, "profile_name"):
+            return self.config.profile_name
+        return "default"
+
     def execute(self, model: ModelNode, manifest: Manifest) -> RunResult:
         """Execute model via federation engine.
 
@@ -625,43 +664,34 @@ class NonDefaultPushdownRunner(CompileRunner):
             return self.config.profile_name
         return "default"
 
-    def _transpile_sql(
-        self, sql: str, source_adapter_type: str, target_adapter_type: str
-    ) -> str:
-        """Transpile SQL from source dialect to target dialect using SQLGlot.
+    def compile(self, manifest: Manifest):
+        """Compile with target-aware adapter.
 
-        The compiled SQL is in the default adapter's dialect (e.g., postgres with
-        double-quoted identifiers). For non-default pushdown, we need to convert
-        it to the target adapter's dialect (e.g., databricks with backtick-quoted).
-
-        Args:
-            sql: Compiled SQL in source dialect
-            source_adapter_type: Source adapter type (e.g., "postgres")
-            target_adapter_type: Target adapter type (e.g., "databricks")
-
-        Returns:
-            SQL transpiled to the target dialect
+        DVT: For non-default pushdown, we compile using the target adapter
+        so that Jinja resolves {{ ref() }} and {{ source() }} with the
+        correct dialect (quoting, relation format).  The compiled SQL is
+        then in the target dialect and can be executed directly — no
+        post-hoc SQLGlot transpilation needed.
         """
-        if source_adapter_type == target_adapter_type:
-            return sql
+        from dvt.federation.adapter_manager import AdapterManager
 
-        try:
-            import sqlglot
-            from dvt.utils.identifiers import get_sqlglot_dialect
-
-            source_dialect = get_sqlglot_dialect(source_adapter_type)
-            target_dialect = get_sqlglot_dialect(target_adapter_type)
-
-            return sqlglot.transpile(sql, read=source_dialect, write=target_dialect)[0]
-        except Exception:
-            # If transpilation fails, return original SQL
-            return sql
+        target_adapter = AdapterManager.get_adapter(
+            profile_name=self._get_profile_name(),
+            target_name=self.resolution.target,
+            profiles_dir=self._get_profiles_dir(),
+        )
+        return self.compiler.compile_node(
+            self.node, manifest, {}, adapter=target_adapter
+        )
 
     def execute(self, model: ModelNode, manifest: Manifest) -> RunResult:
         """Execute model via pushdown on a non-default target adapter.
 
         Uses AdapterManager to get the correct adapter for the resolved target,
         then executes the compiled SQL directly via DDL.
+
+        DVT: The compiled SQL is already in the target dialect thanks to
+        target-aware compilation — no transpilation needed.
         """
         from dvt.federation.adapter_manager import AdapterManager, get_quoted_table_name
 
@@ -676,16 +706,6 @@ class NonDefaultPushdownRunner(CompileRunner):
             profile_name=self._get_profile_name(),
             target_name=self.resolution.target,
             profiles_dir=self._get_profiles_dir(),
-        )
-
-        # Transpile SQL from default adapter dialect to target adapter dialect
-        # The compiled SQL is in the default adapter's quoting style (e.g., postgres
-        # uses "double quotes") but the target may need different quoting (e.g.,
-        # databricks uses `backticks`)
-        default_adapter_type = self.adapter.type()
-        target_adapter_type = target_adapter.type()
-        compiled_sql = self._transpile_sql(
-            compiled_sql, default_adapter_type, target_adapter_type
         )
 
         materialization = model.config.materialized or "table"

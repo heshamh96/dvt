@@ -35,7 +35,8 @@ class MinimalAdapterConfig:
     """Minimal config for adapter instantiation without full RuntimeConfig.
 
     Implements the AdapterRequiredConfig protocol with minimal fields
-    needed for adapter instantiation and SQL execution.
+    needed for adapter instantiation, SQL execution, and compilation
+    (target-aware compilation passes these adapters through ProviderContext).
     """
 
     # HasCredentials protocol
@@ -50,6 +51,18 @@ class MinimalAdapterConfig:
     cli_vars: Dict[str, Any] = field(default_factory=dict)
     target_path: str = "target"
     log_cache_events: bool = False
+
+    # Quoting config — used by RelationProxy during compilation.
+    # Empty dict = use adapter defaults (each adapter defines its own quote policy).
+    quoting: Dict[str, Any] = field(default_factory=dict)
+
+    # Macro dispatch — used by BaseDatabaseWrapper._get_search_packages().
+    # Empty list/dict = no custom dispatch order (use adapter defaults).
+    dependencies: Dict[str, Any] = field(default_factory=dict)
+
+    def get_macro_search_order(self, namespace: str) -> Optional[list]:
+        """Return macro search order for namespace (used by DatabaseWrapper)."""
+        return None
 
     def to_target_dict(self) -> Dict[str, Any]:
         """Return target configuration dictionary."""

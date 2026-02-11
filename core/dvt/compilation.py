@@ -177,13 +177,21 @@ class Linker:
             if dependency in manifest.nodes:
                 self.dependency(node.unique_id, (manifest.nodes[dependency].unique_id))
             elif dependency in manifest.sources:
-                self.dependency(node.unique_id, (manifest.sources[dependency].unique_id))
+                self.dependency(
+                    node.unique_id, (manifest.sources[dependency].unique_id)
+                )
             elif dependency in manifest.metrics:
-                self.dependency(node.unique_id, (manifest.metrics[dependency].unique_id))
+                self.dependency(
+                    node.unique_id, (manifest.metrics[dependency].unique_id)
+                )
             elif dependency in manifest.semantic_models:
-                self.dependency(node.unique_id, (manifest.semantic_models[dependency].unique_id))
+                self.dependency(
+                    node.unique_id, (manifest.semantic_models[dependency].unique_id)
+                )
             elif dependency in manifest.functions:
-                self.dependency(node.unique_id, (manifest.functions[dependency].unique_id))
+                self.dependency(
+                    node.unique_id, (manifest.functions[dependency].unique_id)
+                )
             else:
                 raise GraphDependencyNotFoundError(node, dependency)
 
@@ -281,7 +289,9 @@ class Linker:
                 and manifest.nodes[node_id].resource_type != NodeType.Test
             ):
                 # Get *everything* upstream of the node
-                all_upstream_nodes = nx.traversal.bfs_tree(self.graph, node_id, reverse=True)
+                all_upstream_nodes = nx.traversal.bfs_tree(
+                    self.graph, node_id, reverse=True
+                )
                 # Get the set of upstream nodes not including the current node.
                 upstream_nodes = set([n for n in all_upstream_nodes if n != node_id])
 
@@ -298,13 +308,17 @@ class Linker:
                     # relationship tests). Test nodes do not distinguish
                     # between what node the test is "testing" and what
                     # node(s) it depends on.
-                    test_depends_on = set(manifest.nodes[upstream_test].depends_on_nodes)
+                    test_depends_on = set(
+                        manifest.nodes[upstream_test].depends_on_nodes
+                    )
 
                     # If the set of nodes that an upstream test depends on
                     # is a subset of all upstream nodes of the current node,
                     # add an edge from the upstream test to the current node.
                     if test_depends_on.issubset(upstream_nodes):
-                        self.graph.add_edge(upstream_test, node_id, edge_type="parent_test")
+                        self.graph.add_edge(
+                            upstream_test, node_id, edge_type="parent_test"
+                        )
 
     def add_test_edges_2(self, manifest: Manifest):
         graph = self.graph
@@ -408,7 +422,9 @@ class Linker:
                     new_awaits_for_succs.add((test_id, tuple(deps)))
 
             for succ_id in [
-                s for s in graph.successors(curr_details.node_id) if s in executable_nodes
+                s
+                for s in graph.successors(curr_details.node_id)
+                if s in executable_nodes
             ]:
                 suc_details = details.get(succ_id, None)
                 if suc_details is None:
@@ -426,7 +442,9 @@ class Linker:
                     if len(suc_details.awaits_tests) > 0:
                         removes = set()
                         for awt in suc_details.awaits_tests:
-                            if not any(True for a in awt[1] if a not in suc_details.ancestors):
+                            if not any(
+                                True for a in awt[1] if a not in suc_details.ancestors
+                            ):
                                 removes.add(awt)
                                 new_edges.append((awt[0], succ_id))
 
@@ -458,7 +476,9 @@ class Linker:
         for node_index, node in graph_nodes.items():
             successors = [index_dict[n] for n in self.graph.successors(node["name"])]
             if successors:
-                node["succ"] = [index_dict[n] for n in self.graph.successors(node["name"])]
+                node["succ"] = [
+                    index_dict[n] for n in self.graph.successors(node["name"])
+                ]
 
         return graph_nodes
 
@@ -477,11 +497,16 @@ class Compiler:
         node: ManifestSQLNode,
         manifest: Manifest,
         extra_context: Dict[str, Any],
+        adapter: Optional[Any] = None,
     ) -> Dict[str, Any]:
         if isinstance(node, UnitTestNode):
             context = generate_runtime_unit_test_context(node, self.config, manifest)
         else:
-            context = generate_runtime_model_context(node, self.config, manifest)
+            # DVT: Pass explicit adapter for target-aware compilation.
+            # When adapter is None, the default adapter is used (standard dbt behavior).
+            context = generate_runtime_model_context(
+                node, self.config, manifest, adapter=adapter
+            )
         context.update(extra_context)
 
         if isinstance(node, GenericTestNode):
@@ -500,6 +525,7 @@ class Compiler:
         model: ManifestSQLNode,
         manifest: Manifest,
         extra_context: Optional[Dict[str, Any]],
+        adapter: Optional[Any] = None,
     ) -> Tuple[ManifestSQLNode, List[InjectedCTE]]:
         """This method is called by the 'compile_node' method. Starting
         from the node that it is passed in, it will recursively call
@@ -557,10 +583,12 @@ class Compiler:
             else:
                 # This is an ephemeral parsed model that we can compile.
                 # Render the raw_code and set compiled to True
-                cte_model = self._compile_code(cte_model, manifest, extra_context)
+                cte_model = self._compile_code(
+                    cte_model, manifest, extra_context, adapter=adapter
+                )
                 # recursively call this method, sets extra_ctes_injected to True
                 cte_model, new_prepended_ctes = self._recursively_prepend_ctes(
-                    cte_model, manifest, extra_context
+                    cte_model, manifest, extra_context, adapter=adapter
                 )
                 # Write compiled SQL file
                 self._write_node(cte_model)
@@ -601,12 +629,18 @@ class Compiler:
         node: ManifestSQLNode,
         manifest: Manifest,
         extra_context: Optional[Dict[str, Any]] = None,
+        adapter: Optional[Any] = None,
     ) -> ManifestSQLNode:
         if extra_context is None:
             extra_context = {}
 
-        if node.language == ModelLanguage.python and node.resource_type == NodeType.Model:
-            context = self._create_node_context(node, manifest, extra_context)
+        if (
+            node.language == ModelLanguage.python
+            and node.resource_type == NodeType.Model
+        ):
+            context = self._create_node_context(
+                node, manifest, extra_context, adapter=adapter
+            )
 
             postfix = jinja.get_rendered(
                 "{{ py_script_postfix(model) }}",
@@ -617,7 +651,9 @@ class Compiler:
             node.compiled_code = f"{node.raw_code}\n\n{postfix}"
 
         else:
-            context = self._create_node_context(node, manifest, extra_context)
+            context = self._create_node_context(
+                node, manifest, extra_context, adapter=adapter
+            )
             node.compiled_code = jinja.get_rendered(
                 node.raw_code,
                 context,
@@ -642,8 +678,10 @@ class Compiler:
         if isinstance(node, ModelNode):
             for constraint in node.all_constraints:
                 if constraint.type == ConstraintType.foreign_key and constraint.to:
-                    constraint.to = self._compile_relation_for_foreign_key_constraint_to(
-                        manifest, node, constraint.to
+                    constraint.to = (
+                        self._compile_relation_for_foreign_key_constraint_to(
+                            manifest, node, constraint.to
+                        )
                     )
 
         return node
@@ -666,7 +704,11 @@ class Compiler:
             and foreign_key_node.defer_relation
             and self.config.args.defer
         ):
-            return str(adapter.Relation.create_from(self.config, foreign_key_node.defer_relation))
+            return str(
+                adapter.Relation.create_from(
+                    self.config, foreign_key_node.defer_relation
+                )
+            )
         else:
             return str(adapter.Relation.create_from(self.config, foreign_key_node))
 
@@ -698,7 +740,9 @@ class Compiler:
         ) as out_stream:
             try:
                 out_stream.write(json.dumps(summaries))
-            except Exception as e:  # This is non-essential information, so merely note failures.
+            except (
+                Exception
+            ) as e:  # This is non-essential information, so merely note failures.
                 fire_event(
                     Note(
                         msg=f"An error was encountered writing the graph summary information: {e}"
@@ -739,7 +783,9 @@ class Compiler:
             node.compiled_path = node.get_target_write_path(
                 self.config.target_path, "compiled", split_suffix
             )
-            node.write_node(self.config.project_root, node.compiled_path, node.compiled_code)
+            node.write_node(
+                self.config.project_root, node.compiled_path, node.compiled_code
+            )
         return node
 
     def compile_node(
@@ -749,12 +795,17 @@ class Compiler:
         extra_context: Optional[Dict[str, Any]] = None,
         write: bool = True,
         split_suffix: Optional[str] = None,
+        adapter: Optional[Any] = None,
     ) -> ManifestSQLNode:
         """This is the main entry point into this code. It's called by
         CompileRunner.compile, GenericRPCRunner.compile, and
         RunTask.get_hook_sql. It calls '_compile_code' to render
         the node's raw_code into compiled_code, and then calls the
         recursive method to "prepend" the ctes.
+
+        DVT: The optional ``adapter`` parameter enables target-aware
+        compilation.  When provided, Jinja rendering uses this adapter's
+        Relation class and dialect instead of the default adapter.
         """
         # REVIEW: UnitTestDefinition shouldn't be possible here because of the
         # type of node, and it is likewise an invalid return type.
@@ -767,9 +818,11 @@ class Compiler:
         if hasattr(Lexer, "get_default_instance"):
             Lexer.get_default_instance()
 
-        node = self._compile_code(node, manifest, extra_context)
+        node = self._compile_code(node, manifest, extra_context, adapter=adapter)
 
-        node, _ = self._recursively_prepend_ctes(node, manifest, extra_context)
+        node, _ = self._recursively_prepend_ctes(
+            node, manifest, extra_context, adapter=adapter
+        )
         if write:
             self._write_node(node, split_suffix=split_suffix)
         return node
@@ -814,7 +867,11 @@ def inject_ctes_into_sql(sql: str, ctes: List[InjectedCTE]) -> str:
     for token in parsed.tokens:
         if token.is_keyword and token.normalized == "WITH":
             with_stmt = token
-        elif token.is_keyword and token.normalized == "RECURSIVE" and with_stmt is not None:
+        elif (
+            token.is_keyword
+            and token.normalized == "RECURSIVE"
+            and with_stmt is not None
+        ):
             with_stmt = token
             break
         elif not token.is_whitespace and with_stmt is not None:

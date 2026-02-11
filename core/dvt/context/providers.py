@@ -120,7 +120,9 @@ class RelationProxy:
         return getattr(self._relation_type, key)
 
     def create(self, *args, **kwargs):
-        kwargs["quote_policy"] = merge(self._quoting_config, kwargs.pop("quote_policy", {}))
+        kwargs["quote_policy"] = merge(
+            self._quoting_config, kwargs.pop("quote_policy", {})
+        )
         return self._relation_type.create(*args, **kwargs)
 
 
@@ -156,7 +158,9 @@ class BaseDatabaseWrapper:
         search_prefixes = get_adapter_type_names(self._adapter.type()) + ["default"]
         return search_prefixes
 
-    def _get_search_packages(self, namespace: Optional[str] = None) -> List[Optional[str]]:
+    def _get_search_packages(
+        self, namespace: Optional[str] = None
+    ) -> List[Optional[str]]:
         search_packages: List[Optional[str]] = [None]
 
         if namespace is None:
@@ -165,7 +169,10 @@ class BaseDatabaseWrapper:
             macro_search_order = self._adapter.config.get_macro_search_order(namespace)
             if macro_search_order:
                 search_packages = macro_search_order
-            elif not macro_search_order and namespace in self._adapter.config.dependencies:
+            elif (
+                not macro_search_order
+                and namespace in self._adapter.config.dependencies
+            ):
                 search_packages = [self.config.project_name, namespace]
         else:
             raise CompilationError(
@@ -179,7 +186,9 @@ class BaseDatabaseWrapper:
         self,
         macro_name: str,
         macro_namespace: Optional[str] = None,
-        packages: Optional[List[str]] = None,  # eventually remove since it's fully deprecated
+        packages: Optional[
+            List[str]
+        ] = None,  # eventually remove since it's fully deprecated
     ) -> MacroGenerator:
         search_packages: List[Optional[str]]
 
@@ -255,13 +264,18 @@ class BaseResolver(metaclass=abc.ABCMeta):
             return ""
 
         # Check column-level quote configuration first (overrides source-level)
-        if hasattr(target, "columns") and target.columns and isinstance(target.columns, dict):
+        if (
+            hasattr(target, "columns")
+            and target.columns
+            and isinstance(target.columns, dict)
+        ):
             for _, column_info in target.columns.items():
                 if column_info.name == target.config.event_time:
                     column_found = True
                     # Create the column object
                     column = Column.create(
-                        column_info.name, column_info.data_type if column_info.data_type else ""
+                        column_info.name,
+                        column_info.data_type if column_info.data_type else "",
                     )
                     # Column-level quote setting takes precedence
                     if hasattr(column_info, "quote") and column_info.quote is not None:
@@ -292,7 +306,9 @@ class BaseResolver(metaclass=abc.ABCMeta):
         else:
             return target.config.event_time
 
-    def resolve_event_time_filter(self, target: ManifestNode) -> Optional[EventTimeFilter]:
+    def resolve_event_time_filter(
+        self, target: ManifestNode
+    ) -> Optional[EventTimeFilter]:
         event_time_filter = None
         sample_mode = getattr(self.config.args, "sample", None) is not None
         field_name = self._resolve_event_time_field_name(target)
@@ -306,20 +322,22 @@ class BaseResolver(metaclass=abc.ABCMeta):
             and target.config.event_time
             and isinstance(self.model, (ModelNode, SnapshotNode))
         ):
-
             # Handling of microbatch models
             if (
                 isinstance(self.model, ModelNode)
                 and self.model.config.materialized == "incremental"
                 and self.model.config.incremental_strategy == "microbatch"
-                and self.manifest.use_microbatch_batches(project_name=self.config.project_name)
+                and self.manifest.use_microbatch_batches(
+                    project_name=self.config.project_name
+                )
                 and self.model.batch is not None
             ):
                 # Sample mode microbatch models
                 if sample_mode:
                     start = (
                         self.config.args.sample.start
-                        if self.config.args.sample.start > self.model.batch.event_time_start
+                        if self.config.args.sample.start
+                        > self.model.batch.event_time_start
                         else self.model.batch.event_time_start
                     )
                     end = (
@@ -359,7 +377,10 @@ class BaseResolver(metaclass=abc.ABCMeta):
 class BaseRefResolver(BaseResolver):
     @abc.abstractmethod
     def resolve(
-        self, name: str, package: Optional[str] = None, version: Optional[NodeVersion] = None
+        self,
+        name: str,
+        package: Optional[str] = None,
+        version: Optional[NodeVersion] = None,
     ) -> RelationProxy: ...
 
     def _repack_args(
@@ -367,7 +388,9 @@ class BaseRefResolver(BaseResolver):
     ) -> RefArgs:
         return RefArgs(package=package, name=name, version=version)
 
-    def validate_args(self, name: str, package: Optional[str], version: Optional[NodeVersion]):
+    def validate_args(
+        self, name: str, package: Optional[str], version: Optional[NodeVersion]
+    ):
         if not isinstance(name, str):
             raise CompilationError(
                 f"The name argument to ref() must be a string, got {type(name)}"
@@ -648,7 +671,10 @@ class ParseDatabaseWrapper(BaseDatabaseWrapper):
     """
 
     def __getattr__(self, name):
-        override = name in self._adapter._available_ and name in self._adapter._parse_replacements_
+        override = (
+            name in self._adapter._available_
+            and name in self._adapter._parse_replacements_
+        )
 
         if override:
             return self._adapter._parse_replacements_[name]
@@ -656,7 +682,9 @@ class ParseDatabaseWrapper(BaseDatabaseWrapper):
             return getattr(self._adapter, name)
         else:
             raise AttributeError(
-                "'{}' object has no attribute '{}'".format(self.__class__.__name__, name)
+                "'{}' object has no attribute '{}'".format(
+                    self.__class__.__name__, name
+                )
             )
 
 
@@ -670,14 +698,19 @@ class RuntimeDatabaseWrapper(BaseDatabaseWrapper):
             return getattr(self._adapter, name)
         else:
             raise AttributeError(
-                "'{}' object has no attribute '{}'".format(self.__class__.__name__, name)
+                "'{}' object has no attribute '{}'".format(
+                    self.__class__.__name__, name
+                )
             )
 
 
 # `ref` implementations
 class ParseRefResolver(BaseRefResolver):
     def resolve(
-        self, name: str, package: Optional[str] = None, version: Optional[NodeVersion] = None
+        self,
+        name: str,
+        package: Optional[str] = None,
+        version: Optional[NodeVersion] = None,
     ) -> RelationProxy:
         self.model.refs.append(self._repack_args(name, package, version))
 
@@ -754,7 +787,8 @@ class RuntimeRefResolver(BaseRefResolver):
                 # User has explicitly opted to prefer defer_relation for unselected resources
                 (
                     self.config.args.favor_state
-                    and target_model.unique_id not in selected_resources.SELECTED_RESOURCES
+                    and target_model.unique_id
+                    not in selected_resources.SELECTED_RESOURCES
                 )
                 # Or, this node's relation does not exist in the expected target location (cache lookup)
                 or not get_adapter(self.config).get_relation(
@@ -802,7 +836,9 @@ class OperationRefResolver(RuntimeRefResolver):
         if target_model.is_ephemeral_model:
             # In operations, we can't ref() ephemeral nodes, because
             # Macros do not support set_cte
-            raise OperationsCannotRefEphemeralNodesError(target_model.name, node=self.model)
+            raise OperationsCannotRefEphemeralNodesError(
+                target_model.name, node=self.model
+            )
         else:
             return super().create_relation(target_model)
 
@@ -903,7 +939,9 @@ class ParseMetricResolver(BaseMetricResolver):
 
 
 class RuntimeMetricResolver(BaseMetricResolver):
-    def resolve(self, target_name: str, target_package: Optional[str] = None) -> MetricReference:
+    def resolve(
+        self, target_name: str, target_package: Optional[str] = None
+    ) -> MetricReference:
         target_metric = self.manifest.resolve_metric(
             target_name,
             target_package,
@@ -990,7 +1028,9 @@ class ParseFunctionResolver(BaseFunctionResolver):
     def resolve(self, name: str, package: Optional[str] = None):
         # When you call function(), this is what happens at parse time
         self.model.functions.append(self._repack_args(name, package))
-        return self.Relation.create_from(self.config, self.model, type=RelationType.Function)
+        return self.Relation.create_from(
+            self.config, self.model, type=RelationType.Function
+        )
 
 
 class RuntimeFunctionResolver(BaseFunctionResolver):
@@ -1103,6 +1143,7 @@ class ProviderContext(ManifestContext):
         manifest: Manifest,
         provider: Provider,
         context_config: Optional[ContextConfig],
+        adapter: Optional[Any] = None,
     ) -> None:
         if provider is None:
             raise DbtInternalError(f"Invalid provider given to context: {provider}")
@@ -1113,7 +1154,9 @@ class ProviderContext(ManifestContext):
         self.sql_results: Dict[str, Optional[AttrDict]] = {}
         self.context_config: Optional[ContextConfig] = context_config
         self.provider: Provider = provider
-        self.adapter = get_adapter(self.config)
+        # DVT: Use explicit adapter if provided (target-aware compilation),
+        # otherwise fall back to default adapter from global FACTORY singleton.
+        self.adapter = adapter if adapter is not None else get_adapter(self.config)
         # The macro namespace is used in creating the DatabaseWrapper
         self.db_wrapper = self.provider.DatabaseWrapper(self.adapter, self.namespace)
 
@@ -1189,7 +1232,9 @@ class ProviderContext(ManifestContext):
         rows_affected=Optional[str],
         agate_table: Optional["agate.Table"] = None,
     ) -> str:
-        response = AdapterResponse(_message=message, code=code, rows_affected=rows_affected)
+        response = AdapterResponse(
+            _message=message, code=code, rows_affected=rows_affected
+        )
         return self.store_result(name, response, agate_table)
 
     @contextproperty()
@@ -1202,7 +1247,9 @@ class ProviderContext(ManifestContext):
                     elif value == arg:
                         return
                 raise DbtValidationError(
-                    'Expected value "{}" to be one of {}'.format(value, ",".join(map(str, args)))
+                    'Expected value "{}" to be one of {}'.format(
+                        value, ",".join(map(str, args))
+                    )
                 )
 
             return inner
@@ -1262,7 +1309,9 @@ class ProviderContext(ManifestContext):
             if self.model.package_name != self.config.project_name
             else "."
         )
-        path = os.path.join(self.config.project_root, package_path, self.model.original_file_path)
+        path = os.path.join(
+            self.config.project_root, package_path, self.model.original_file_path
+        )
         if not os.path.exists(path):
             assert self.model.root_path
             path = os.path.join(self.model.root_path, self.model.original_file_path)
@@ -1270,7 +1319,9 @@ class ProviderContext(ManifestContext):
         column_types = self.model.config.column_types
         delimiter = self.model.config.delimiter
         try:
-            table = agate_helper.from_csv(path, text_columns=column_types, delimiter=delimiter)
+            table = agate_helper.from_csv(
+                path, text_columns=column_types, delimiter=delimiter
+            )
         except ValueError as e:
             raise LoadAgateTableValueError(e, node=self.model)
         # this is used by some adapters
@@ -1316,19 +1367,27 @@ class ProviderContext(ManifestContext):
 
             select * from {{ ref('package_name', 'model_name') }}"
         """
-        return self.provider.ref(self.db_wrapper, self.model, self.config, self.manifest)
+        return self.provider.ref(
+            self.db_wrapper, self.model, self.config, self.manifest
+        )
 
     @contextproperty()
     def source(self) -> Callable:
-        return self.provider.source(self.db_wrapper, self.model, self.config, self.manifest)
+        return self.provider.source(
+            self.db_wrapper, self.model, self.config, self.manifest
+        )
 
     @contextproperty()
     def metric(self) -> Callable:
-        return self.provider.metric(self.db_wrapper, self.model, self.config, self.manifest)
+        return self.provider.metric(
+            self.db_wrapper, self.model, self.config, self.manifest
+        )
 
     @contextproperty()
     def function(self) -> Callable:
-        return self.provider.function(self.db_wrapper, self.model, self.config, self.manifest)
+        return self.provider.function(
+            self.db_wrapper, self.model, self.config, self.manifest
+        )
 
     @contextproperty("config")
     def ctx_config(self) -> Config:
@@ -1739,7 +1798,9 @@ class ProviderContext(ManifestContext):
         return selected_resources.SELECTED_RESOURCES
 
     @contextmember()
-    def submit_python_job(self, parsed_model: Dict, compiled_code: str) -> AdapterResponse:
+    def submit_python_job(
+        self, parsed_model: Dict, compiled_code: str
+    ) -> AdapterResponse:
         # Check macro_stack and that the unique id is for a materialization macro
         if not (
             self.context_macro_stack.depth == 2
@@ -1801,7 +1862,8 @@ class ModelContext(ProviderContext):
             return []
         # TODO CT-211
         return [
-            h.to_dict(omit_none=True) for h in self.model.config.pre_hook  # type: ignore[union-attr] # noqa
+            h.to_dict(omit_none=True)
+            for h in self.model.config.pre_hook  # type: ignore[union-attr] # noqa
         ]
 
     @contextproperty()
@@ -1810,13 +1872,17 @@ class ModelContext(ProviderContext):
             return []
         # TODO CT-211
         return [
-            h.to_dict(omit_none=True) for h in self.model.config.post_hook  # type: ignore[union-attr] # noqa
+            h.to_dict(omit_none=True)
+            for h in self.model.config.post_hook  # type: ignore[union-attr] # noqa
         ]
 
     @contextproperty()
     def compiled_code(self) -> Optional[str]:
         # TODO: avoid routing on args.which if possible
-        if getattr(self.model, "defer_relation", None) and self.config.args.which == "clone":
+        if (
+            getattr(self.model, "defer_relation", None)
+            and self.config.args.which == "clone"
+        ):
             # TODO https://github.com/dbt-labs/dbt-core/issues/7976
             return f"select * from {self.model.defer_relation.relation_name or str(self.defer_relation)}"  # type: ignore[union-attr]
         elif getattr(self.model, "extra_ctes_injected", None):
@@ -1885,7 +1951,8 @@ class ModelContext(ProviderContext):
         """
         if getattr(self.model, "defer_relation", None):
             return self.db_wrapper.Relation.create_from(
-                self.config, self.model.defer_relation  # type: ignore
+                self.config,
+                self.model.defer_relation,  # type: ignore
             )
         else:
             return None
@@ -1970,8 +2037,11 @@ def generate_runtime_model_context(
     model: ManifestNode,
     config: RuntimeConfig,
     manifest: Manifest,
+    adapter: Optional[Any] = None,
 ) -> Dict[str, Any]:
-    ctx = ModelContext(model, config, manifest, RuntimeProvider(), None)
+    ctx = ModelContext(
+        model, config, manifest, RuntimeProvider(), None, adapter=adapter
+    )
     return ctx.to_dict()
 
 
@@ -2007,7 +2077,9 @@ def generate_runtime_unit_test_context(
             if macro_package is None and macro_name in ctx_dict:
                 original_context_value = ctx_dict[macro_name]
                 if isinstance(original_context_value, MacroGenerator):
-                    macro_value = UnitTestMacroGenerator(original_context_value, macro_value)
+                    macro_value = UnitTestMacroGenerator(
+                        original_context_value, macro_value
+                    )
                 global_macro_overrides[macro_name] = macro_value
 
             # macro overrides of package-namespaced macros
@@ -2018,11 +2090,16 @@ def generate_runtime_unit_test_context(
             ):
                 original_context_value = ctx_dict[macro_package][macro_name]
                 if isinstance(original_context_value, MacroGenerator):
-                    macro_value = UnitTestMacroGenerator(original_context_value, macro_value)
+                    macro_value = UnitTestMacroGenerator(
+                        original_context_value, macro_value
+                    )
                 package_macro_overrides[(macro_package, macro_name)] = macro_value
 
         # macro overrides of package-namespaced macros
-        for (macro_package, macro_name), macro_override_value in package_macro_overrides.items():
+        for (
+            macro_package,
+            macro_name,
+        ), macro_override_value in package_macro_overrides.items():
             ctx_dict[macro_package][macro_name] = macro_override_value
             # propgate override of namespaced dbt macro to global namespace
             if macro_package == "dvt":
@@ -2186,7 +2263,9 @@ class TestContext(ProviderContext):
         depends_on_macros = []
         # all generic tests use a macro named 'get_where_subquery' to wrap 'model' arg
         # see generic_test_builders.build_model_str
-        get_where_subquery = self.macro_resolver.macros_by_name.get("get_where_subquery")
+        get_where_subquery = self.macro_resolver.macros_by_name.get(
+            "get_where_subquery"
+        )
         if get_where_subquery:
             depends_on_macros.append(get_where_subquery.unique_id)
         if self.model.depends_on and self.model.depends_on.macros:
@@ -2198,7 +2277,11 @@ class TestContext(ProviderContext):
                 depends_on_macros.extend(lookup_macro.depends_on.macros)
 
         macro_namespace = TestMacroNamespace(
-            self.macro_resolver, self._ctx, self.model, self.thread_ctx, depends_on_macros
+            self.macro_resolver,
+            self._ctx,
+            self.model,
+            self.thread_ctx,
+            depends_on_macros,
         )
         self.namespace = macro_namespace
 
@@ -2226,7 +2309,10 @@ class TestContext(ProviderContext):
                 )
                 # the "model" should only be test nodes, but just in case, check
                 # TODO CT-211
-                if self.model.resource_type == NodeType.Test and self.model.file_key_name:  # type: ignore[union-attr] # noqa
+                if (
+                    self.model.resource_type == NodeType.Test
+                    and self.model.file_key_name
+                ):  # type: ignore[union-attr] # noqa
                     source_file = self.manifest.files[self.model.file_id]
                     # TODO CT-211
                     (yaml_key, name) = self.model.file_key_name.split(".")  # type: ignore[union-attr] # noqa
@@ -2244,7 +2330,9 @@ def generate_test_context(
     context_config: ContextConfig,
     macro_resolver: MacroResolver,
 ) -> Dict[str, Any]:
-    ctx = TestContext(model, config, manifest, ParseProvider(), context_config, macro_resolver)
+    ctx = TestContext(
+        model, config, manifest, ParseProvider(), context_config, macro_resolver
+    )
     # The 'to_dict' method in ManifestContext moves all of the macro names
     # in the macro 'namespace' up to top level keys
     return ctx.to_dict()

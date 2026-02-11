@@ -127,11 +127,10 @@ class FederationEngine:
             source_mappings = self._build_source_mappings(model, compiled_sql)
 
             # 4. Extract pushable operations from compiled SQL
-            # The compiled SQL is in the DEFAULT adapter's dialect (since
-            # dbt compiles all models using the default adapter). We use the
-            # default adapter's type for SQL parsing, not the model's target.
-            default_adapter_type = self.config.credentials.type
-            source_dialect = self._get_dialect_for_target(default_adapter_type)
+            # DVT: With target-aware compilation, the compiled SQL is in the
+            # TARGET adapter's dialect (e.g., databricks backticks when the
+            # model targets databricks). We parse using the target's dialect.
+            source_dialect = self._get_dialect_for_target(resolution.target)
             pushable_ops = self.query_optimizer.extract_all_pushable_operations(
                 compiled_sql=compiled_sql,
                 source_mappings=source_mappings,
