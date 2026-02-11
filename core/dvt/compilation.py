@@ -497,16 +497,11 @@ class Compiler:
         node: ManifestSQLNode,
         manifest: Manifest,
         extra_context: Dict[str, Any],
-        adapter: Optional[Any] = None,
     ) -> Dict[str, Any]:
         if isinstance(node, UnitTestNode):
             context = generate_runtime_unit_test_context(node, self.config, manifest)
         else:
-            # DVT: Pass explicit adapter for target-aware compilation.
-            # When adapter is None, the default adapter is used (standard dbt behavior).
-            context = generate_runtime_model_context(
-                node, self.config, manifest, adapter=adapter
-            )
+            context = generate_runtime_model_context(node, self.config, manifest)
         context.update(extra_context)
 
         if isinstance(node, GenericTestNode):
@@ -525,7 +520,6 @@ class Compiler:
         model: ManifestSQLNode,
         manifest: Manifest,
         extra_context: Optional[Dict[str, Any]],
-        adapter: Optional[Any] = None,
     ) -> Tuple[ManifestSQLNode, List[InjectedCTE]]:
         """This method is called by the 'compile_node' method. Starting
         from the node that it is passed in, it will recursively call
@@ -583,12 +577,10 @@ class Compiler:
             else:
                 # This is an ephemeral parsed model that we can compile.
                 # Render the raw_code and set compiled to True
-                cte_model = self._compile_code(
-                    cte_model, manifest, extra_context, adapter=adapter
-                )
+                cte_model = self._compile_code(cte_model, manifest, extra_context)
                 # recursively call this method, sets extra_ctes_injected to True
                 cte_model, new_prepended_ctes = self._recursively_prepend_ctes(
-                    cte_model, manifest, extra_context, adapter=adapter
+                    cte_model, manifest, extra_context
                 )
                 # Write compiled SQL file
                 self._write_node(cte_model)
@@ -629,7 +621,6 @@ class Compiler:
         node: ManifestSQLNode,
         manifest: Manifest,
         extra_context: Optional[Dict[str, Any]] = None,
-        adapter: Optional[Any] = None,
     ) -> ManifestSQLNode:
         if extra_context is None:
             extra_context = {}
@@ -638,9 +629,7 @@ class Compiler:
             node.language == ModelLanguage.python
             and node.resource_type == NodeType.Model
         ):
-            context = self._create_node_context(
-                node, manifest, extra_context, adapter=adapter
-            )
+            context = self._create_node_context(node, manifest, extra_context)
 
             postfix = jinja.get_rendered(
                 "{{ py_script_postfix(model) }}",
@@ -651,9 +640,7 @@ class Compiler:
             node.compiled_code = f"{node.raw_code}\n\n{postfix}"
 
         else:
-            context = self._create_node_context(
-                node, manifest, extra_context, adapter=adapter
-            )
+            context = self._create_node_context(node, manifest, extra_context)
             node.compiled_code = jinja.get_rendered(
                 node.raw_code,
                 context,
@@ -795,17 +782,12 @@ class Compiler:
         extra_context: Optional[Dict[str, Any]] = None,
         write: bool = True,
         split_suffix: Optional[str] = None,
-        adapter: Optional[Any] = None,
     ) -> ManifestSQLNode:
         """This is the main entry point into this code. It's called by
         CompileRunner.compile, GenericRPCRunner.compile, and
         RunTask.get_hook_sql. It calls '_compile_code' to render
         the node's raw_code into compiled_code, and then calls the
         recursive method to "prepend" the ctes.
-
-        DVT: The optional ``adapter`` parameter enables target-aware
-        compilation.  When provided, Jinja rendering uses this adapter's
-        Relation class and dialect instead of the default adapter.
         """
         # REVIEW: UnitTestDefinition shouldn't be possible here because of the
         # type of node, and it is likewise an invalid return type.
@@ -818,11 +800,9 @@ class Compiler:
         if hasattr(Lexer, "get_default_instance"):
             Lexer.get_default_instance()
 
-        node = self._compile_code(node, manifest, extra_context, adapter=adapter)
+        node = self._compile_code(node, manifest, extra_context)
 
-        node, _ = self._recursively_prepend_ctes(
-            node, manifest, extra_context, adapter=adapter
-        )
+        node, _ = self._recursively_prepend_ctes(node, manifest, extra_context)
         if write:
             self._write_node(node, split_suffix=split_suffix)
         return node

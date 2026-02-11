@@ -213,7 +213,7 @@ def cli(ctx, **kwargs):
 @requires.manifest
 def build(ctx, **kwargs):
     """Run all seeds, models, snapshots, and tests in DAG order"""
-    from dvt.task.build import BuildTask
+    from dvt.dvt_tasks.dvt_build import DvtBuildTask as BuildTask
 
     task = BuildTask(
         ctx.obj["flags"],
@@ -397,7 +397,8 @@ def compile(ctx, **kwargs):
 def show(ctx, **kwargs):
     """Generates executable SQL for a named resource or inline query, runs that SQL, and returns a preview of the
     results. Does not materialize anything to the warehouse."""
-    from dvt.task.show import ShowTask, ShowTaskDirect
+    from dvt.dvt_tasks.dvt_show import DvtShowTask as ShowTask
+    from dvt.task.show import ShowTaskDirect
 
     if ctx.obj["flags"].inline_direct:
         # Issue the inline query directly, with no templating. Does not require
@@ -623,7 +624,7 @@ def parse(ctx, **kwargs):
 @requires.manifest
 def run(ctx, **kwargs):
     """Compile SQL and execute against the current target database."""
-    from dvt.task.run import RunTask
+    from dvt.dvt_tasks.dvt_run import DvtRunTask as RunTask
 
     task = RunTask(
         ctx.obj["flags"],
@@ -653,7 +654,7 @@ def run(ctx, **kwargs):
 @requires.runtime_config
 def retry(ctx, **kwargs):
     """Retry the nodes that failed in the previous run."""
-    from dvt.task.retry import RetryTask
+    from dvt.dvt_tasks.dvt_retry import DvtRetryTask as RetryTask
 
     # Retry will parse manifest inside the task after we consolidate the flags
     task = RetryTask(
@@ -758,7 +759,7 @@ def run_operation(ctx, **kwargs):
 @requires.manifest
 def seed(ctx, **kwargs):
     """Load CSV seed files into your data warehouse via Spark JDBC. Use --compute to specify compute engine, --target for destination."""
-    from dvt.task.seed import SeedTask
+    from dvt.dvt_tasks.dvt_seed import DvtSeedTask as SeedTask
 
     task = SeedTask(
         ctx.obj["flags"],

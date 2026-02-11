@@ -1,3 +1,11 @@
+"""DVT RetryTask — extends dbt RetryTask with DVT-specific flag handling.
+
+Adds DROP_FLAGS to strip DVT root-group-only flags (like show_resource_report)
+from both previous_args and current_args before replaying through Flags.from_dict().
+"""
+
+from __future__ import annotations
+
 from pathlib import Path
 
 from click import get_current_context
@@ -13,15 +21,6 @@ from dvt.flags import get_flags, set_flags
 from dvt.graph import GraphQueue
 from dvt.parser.manifest import parse_manifest
 from dvt.task.base import ConfiguredTask
-from dvt.task.build import BuildTask
-from dvt.task.clone import CloneTask
-from dvt.task.compile import CompileTask
-from dvt.task.docs.generate import GenerateTask
-from dvt.task.run import RunTask
-from dvt.task.run_operation import RunOperationTask
-from dvt.task.seed import SeedTask
-from dvt.task.snapshot import SnapshotTask
-from dvt.task.test import TestTask
 from dbt_common.exceptions import DbtRuntimeError
 
 RETRYABLE_STATUSES = {
@@ -31,6 +30,7 @@ RETRYABLE_STATUSES = {
     NodeStatus.RuntimeErr,
     NodeStatus.PartialSuccess,
 }
+
 IGNORE_PARENT_FLAGS = {
     "log_path",
     "output_path",
@@ -43,19 +43,41 @@ IGNORE_PARENT_FLAGS = {
     "warn_error",
 }
 
+# DVT: Flags that live on the root cli group only, not on subcommands.
+# These must be stripped from BOTH previous_args AND current_args before
+# replaying through Flags.from_dict(), otherwise Click raises NoSuchOption.
+DROP_FLAGS = {
+    "show_resource_report",
+}
+
 ALLOW_CLI_OVERRIDE_FLAGS = {"vars", "threads"}
 
-TASK_DICT = {
-    "build": BuildTask,
-    "compile": CompileTask,
-    "clone": CloneTask,
-    "generate": GenerateTask,
-    "seed": SeedTask,
-    "snapshot": SnapshotTask,
-    "test": TestTask,
-    "run": RunTask,
-    "run-operation": RunOperationTask,
-}
+
+# Import task classes — use DVT subclasses where they exist
+def _get_task_dict():
+    """Lazy import to avoid circular imports."""
+    from dvt.dvt_tasks.dvt_build import DvtBuildTask
+    from dvt.task.compile import CompileTask
+    from dvt.task.clone import CloneTask
+    from dvt.task.docs.generate import GenerateTask
+    from dvt.dvt_tasks.dvt_seed import DvtSeedTask
+    from dvt.task.snapshot import SnapshotTask
+    from dvt.task.test import TestTask
+    from dvt.dvt_tasks.dvt_run import DvtRunTask
+    from dvt.task.run_operation import RunOperationTask
+
+    return {
+        "build": DvtBuildTask,
+        "compile": CompileTask,
+        "clone": CloneTask,
+        "generate": GenerateTask,
+        "seed": DvtSeedTask,
+        "snapshot": SnapshotTask,
+        "test": TestTask,
+        "run": DvtRunTask,
+        "run-operation": RunOperationTask,
+    }
+
 
 CMD_DICT = {
     "build": CliCommand.BUILD,
@@ -70,7 +92,9 @@ CMD_DICT = {
 }
 
 
-class RetryTask(ConfiguredTask):
+class DvtRetryTask(ConfiguredTask):
+    """Retry task with DVT-specific flag handling."""
+
     def __init__(self, args: Flags, config: RuntimeConfig) -> None:
         # load previous run results
         state_path = args.state or config.target_path
@@ -84,12 +108,11 @@ class RetryTask(ConfiguredTask):
         self.previous_args = self.previous_results.args
         self.previous_command_name = self.previous_args.get("which")
 
-        # Reslove flags and config
+        # Resolve flags and config
         if args.warn_error:
             RETRYABLE_STATUSES.add(NodeStatus.Warn)
 
-        cli_command = CMD_DICT.get(self.previous_command_name)  # type: ignore
-        # Remove these args when their default values are present, otherwise they'll raise an exception
+        cli_command = CMD_DICT.get(self.previous_command_name)
         args_to_remove = {
             "show": lambda x: True,
             "resource_types": lambda x: x == [],
@@ -101,7 +124,9 @@ class RetryTask(ConfiguredTask):
             if k in self.previous_args and v(self.previous_args[k]):
                 del self.previous_args[k]
         previous_args = {
-            k: v for k, v in self.previous_args.items() if k not in IGNORE_PARENT_FLAGS
+            k: v
+            for k, v in self.previous_args.items()
+            if k not in IGNORE_PARENT_FLAGS and k not in DROP_FLAGS
         }
         click_context = get_current_context()
         current_args = {
@@ -114,35 +139,33 @@ class RetryTask(ConfiguredTask):
                     and k in ALLOW_CLI_OVERRIDE_FLAGS
                 )
             )
+            and k not in DROP_FLAGS
         }
         combined_args = {**previous_args, **current_args}
-        retry_flags = Flags.from_dict(cli_command, combined_args)  # type: ignore
+        retry_flags = Flags.from_dict(cli_command, combined_args)
         set_flags(retry_flags)
         retry_config = RuntimeConfig.from_args(args=retry_flags)
 
         # Parse manifest using resolved config/flags
-        manifest = parse_manifest(retry_config, False, True, retry_flags.write_json, [])  # type: ignore
+        manifest = parse_manifest(retry_config, False, True, retry_flags.write_json, [])
         super().__init__(args, retry_config, manifest)
-        self.task_class = TASK_DICT.get(self.previous_command_name)  # type: ignore
+
+        task_dict = _get_task_dict()
+        self.task_class = task_dict.get(self.previous_command_name)
 
     def run(self):
+        from dvt.dvt_tasks.dvt_run import DvtRunTask
+
         unique_ids = {
             result.unique_id
             for result in self.previous_results.results
             if result.status in RETRYABLE_STATUSES
-            # Avoid retrying operation nodes unless we are retrying the run-operation command
             and not (
                 self.previous_command_name != "run-operation"
                 and result.unique_id.startswith("operation.")
             )
         }
 
-        # We need this so that re-running of a microbatch model will only rerun
-        # batches that previously failed. Note _explicitly_ do no pass the
-        # batch info if there were _no_ successful batches previously. This is
-        # because passing the batch info _forces_ the microbatch process into
-        # _incremental_ model, and it may be that we need to be in full refresh
-        # mode which is only handled if previous_batch_results _isn't_ passed for a node
         batch_map = {
             result.unique_id: result.batch_results
             for result in self.previous_results.results
@@ -155,9 +178,7 @@ class RetryTask(ConfiguredTask):
             )
         }
 
-        # Tasks without get_graph_queue (e.g. run-operation) and no failed nodes to retry.
         if not unique_ids and not hasattr(self.task_class, "get_graph_queue"):
-            # Return early with the previous results as the past invocation was successful
             return self.previous_results
 
         class TaskWrapper(self.task_class):
@@ -175,7 +196,7 @@ class RetryTask(ConfiguredTask):
             self.manifest,
         )
 
-        if self.task_class == RunTask:
+        if self.task_class == DvtRunTask:
             task.batch_map = batch_map
 
         return_value = task.run()
