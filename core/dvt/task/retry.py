@@ -43,6 +43,13 @@ IGNORE_PARENT_FLAGS = {
     "warn_error",
 }
 
+# DVT: Flags that live on the root cli group only, not on subcommands.
+# These must be stripped from BOTH previous_args AND current_args before
+# replaying through Flags.from_dict(), otherwise Click raises NoSuchOption.
+DROP_FLAGS = {
+    "show_resource_report",
+}
+
 ALLOW_CLI_OVERRIDE_FLAGS = {"vars", "threads"}
 
 TASK_DICT = {
@@ -93,23 +100,30 @@ class RetryTask(ConfiguredTask):
         args_to_remove = {
             "show": lambda x: True,
             "resource_types": lambda x: x == [],
-            "warn_error_options": lambda x: x == {"warn": [], "error": [], "silence": []},
+            "warn_error_options": lambda x: (
+                x == {"warn": [], "error": [], "silence": []}
+            ),
         }
         for k, v in args_to_remove.items():
             if k in self.previous_args and v(self.previous_args[k]):
                 del self.previous_args[k]
         previous_args = {
-            k: v for k, v in self.previous_args.items() if k not in IGNORE_PARENT_FLAGS
+            k: v
+            for k, v in self.previous_args.items()
+            if k not in IGNORE_PARENT_FLAGS and k not in DROP_FLAGS
         }
         click_context = get_current_context()
         current_args = {
             k: v
             for k, v in args.__dict__.items()
-            if k in IGNORE_PARENT_FLAGS
-            or (
-                click_context.get_parameter_source(k) == ParameterSource.COMMANDLINE
-                and k in ALLOW_CLI_OVERRIDE_FLAGS
+            if (
+                k in IGNORE_PARENT_FLAGS
+                or (
+                    click_context.get_parameter_source(k) == ParameterSource.COMMANDLINE
+                    and k in ALLOW_CLI_OVERRIDE_FLAGS
+                )
             )
+            and k not in DROP_FLAGS
         }
         combined_args = {**previous_args, **current_args}
         retry_flags = Flags.from_dict(cli_command, combined_args)  # type: ignore

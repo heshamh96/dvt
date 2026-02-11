@@ -114,6 +114,22 @@ class BaseLoader(ABC):
     # DDL Operations via Adapter
     # =========================================================================
 
+    def _safe_commit(self, adapter: Any) -> None:
+        """Commit the adapter connection, tolerating aborted transaction state.
+
+        On PostgreSQL, a failed SQL statement aborts the current transaction.
+        Calling commit() on an aborted transaction raises an error or silently
+        rolls back.  This helper catches that error and resets the connection
+        via rollback so subsequent operations can proceed.
+        """
+        try:
+            adapter.connections.commit()
+        except Exception:
+            try:
+                adapter.connections.rollback()
+            except Exception:
+                pass  # Connection may already be clean
+
     def _execute_ddl(
         self,
         adapter: Any,
@@ -153,7 +169,7 @@ class BaseLoader(ABC):
                     # Table might not exist - will be created by Spark
                     pass
             # Commit DDL so it's visible to other connections (COPY, JDBC)
-            adapter.connections.commit()
+            self._safe_commit(adapter)
 
     def _ensure_schema_exists(
         self,
@@ -177,7 +193,7 @@ class BaseLoader(ABC):
                     adapter.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
                 except Exception:
                     pass  # Schema might already exist or we might not have permissions
-                adapter.connections.commit()
+                self._safe_commit(adapter)
 
     def _create_table_with_adapter(
         self,
@@ -212,7 +228,7 @@ class BaseLoader(ABC):
                 # Table might already exist (IF NOT EXISTS not supported everywhere)
                 self._log(f"Create table note: {e}")
             # Commit DDL so it's visible to other connections (COPY, JDBC)
-            adapter.connections.commit()
+            self._safe_commit(adapter)
 
     # =========================================================================
     # Spark JDBC Load - Default Data Loading Method

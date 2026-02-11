@@ -125,18 +125,17 @@ class PostgresLoader(BaseLoader):
             conn.autocommit = False
             cursor = conn.cursor()
 
-            # DDL: DROP or TRUNCATE
+            # DDL: Always DROP + CREATE for overwrite mode.
+            # We always re-create the table from the current DataFrame schema
+            # rather than truncating, because:
+            # 1. The old schema may have NOT NULL constraints from previous runs
+            #    that don't match the current data (Spark nullable inference is
+            #    unreliable for federated sources).
+            # 2. Column types/names may have changed between runs.
+            # 3. CREATE TABLE IF NOT EXISTS would be a no-op on an existing table.
             if config.mode == "overwrite":
-                if config.full_refresh:
-                    self._log(f"Dropping {config.table_name}...")
-                    cursor.execute(f"DROP TABLE IF EXISTS {quoted_table} CASCADE")
-                elif config.truncate:
-                    self._log(f"Truncating {config.table_name}...")
-                    try:
-                        cursor.execute(f"TRUNCATE TABLE {quoted_table}")
-                    except Exception:
-                        conn.rollback()  # Reset after failed TRUNCATE
-                        # Table might not exist — will be created below
+                self._log(f"Dropping {config.table_name}...")
+                cursor.execute(f"DROP TABLE IF EXISTS {quoted_table} CASCADE")
 
             # DDL: CREATE TABLE with properly quoted column names
             self._log(f"Creating table {config.table_name} via adapter DDL...")
