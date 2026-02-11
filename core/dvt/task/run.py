@@ -625,6 +625,38 @@ class NonDefaultPushdownRunner(CompileRunner):
             return self.config.profile_name
         return "default"
 
+    def _transpile_sql(
+        self, sql: str, source_adapter_type: str, target_adapter_type: str
+    ) -> str:
+        """Transpile SQL from source dialect to target dialect using SQLGlot.
+
+        The compiled SQL is in the default adapter's dialect (e.g., postgres with
+        double-quoted identifiers). For non-default pushdown, we need to convert
+        it to the target adapter's dialect (e.g., databricks with backtick-quoted).
+
+        Args:
+            sql: Compiled SQL in source dialect
+            source_adapter_type: Source adapter type (e.g., "postgres")
+            target_adapter_type: Target adapter type (e.g., "databricks")
+
+        Returns:
+            SQL transpiled to the target dialect
+        """
+        if source_adapter_type == target_adapter_type:
+            return sql
+
+        try:
+            import sqlglot
+            from dvt.utils.identifiers import get_sqlglot_dialect
+
+            source_dialect = get_sqlglot_dialect(source_adapter_type)
+            target_dialect = get_sqlglot_dialect(target_adapter_type)
+
+            return sqlglot.transpile(sql, read=source_dialect, write=target_dialect)[0]
+        except Exception:
+            # If transpilation fails, return original SQL
+            return sql
+
     def execute(self, model: ModelNode, manifest: Manifest) -> RunResult:
         """Execute model via pushdown on a non-default target adapter.
 
@@ -644,6 +676,16 @@ class NonDefaultPushdownRunner(CompileRunner):
             profile_name=self._get_profile_name(),
             target_name=self.resolution.target,
             profiles_dir=self._get_profiles_dir(),
+        )
+
+        # Transpile SQL from default adapter dialect to target adapter dialect
+        # The compiled SQL is in the default adapter's quoting style (e.g., postgres
+        # uses "double quotes") but the target may need different quoting (e.g.,
+        # databricks uses `backticks`)
+        default_adapter_type = self.adapter.type()
+        target_adapter_type = target_adapter.type()
+        compiled_sql = self._transpile_sql(
+            compiled_sql, default_adapter_type, target_adapter_type
         )
 
         materialization = model.config.materialized or "table"

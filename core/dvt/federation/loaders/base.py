@@ -152,6 +152,8 @@ class BaseLoader(ABC):
                 except Exception:
                     # Table might not exist - will be created by Spark
                     pass
+            # Commit DDL so it's visible to other connections (COPY, JDBC)
+            adapter.connections.commit()
 
     def _ensure_schema_exists(
         self,
@@ -175,6 +177,7 @@ class BaseLoader(ABC):
                     adapter.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
                 except Exception:
                     pass  # Schema might already exist or we might not have permissions
+                adapter.connections.commit()
 
     def _create_table_with_adapter(
         self,
@@ -208,6 +211,8 @@ class BaseLoader(ABC):
             except Exception as e:
                 # Table might already exist (IF NOT EXISTS not supported everywhere)
                 self._log(f"Create table note: {e}")
+            # Commit DDL so it's visible to other connections (COPY, JDBC)
+            adapter.connections.commit()
 
     # =========================================================================
     # Spark JDBC Load - Default Data Loading Method

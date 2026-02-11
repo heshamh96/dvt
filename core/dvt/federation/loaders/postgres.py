@@ -68,15 +68,20 @@ class PostgresLoader(BaseLoader):
     ) -> LoadResult:
         """Load via PostgreSQL COPY FROM.
 
+        All DDL and data loading happens on a single psycopg2 connection
+        to avoid transaction visibility issues with the dbt adapter's
+        connection management (which may rollback uncommitted DDL).
+
         Steps:
-        1. Execute DDL via adapter (TRUNCATE or DROP)
-        2. Create table via adapter DDL with properly quoted columns
+        1. DROP/TRUNCATE table (if overwrite mode)
+        2. CREATE TABLE with properly quoted columns
         3. Stream data via COPY FROM STDIN
+        4. COMMIT
 
         Args:
             df: PySpark DataFrame to load
             config: Load configuration
-            adapter: dbt adapter for DDL operations
+            adapter: dbt adapter (used only for table name quoting)
 
         Returns:
             LoadResult with success status and metadata
@@ -94,15 +99,7 @@ class PostgresLoader(BaseLoader):
         if not config.connection_config:
             raise ValueError("connection_config required for COPY")
 
-        # Execute DDL via adapter if provided
-        if adapter and config.mode == "overwrite":
-            self._execute_ddl(adapter, config)
-
-        # Create table with properly quoted column names via adapter DDL
-        if adapter:
-            self._create_table_with_adapter(adapter, df, config)
-
-        # Get quoted table name for COPY SQL
+        # Get quoted table name
         if adapter:
             from dvt.federation.adapter_manager import get_quoted_table_name
 
@@ -110,7 +107,13 @@ class PostgresLoader(BaseLoader):
         else:
             quoted_table = config.table_name
 
-        # Now COPY data into the existing table
+        # Build CREATE TABLE DDL from DataFrame schema
+        from dvt.utils.identifiers import build_create_table_sql
+
+        adapter_type = config.connection_config.get("type", "postgres")
+        create_sql = build_create_table_sql(df, adapter_type, quoted_table)
+
+        # Open a single psycopg2 connection for DDL + COPY
         from dvt.federation.auth.postgres import PostgresAuthHandler
 
         handler = PostgresAuthHandler()
@@ -121,6 +124,23 @@ class PostgresLoader(BaseLoader):
             conn = psycopg2.connect(**connect_kwargs)
             conn.autocommit = False
             cursor = conn.cursor()
+
+            # DDL: DROP or TRUNCATE
+            if config.mode == "overwrite":
+                if config.full_refresh:
+                    self._log(f"Dropping {config.table_name}...")
+                    cursor.execute(f"DROP TABLE IF EXISTS {quoted_table} CASCADE")
+                elif config.truncate:
+                    self._log(f"Truncating {config.table_name}...")
+                    try:
+                        cursor.execute(f"TRUNCATE TABLE {quoted_table}")
+                    except Exception:
+                        conn.rollback()  # Reset after failed TRUNCATE
+                        # Table might not exist — will be created below
+
+            # DDL: CREATE TABLE with properly quoted column names
+            self._log(f"Creating table {config.table_name} via adapter DDL...")
+            cursor.execute(create_sql)
 
             # Collect DataFrame to driver
             self._log("Collecting DataFrame for COPY...")
@@ -156,7 +176,7 @@ class PostgresLoader(BaseLoader):
                 buffer.write("\t".join(values) + "\n")
             buffer.seek(0)
 
-            # Use COPY FROM STDIN
+            # COPY FROM STDIN
             self._log(f"Loading {config.table_name} via COPY FROM...")
             columns_str = ", ".join(f'"{col}"' for col in columns)
             copy_sql = (
