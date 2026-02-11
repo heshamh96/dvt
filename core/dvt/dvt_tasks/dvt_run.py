@@ -10,26 +10,20 @@ The base RunTask in dvt.task.run remains identical to upstream dbt-core.
 
 from __future__ import annotations
 
-import time
-from datetime import datetime, timezone
 from typing import AbstractSet, Dict, Optional, Type
 
 from dvt.adapters.base import BaseAdapter
 from dvt.adapters.factory import get_adapter
-from dvt.artifacts.schemas.results import RunStatus
-from dvt.artifacts.schemas.run import RunResult
-from dvt.cli.flags import Flags
 from dvt.config import RuntimeConfig
+from dvt.config.user_config import load_buckets_for_profile, load_computes_for_profile
 from dvt.contracts.graph.manifest import Manifest
 from dvt.dvt_compilation.dvt_compiler import DvtCompiler
 from dvt.dvt_runners.federation_runner import FederationModelRunner
 from dvt.dvt_runners.pushdown_runner import NonDefaultPushdownRunner
 from dvt.federation.resolver import ExecutionPath, FederationResolver, ResolvedExecution
 from dvt.federation.spark_manager import SparkManager
-from dvt.config.user_config import load_computes_for_profile, load_buckets_for_profile
 from dvt.task.base import BaseRunner
-from dvt.task.run import ModelRunner, MicrobatchModelRunner, RunTask
-from dvt.task.printer import print_run_end_messages
+from dvt.task.run import MicrobatchModelRunner, ModelRunner, RunTask
 from dbt_common.events.functions import fire_event
 from dbt_common.events.types import Formatting
 from dbt_common.exceptions import DbtInternalError
@@ -202,11 +196,7 @@ class DvtRunTask(RunTask):
             return
 
         try:
-            profile_name = (
-                self.config.profile_name
-                if hasattr(self.config, "profile_name")
-                else "default"
-            )
+            profile_name = self.config.profile_name
             profiles_dir = getattr(self.args, "profiles_dir", None)
 
             compute_config = {}

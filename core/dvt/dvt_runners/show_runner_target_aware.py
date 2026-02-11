@@ -13,8 +13,6 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Any
-
 from dvt.artifacts.schemas.results import RunStatus
 from dvt.artifacts.schemas.run import RunResult
 from dvt.federation.resolver import ResolvedExecution

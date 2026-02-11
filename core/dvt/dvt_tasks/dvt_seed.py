@@ -11,7 +11,6 @@ Use --compute to specify compute engine, --target for destination.
 
 from __future__ import annotations
 
-import sys
 from typing import Any, Dict, Optional, Type
 
 from dvt.artifacts.schemas.run import RunExecutionResult
@@ -21,8 +20,9 @@ from dvt.node_types import NodeType
 from dvt.task.base import BaseRunner
 from dvt.task.printer import print_run_end_messages
 from dvt.task.run import RunTask
+from dbt_common.events.functions import fire_event
+from dbt_common.events.types import Formatting
 from dbt_common.exceptions import DbtInternalError
-from dbt_common.ui import green
 
 
 def _load_compute_config(
@@ -132,7 +132,7 @@ class DvtSeedTask(RunTask):
         if target_name:
             info_parts.append(f"target={target_name}")
 
-        sys.stderr.write(green(" ".join(info_parts) + "\n"))
+        fire_event(Formatting(msg=" ".join(info_parts)))
         return SparkSeedRunner
 
     def task_end_messages(self, results) -> None:

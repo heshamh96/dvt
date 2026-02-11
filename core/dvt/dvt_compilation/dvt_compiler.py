@@ -13,7 +13,6 @@ standard dbt Compiler.
 from typing import Any, Dict, List, Optional, Tuple
 
 from dvt.compilation import Compiler
-from dvt.context.providers import generate_runtime_model_context
 from dvt.contracts.graph.manifest import Manifest
 from dvt.contracts.graph.nodes import (
     InjectedCTE,
@@ -25,13 +24,7 @@ from dvt.exceptions import DbtInternalError, DbtRuntimeError
 
 
 class DvtCompiler(Compiler):
-    """Compiler that supports target-aware compilation via an ``adapter``
-    parameter threaded through the compilation chain.
-
-    All public methods mirror the base ``Compiler`` API with an additional
-    optional ``adapter`` keyword argument.  When ``adapter`` is ``None``,
-    the behaviour is identical to the standard dbt ``Compiler``.
-    """
+    """Compiler with target-aware compilation via an optional ``adapter`` parameter."""
 
     # ------------------------------------------------------------------
     # compile_node — main entry point

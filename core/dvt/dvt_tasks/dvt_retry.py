@@ -1,47 +1,31 @@
-"""DVT RetryTask — extends dbt RetryTask with DVT-specific flag handling.
+"""DVT RetryTask — extends dbt RetryTask with DVT-specific overrides.
 
-Adds DROP_FLAGS to strip DVT root-group-only flags (like show_resource_report)
-from both previous_args and current_args before replaying through Flags.from_dict().
+Two differences from the base RetryTask:
+1. DROP_FLAGS: Strips DVT root-group-only flags (like show_resource_report)
+   from both previous_args and current_args before replaying through
+   Flags.from_dict(), otherwise Click raises NoSuchOption.
+2. TASK_DICT: Uses DVT subclasses (DvtRunTask, DvtBuildTask, DvtSeedTask)
+   via a lazy import to avoid circular imports.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from click import get_current_context
 from click.core import ParameterSource
 
-from dvt.artifacts.schemas.results import NodeStatus
 from dvt.cli.flags import Flags
-from dvt.cli.types import Command as CliCommand
 from dvt.config import RuntimeConfig
-from dvt.constants import RUN_RESULTS_FILE_NAME
-from dvt.contracts.state import load_result_state
 from dvt.flags import get_flags, set_flags
 from dvt.graph import GraphQueue
 from dvt.parser.manifest import parse_manifest
-from dvt.task.base import ConfiguredTask
+from dvt.task.retry import (
+    CMD_DICT,
+    ALLOW_CLI_OVERRIDE_FLAGS,
+    IGNORE_PARENT_FLAGS,
+    RETRYABLE_STATUSES,
+    RetryTask,
+)
 from dbt_common.exceptions import DbtRuntimeError
-
-RETRYABLE_STATUSES = {
-    NodeStatus.Error,
-    NodeStatus.Fail,
-    NodeStatus.Skipped,
-    NodeStatus.RuntimeErr,
-    NodeStatus.PartialSuccess,
-}
-
-IGNORE_PARENT_FLAGS = {
-    "log_path",
-    "output_path",
-    "profiles_dir",
-    "profiles_dir_exists_false",
-    "project_dir",
-    "defer_state",
-    "deprecated_state",
-    "target_path",
-    "warn_error",
-}
 
 # DVT: Flags that live on the root cli group only, not on subcommands.
 # These must be stripped from BOTH previous_args AND current_args before
@@ -50,21 +34,18 @@ DROP_FLAGS = {
     "show_resource_report",
 }
 
-ALLOW_CLI_OVERRIDE_FLAGS = {"vars", "threads"}
 
-
-# Import task classes — use DVT subclasses where they exist
 def _get_task_dict():
-    """Lazy import to avoid circular imports."""
+    """Lazy import to avoid circular imports — uses DVT subclasses."""
     from dvt.dvt_tasks.dvt_build import DvtBuildTask
-    from dvt.task.compile import CompileTask
-    from dvt.task.clone import CloneTask
-    from dvt.task.docs.generate import GenerateTask
+    from dvt.dvt_tasks.dvt_run import DvtRunTask
     from dvt.dvt_tasks.dvt_seed import DvtSeedTask
+    from dvt.task.clone import CloneTask
+    from dvt.task.compile import CompileTask
+    from dvt.task.docs.generate import GenerateTask
+    from dvt.task.run_operation import RunOperationTask
     from dvt.task.snapshot import SnapshotTask
     from dvt.task.test import TestTask
-    from dvt.dvt_tasks.dvt_run import DvtRunTask
-    from dvt.task.run_operation import RunOperationTask
 
     return {
         "build": DvtBuildTask,
@@ -79,24 +60,24 @@ def _get_task_dict():
     }
 
 
-CMD_DICT = {
-    "build": CliCommand.BUILD,
-    "compile": CliCommand.COMPILE,
-    "clone": CliCommand.CLONE,
-    "generate": CliCommand.DOCS_GENERATE,
-    "seed": CliCommand.SEED,
-    "snapshot": CliCommand.SNAPSHOT,
-    "test": CliCommand.TEST,
-    "run": CliCommand.RUN,
-    "run-operation": CliCommand.RUN_OPERATION,
-}
+class DvtRetryTask(RetryTask):
+    """RetryTask with DVT-specific flag stripping and task class routing.
 
-
-class DvtRetryTask(ConfiguredTask):
-    """Retry task with DVT-specific flag handling."""
+    Cannot delegate to super().__init__() because the base RetryTask hard-codes
+    the module-level TASK_DICT (with dbt classes) and lacks DROP_FLAGS filtering.
+    So we override __init__ fully, reusing the shared constants from the base module.
+    """
 
     def __init__(self, args: Flags, config: RuntimeConfig) -> None:
-        # load previous run results
+        # Replicate base RetryTask.__init__ with DVT additions.
+        # We call ConfiguredTask.__init__ at the end (same as base).
+        from pathlib import Path
+
+        from dvt.artifacts.schemas.results import NodeStatus
+        from dvt.constants import RUN_RESULTS_FILE_NAME
+        from dvt.contracts.state import load_result_state
+        from dvt.task.base import ConfiguredTask
+
         state_path = args.state or config.target_path
         self.previous_results = load_result_state(
             Path(config.project_root) / Path(state_path) / RUN_RESULTS_FILE_NAME
@@ -108,7 +89,6 @@ class DvtRetryTask(ConfiguredTask):
         self.previous_args = self.previous_results.args
         self.previous_command_name = self.previous_args.get("which")
 
-        # Resolve flags and config
         if args.warn_error:
             RETRYABLE_STATUSES.add(NodeStatus.Warn)
 
@@ -123,12 +103,15 @@ class DvtRetryTask(ConfiguredTask):
         for k, v in args_to_remove.items():
             if k in self.previous_args and v(self.previous_args[k]):
                 del self.previous_args[k]
+
+        # DVT: filter out DROP_FLAGS from previous args
         previous_args = {
             k: v
             for k, v in self.previous_args.items()
             if k not in IGNORE_PARENT_FLAGS and k not in DROP_FLAGS
         }
         click_context = get_current_context()
+        # DVT: filter out DROP_FLAGS from current args
         current_args = {
             k: v
             for k, v in args.__dict__.items()
@@ -146,10 +129,11 @@ class DvtRetryTask(ConfiguredTask):
         set_flags(retry_flags)
         retry_config = RuntimeConfig.from_args(args=retry_flags)
 
-        # Parse manifest using resolved config/flags
         manifest = parse_manifest(retry_config, False, True, retry_flags.write_json, [])
-        super().__init__(args, retry_config, manifest)
+        # Call ConfiguredTask.__init__ directly (skip RetryTask.__init__)
+        ConfiguredTask.__init__(self, args, retry_config, manifest)
 
+        # DVT: use lazy task dict with DVT subclasses
         task_dict = _get_task_dict()
         self.task_class = task_dict.get(self.previous_command_name)
 
@@ -196,11 +180,9 @@ class DvtRetryTask(ConfiguredTask):
             self.manifest,
         )
 
+        # DVT: check DvtRunTask (not base RunTask)
         if self.task_class == DvtRunTask:
             task.batch_map = batch_map
 
         return_value = task.run()
         return return_value
-
-    def interpret_results(self, *args, **kwargs):
-        return self.task_class.interpret_results(*args, **kwargs)

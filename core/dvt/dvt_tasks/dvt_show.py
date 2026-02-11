@@ -7,7 +7,7 @@ on the correct target adapter.
 
 from __future__ import annotations
 
-from typing import Dict, Optional
+from typing import Dict
 
 from dvt.adapters.factory import get_adapter
 from dvt.contracts.graph.nodes import SeedNode
@@ -46,8 +46,6 @@ class DvtShowTask(ShowTask):
     def get_runner(self, node):
         """Route to the correct runner based on federation resolution."""
         adapter = get_adapter(self.config)
-        run_count = 0
-        num_nodes = 0
 
         if node.is_ephemeral_model:
             run_count = 0
@@ -81,11 +79,7 @@ class DvtShowTask(ShowTask):
                             )
                         profiles_dir = str(profiles_dir) if profiles_dir else None
 
-                        profile_name = (
-                            self.config.profile_name
-                            if hasattr(self.config, "profile_name")
-                            else "default"
-                        )
+                        profile_name = self.config.profile_name
 
                         target_adapter = AdapterManager.get_adapter(
                             profile_name=profile_name,
