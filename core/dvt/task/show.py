@@ -28,13 +28,23 @@ class ShowRunner(CompileRunner):
         # Allow passing in -1 (or any negative number) to get all rows
         limit = None if self.config.args.limit < 0 else self.config.args.limit
 
-        model_context = generate_runtime_model_context(compiled_node, self.config, manifest)
+        model_context = generate_runtime_model_context(
+            compiled_node, self.config, manifest
+        )
+
+        # Wrap compiled SQL in a subquery to avoid LIMIT clause conflicts.
+        # The get_show_sql macro appends its own LIMIT, which produces invalid
+        # SQL if the model already contains a LIMIT clause (e.g., "... LIMIT 100\nlimit 10").
+        # Wrapping in a subquery makes the outer LIMIT apply cleanly.
+        compiled_code = model_context["compiled_code"]
+        compiled_code = f"SELECT * FROM ({compiled_code}) AS _dvt_show_subq"
+
         compiled_node.compiled_code = self.adapter.execute_macro(
             macro_name="get_show_sql",
             macro_resolver=manifest,
             context_override=model_context,
             kwargs={
-                "compiled_code": model_context["compiled_code"],
+                "compiled_code": compiled_code,
                 "sql_header": model_context["config"].get("sql_header"),
                 "limit": limit,
             },
@@ -75,7 +85,9 @@ class ShowTask(CompileTask):
         is_inline = bool(getattr(self.args, "inline", None))
 
         if is_inline:
-            matched_results = [result for result in results if result.node.name == "inline_query"]
+            matched_results = [
+                result for result in results if result.node.name == "inline_query"
+            ]
         else:
             matched_results = []
             for result in results:
@@ -129,7 +141,9 @@ class ShowTaskDirect(ConfiguredTask):
         adapter = get_adapter(self.config)
         with adapter.connection_named("show", should_release_connection=False):
             limit = None if self.args.limit < 0 else self.args.limit
-            response, table = adapter.execute(self.args.inline_direct, fetch=True, limit=limit)
+            response, table = adapter.execute(
+                self.args.inline_direct, fetch=True, limit=limit
+            )
 
             output = io.StringIO()
             if self.args.output == "json":
