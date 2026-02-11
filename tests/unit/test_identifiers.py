@@ -1,8 +1,8 @@
 # coding=utf-8
 """Unit tests for dvt.utils.identifiers module.
 
-Tests the column name sanitization utilities that ensure SQL compatibility
-across all database adapters (Postgres, Snowflake, Databricks, etc.).
+Tests the identifier quoting and DDL generation utilities that preserve
+original column names across all database adapters via dialect-aware quoting.
 """
 
 import pytest
@@ -10,137 +10,11 @@ import pytest
 from dvt.utils.identifiers import (
     ADAPTER_TO_SQLGLOT,
     build_create_table_column_types,
+    build_create_table_sql,
     get_sqlglot_dialect,
-    needs_sanitization,
     quote_identifier,
-    sanitize_column_name,
     spark_type_to_sql_type,
 )
-
-
-class TestSanitizeColumnName:
-    """Tests for sanitize_column_name function."""
-
-    def test_simple_name_unchanged(self):
-        """Simple alphanumeric names should remain unchanged."""
-        assert sanitize_column_name("customer_id") == "customer_id"
-        assert sanitize_column_name("Name") == "Name"
-        assert sanitize_column_name("COLUMN_NAME") == "COLUMN_NAME"
-
-    def test_spaces_replaced_with_underscores(self):
-        """Spaces should be replaced with underscores."""
-        assert sanitize_column_name("Customer Code") == "Customer_Code"
-        assert sanitize_column_name("First Name") == "First_Name"
-        assert sanitize_column_name("A B C") == "A_B_C"
-
-    def test_leading_trailing_whitespace_stripped(self):
-        """Leading and trailing whitespace should be stripped."""
-        assert sanitize_column_name(" Price ") == "Price"
-        assert sanitize_column_name("  Total Cost  ") == "Total_Cost"
-        assert sanitize_column_name("\tColumn\t") == "Column"
-
-    def test_special_characters_replaced(self):
-        """Special characters should be replaced with underscores."""
-        assert sanitize_column_name("price($)") == "price"
-        assert sanitize_column_name("amount-total") == "amount_total"
-        assert sanitize_column_name("user@email") == "user_email"
-        assert sanitize_column_name("col.name") == "col_name"
-
-    def test_multiple_underscores_collapsed(self):
-        """Multiple consecutive underscores should be collapsed to one."""
-        assert sanitize_column_name("a  b") == "a_b"
-        assert sanitize_column_name("a___b") == "a_b"
-        assert sanitize_column_name("a - b") == "a_b"
-
-    def test_leading_digit_prefixed(self):
-        """Names starting with a digit should be prefixed with underscore."""
-        assert sanitize_column_name("123column") == "_123column"
-        assert sanitize_column_name("1st_place") == "_1st_place"
-        assert sanitize_column_name("2023_data") == "_2023_data"
-
-    def test_empty_string_returns_default(self):
-        """Empty or whitespace-only strings should return default name."""
-        assert sanitize_column_name("") == "_column"
-        assert sanitize_column_name("   ") == "_column"
-        assert sanitize_column_name("\t\n") == "_column"
-
-    def test_only_special_chars_returns_default(self):
-        """Strings with only special characters should return default name."""
-        assert sanitize_column_name("@#$%") == "_column"
-        assert sanitize_column_name("...") == "_column"
-        assert sanitize_column_name("   -   ") == "_column"
-
-    def test_preserves_case(self):
-        """Original case should be preserved."""
-        assert sanitize_column_name("CustomerName") == "CustomerName"
-        assert sanitize_column_name("UPPER CASE") == "UPPER_CASE"
-        assert sanitize_column_name("lower case") == "lower_case"
-
-    def test_unicode_characters_replaced(self):
-        """Unicode/non-ASCII characters should be replaced."""
-        assert sanitize_column_name("café") == "caf"
-        assert sanitize_column_name("über") == "ber"
-        assert sanitize_column_name("日本語") == "_column"  # All non-ASCII
-
-    def test_real_world_examples(self):
-        """Test with real column names from the failing seed files."""
-        # From customers_db_1.csv
-        assert sanitize_column_name("Customer Code") == "Customer_Code"
-        assert sanitize_column_name("Customer name") == "Customer_name"
-        assert sanitize_column_name("Customer Channel type") == "Customer_Channel_type"
-        assert (
-            sanitize_column_name(" Customer coordinates X ") == "Customer_coordinates_X"
-        )
-        assert (
-            sanitize_column_name(" Customer coordinates y ") == "Customer_coordinates_y"
-        )
-        assert sanitize_column_name("Number of Doors") == "Number_of_Doors"
-        assert sanitize_column_name("Rep name") == "Rep_name"
-
-        # From dim_files.csv
-        assert sanitize_column_name(" file_name") == "file_name"
-
-        # From packs.csv
-        assert sanitize_column_name("SKU Code") == "SKU_Code"
-        assert sanitize_column_name(" Price ") == "Price"
-        assert sanitize_column_name(" Total Cost ") == "Total_Cost"
-
-
-class TestNeedsSanitization:
-    """Tests for needs_sanitization function."""
-
-    def test_clean_names_dont_need_sanitization(self):
-        """Clean SQL-safe names should not need sanitization."""
-        assert needs_sanitization("customer_id") is False
-        assert needs_sanitization("Name") is False
-        assert needs_sanitization("column_123") is False
-        assert needs_sanitization("_private") is False
-
-    def test_names_with_spaces_need_sanitization(self):
-        """Names with spaces should need sanitization."""
-        assert needs_sanitization("Customer Code") is True
-        assert needs_sanitization("First Name") is True
-
-    def test_names_with_leading_trailing_whitespace_need_sanitization(self):
-        """Names with leading/trailing whitespace should need sanitization."""
-        assert needs_sanitization(" Price") is True
-        assert needs_sanitization("Price ") is True
-        assert needs_sanitization(" Price ") is True
-
-    def test_names_with_special_chars_need_sanitization(self):
-        """Names with special characters should need sanitization."""
-        assert needs_sanitization("price($)") is True
-        assert needs_sanitization("col-name") is True
-        assert needs_sanitization("user@email") is True
-
-    def test_names_starting_with_digit_need_sanitization(self):
-        """Names starting with a digit should need sanitization."""
-        assert needs_sanitization("123column") is True
-        assert needs_sanitization("1st") is True
-
-    def test_empty_string_needs_sanitization(self):
-        """Empty string should need sanitization."""
-        assert needs_sanitization("") is True
 
 
 class TestQuoteIdentifier:
@@ -291,8 +165,8 @@ class TestSparkTypeToSqlType:
 class TestBuildCreateTableColumnTypes:
     """Tests for build_create_table_column_types function."""
 
-    def test_generates_unquoted_column_defs_databricks(self):
-        """Should generate unquoted columns for Spark JDBC (Databricks handles quoting)."""
+    def test_generates_quoted_column_defs_databricks(self):
+        """Should generate quoted columns for Databricks (backtick quoting)."""
         from pyspark.sql import SparkSession
 
         spark = SparkSession.builder.appName("test").master("local[1]").getOrCreate()
@@ -300,20 +174,15 @@ class TestBuildCreateTableColumnTypes:
             df = spark.createDataFrame([("Alice", 100)], ["Name", "Age"])
             result = build_create_table_column_types(df, "databricks")
 
-            # Spark JDBC expects unquoted column names - it handles quoting internally
-            assert "Name" in result
-            assert "Age" in result
-            # Should NOT have dialect-specific quotes
-            assert "`Name`" not in result
-            assert "`Age`" not in result
-            # Should have types
+            assert "`Name`" in result
+            assert "`Age`" in result
             assert "VARCHAR" in result or "STRING" in result
             assert "BIGINT" in result
         finally:
             spark.stop()
 
-    def test_generates_unquoted_column_defs_postgres(self):
-        """Should generate unquoted columns for Spark JDBC (Postgres handles quoting)."""
+    def test_generates_quoted_column_defs_postgres(self):
+        """Should generate quoted columns for Postgres (double-quote quoting)."""
         from pyspark.sql import SparkSession
 
         spark = SparkSession.builder.appName("test").master("local[1]").getOrCreate()
@@ -321,33 +190,25 @@ class TestBuildCreateTableColumnTypes:
             df = spark.createDataFrame([("Alice", 100)], ["Name", "Age"])
             result = build_create_table_column_types(df, "postgres")
 
-            # Spark JDBC expects unquoted column names
-            assert "Name" in result
-            assert "Age" in result
-            # Should NOT have double quotes
-            assert '"Name"' not in result
-            assert '"Age"' not in result
+            assert '"Name"' in result
+            assert '"Age"' in result
         finally:
             spark.stop()
 
-    def test_handles_sanitized_column_names(self):
-        """Should work with already-sanitized column names (unquoted)."""
+    def test_handles_column_names_with_spaces(self):
+        """Should properly quote column names that contain spaces."""
         from pyspark.sql import SparkSession
 
         spark = SparkSession.builder.appName("test").master("local[1]").getOrCreate()
         try:
-            # Use sanitized names (underscores instead of spaces)
             df = spark.createDataFrame(
-                [("Alice", 100, 3.14)], ["Customer_Name", "Total_Quantity", "Price"]
+                [("Alice", 100, 3.14)], ["Customer Name", "Total Quantity", "Price"]
             )
             result = build_create_table_column_types(df, "databricks")
 
-            # Column names should be present (unquoted)
-            assert "Customer_Name" in result
-            assert "Total_Quantity" in result
-            assert "Price" in result
-            # Should NOT be quoted
-            assert "`Customer_Name`" not in result
+            assert "`Customer Name`" in result
+            assert "`Total Quantity`" in result
+            assert "`Price`" in result
         finally:
             spark.stop()
 
@@ -362,5 +223,109 @@ class TestBuildCreateTableColumnTypes:
 
             # Should have commas separating definitions
             assert result.count(",") == 2  # 3 columns = 2 commas
+        finally:
+            spark.stop()
+
+
+class TestBuildCreateTableSql:
+    """Tests for build_create_table_sql function.
+
+    Verifies that CREATE TABLE DDL is generated with properly quoted
+    column names that preserve original names (spaces, special chars).
+    """
+
+    def test_postgres_simple_columns(self):
+        """Postgres CREATE TABLE with simple column names."""
+        from pyspark.sql import SparkSession
+
+        spark = SparkSession.builder.appName("test").master("local[1]").getOrCreate()
+        try:
+            df = spark.createDataFrame([("Alice", 30)], ["name", "age"])
+            result = build_create_table_sql(df, "postgres", '"public"."users"')
+
+            assert 'CREATE TABLE IF NOT EXISTS "public"."users"' in result
+            assert '"name"' in result
+            assert '"age"' in result
+        finally:
+            spark.stop()
+
+    def test_postgres_columns_with_spaces(self):
+        """Postgres CREATE TABLE preserves column names with spaces via quoting."""
+        from pyspark.sql import SparkSession
+
+        spark = SparkSession.builder.appName("test").master("local[1]").getOrCreate()
+        try:
+            df = spark.createDataFrame(
+                [("CUST001", "Acme Corp")], ["Customer Code", "Customer Name"]
+            )
+            result = build_create_table_sql(df, "postgres", '"public"."customers"')
+
+            assert '"Customer Code"' in result
+            assert '"Customer Name"' in result
+            assert "VARCHAR" in result
+        finally:
+            spark.stop()
+
+    def test_databricks_columns_with_spaces(self):
+        """Databricks CREATE TABLE uses backtick quoting for column names."""
+        from pyspark.sql import SparkSession
+
+        spark = SparkSession.builder.appName("test").master("local[1]").getOrCreate()
+        try:
+            df = spark.createDataFrame(
+                [("CUST001", 100)], ["Customer Code", "Total Amount"]
+            )
+            result = build_create_table_sql(
+                df, "databricks", "`catalog`.`schema`.`table`"
+            )
+
+            assert "`Customer Code`" in result
+            assert "`Total Amount`" in result
+            assert "CREATE TABLE IF NOT EXISTS" in result
+        finally:
+            spark.stop()
+
+    def test_mixed_column_types(self):
+        """CREATE TABLE should generate correct types for each column."""
+        from pyspark.sql import SparkSession
+        from pyspark.sql.types import (
+            DoubleType,
+            LongType,
+            StringType,
+            StructField,
+            StructType,
+        )
+
+        spark = SparkSession.builder.appName("test").master("local[1]").getOrCreate()
+        try:
+            schema = StructType(
+                [
+                    StructField("Product Name", StringType(), True),
+                    StructField("Unit Price", DoubleType(), True),
+                    StructField("Quantity", LongType(), True),
+                ]
+            )
+            df = spark.createDataFrame([], schema)
+            result = build_create_table_sql(df, "postgres", '"public"."products"')
+
+            assert '"Product Name"' in result
+            assert '"Unit Price"' in result
+            assert '"Quantity"' in result
+            assert "VARCHAR" in result
+            assert "DOUBLE PRECISION" in result
+            assert "BIGINT" in result
+        finally:
+            spark.stop()
+
+    def test_contains_if_not_exists(self):
+        """Generated SQL should use IF NOT EXISTS."""
+        from pyspark.sql import SparkSession
+
+        spark = SparkSession.builder.appName("test").master("local[1]").getOrCreate()
+        try:
+            df = spark.createDataFrame([(1,)], ["id"])
+            result = build_create_table_sql(df, "postgres", '"public"."test"')
+
+            assert "IF NOT EXISTS" in result
         finally:
             spark.stop()

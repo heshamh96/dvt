@@ -29,10 +29,6 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from dvt.artifacts.schemas.results import NodeStatus, RunStatus
-from dvt.utils.identifiers import (
-    sanitize_dataframe_columns,
-    needs_sanitization,
-)
 from dvt.config import RuntimeConfig
 from dvt.contracts.graph.manifest import Manifest
 from dvt.contracts.graph.nodes import SeedNode
@@ -156,9 +152,6 @@ class SparkSeedRunner(BaseRunner):
 
             # Apply schema overrides from seed config
             df = self._apply_schema_overrides(df, seed)
-
-            # Sanitize column names for SQL compatibility across all adapters
-            df = self._sanitize_columns(df, seed)
 
             # Determine target for this seed
             self._target_name = self._resolve_target(seed)
@@ -369,47 +362,6 @@ class SparkSeedRunner(BaseRunner):
                 df = df.withColumn(col_name, df[col_name].cast(col_type))
 
         return df
-
-    def _sanitize_columns(self, df: Any, seed: SeedNode) -> Any:
-        """Sanitize DataFrame column names for SQL compatibility.
-
-        Uses SQLGlot-based sanitization to ensure column names work across
-        all database adapters (Postgres, Snowflake, Databricks, etc.).
-
-        Handles:
-        - Spaces in column names (e.g., "Customer Code" -> "Customer_Code")
-        - Leading/trailing whitespace (e.g., " Price " -> "Price")
-        - Special characters (e.g., "price($)" -> "price_")
-        - Names starting with digits (e.g., "123col" -> "_123col")
-
-        Args:
-            df: PySpark DataFrame with potentially problematic column names
-            seed: SeedNode for context (unused for now, but available for
-                  future dialect-specific handling)
-
-        Returns:
-            DataFrame with sanitized column names
-        """
-        # Check if any columns need sanitization
-        columns_needing_sanitization = [
-            col for col in df.columns if needs_sanitization(col)
-        ]
-
-        if not columns_needing_sanitization:
-            return df
-
-        # Apply sanitization and get the rename mapping
-        df_sanitized, renames = sanitize_dataframe_columns(df)
-
-        # Log the renames for user visibility
-        if renames:
-            _log(
-                f"  🔧 Sanitizing {len(renames)} column name(s) for SQL compatibility:"
-            )
-            for old_name, new_name in renames.items():
-                _log(f"      '{old_name}' → '{new_name}'")
-
-        return df_sanitized
 
     def _get_full_table_name(self, seed: SeedNode, connection: Dict[str, Any]) -> str:
         """Get fully qualified table name for the seed.

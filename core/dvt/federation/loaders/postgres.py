@@ -11,7 +11,7 @@ because it streams data directly to the database without per-row overhead.
 
 import time
 from io import StringIO
-from typing import Any, List, Optional
+from typing import Any, Optional
 
 from dvt.federation.loaders.base import BaseLoader, LoadConfig, LoadResult
 
@@ -70,7 +70,7 @@ class PostgresLoader(BaseLoader):
 
         Steps:
         1. Execute DDL via adapter (TRUNCATE or DROP)
-        2. Ensure table exists (create via Spark JDBC if needed)
+        2. Create table via adapter DDL with properly quoted columns
         3. Stream data via COPY FROM STDIN
 
         Args:
@@ -98,8 +98,17 @@ class PostgresLoader(BaseLoader):
         if adapter and config.mode == "overwrite":
             self._execute_ddl(adapter, config)
 
-        # Ensure table exists by creating it via Spark JDBC with empty DataFrame
-        self._ensure_table_exists(df, config)
+        # Create table with properly quoted column names via adapter DDL
+        if adapter:
+            self._create_table_with_adapter(adapter, df, config)
+
+        # Get quoted table name for COPY SQL
+        if adapter:
+            from dvt.federation.adapter_manager import get_quoted_table_name
+
+            quoted_table = get_quoted_table_name(adapter, config.table_name)
+        else:
+            quoted_table = config.table_name
 
         # Now COPY data into the existing table
         from dvt.federation.auth.postgres import PostgresAuthHandler
@@ -151,7 +160,7 @@ class PostgresLoader(BaseLoader):
             self._log(f"Loading {config.table_name} via COPY FROM...")
             columns_str = ", ".join(f'"{col}"' for col in columns)
             copy_sql = (
-                f"COPY {config.table_name} ({columns_str}) "
+                f"COPY {quoted_table} ({columns_str}) "
                 f"FROM STDIN WITH (FORMAT csv, DELIMITER E'\\t', NULL '\\N')"
             )
             cursor.copy_expert(copy_sql, buffer)
@@ -179,63 +188,3 @@ class PostgresLoader(BaseLoader):
         finally:
             if conn:
                 conn.close()
-
-    def _ensure_table_exists(
-        self,
-        df: Any,
-        config: LoadConfig,
-    ) -> None:
-        """Ensure target table exists by creating via Spark JDBC.
-
-        Uses Spark JDBC to create an empty table with the correct schema.
-        This lets Spark handle the column type mapping.
-
-        Args:
-            df: DataFrame with schema to create
-            config: Load configuration
-        """
-        from dvt.federation.auth import get_auth_handler
-        from dvt.federation.spark_manager import SparkManager
-
-        connection = config.connection_config
-        if not connection:
-            return
-
-        adapter_type = connection.get("type", "")
-        spark_manager = SparkManager.get_instance()
-        jdbc_url = spark_manager.get_jdbc_url(connection)
-        jdbc_driver = spark_manager.get_jdbc_driver(adapter_type)
-
-        if not jdbc_driver:
-            return
-
-        auth_handler = get_auth_handler(adapter_type)
-        jdbc_props = auth_handler.get_jdbc_properties(connection)
-
-        properties = {
-            **jdbc_props,
-            "driver": jdbc_driver,
-        }
-
-        # Check if table exists by trying to read schema
-        try:
-            spark = spark_manager.get_or_create_session()
-            existing_df = spark.read.jdbc(
-                url=jdbc_url,
-                table=f"(SELECT * FROM {config.table_name} WHERE 1=0) AS t",
-                properties=properties,
-            )
-            # Table exists
-            return
-        except Exception:
-            pass  # Table doesn't exist, create it
-
-        # Create table with empty DataFrame
-        self._log(f"Creating {config.table_name} via Spark JDBC...")
-        empty_df = df.limit(0)
-        empty_df.write.jdbc(
-            url=jdbc_url,
-            table=config.table_name,
-            mode="overwrite",  # Will create table
-            properties=properties,
-        )

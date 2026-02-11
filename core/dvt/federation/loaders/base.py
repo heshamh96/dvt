@@ -176,6 +176,39 @@ class BaseLoader(ABC):
                 except Exception:
                     pass  # Schema might already exist or we might not have permissions
 
+    def _create_table_with_adapter(
+        self,
+        adapter: Any,
+        df: Any,  # pyspark.sql.DataFrame
+        config: LoadConfig,
+    ) -> None:
+        """Create target table via adapter DDL with properly quoted columns.
+
+        Generates a CREATE TABLE IF NOT EXISTS statement using dialect-aware
+        quoting for both the table name and all column names. This preserves
+        original column names (including spaces, special characters) by
+        wrapping them in dialect-appropriate quotes.
+
+        Args:
+            adapter: dbt adapter instance
+            df: PySpark DataFrame whose schema defines the table structure
+            config: Load configuration with table_name
+        """
+        from dvt.federation.adapter_manager import get_quoted_table_name
+        from dvt.utils.identifiers import build_create_table_sql
+
+        adapter_type = adapter.type()
+        quoted_table = get_quoted_table_name(adapter, config.table_name)
+        create_sql = build_create_table_sql(df, adapter_type, quoted_table)
+
+        self._log(f"Creating table {config.table_name} via adapter DDL...")
+        with adapter.connection_named("dvt_loader"):
+            try:
+                adapter.execute(create_sql)
+            except Exception as e:
+                # Table might already exist (IF NOT EXISTS not supported everywhere)
+                self._log(f"Create table note: {e}")
+
     # =========================================================================
     # Spark JDBC Load - Default Data Loading Method
     # =========================================================================
@@ -245,6 +278,8 @@ class BaseLoader(ABC):
             if adapter and config.mode == "overwrite":
                 # DDL via adapter (proper quoting), data via Spark JDBC append
                 self._execute_ddl(adapter, config)
+                # Create table with properly quoted column names via adapter
+                self._create_table_with_adapter(adapter, df, config)
                 write_mode = "append"  # Table cleared by DDL, just append
             else:
                 # Pure Spark JDBC mode

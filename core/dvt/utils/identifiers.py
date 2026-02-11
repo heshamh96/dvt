@@ -1,28 +1,27 @@
 # coding=utf-8
-"""Identifier sanitization utilities using SQLGlot.
+"""Identifier quoting and type conversion utilities using SQLGlot.
 
-Provides cross-dialect column name sanitization for safe SQL operations.
-This module handles the universal sanitization of column names to ensure
-they work across all database adapters (Postgres, Snowflake, Databricks, etc.).
+Provides cross-dialect identifier quoting and DDL generation for safe SQL
+operations. Column names are always preserved as-is and quoted using
+dialect-appropriate quote characters (double quotes, backticks, brackets).
 
 Key features:
-- Strips leading/trailing whitespace
-- Replaces spaces and special characters with underscores
-- Handles dialect-specific identifier quoting via SQLGlot
-- Preserves case sensitivity
+- Dialect-specific identifier quoting via SQLGlot
+- Spark-to-SQL type conversion per dialect
+- CREATE TABLE DDL generation from DataFrame schemas
+- Preserves original column names (spaces, special chars) via quoting
 
 Usage:
-    from dvt.utils.identifiers import sanitize_column_name, sanitize_dataframe_columns
+    from dvt.utils.identifiers import quote_identifier, build_create_table_sql
 
-    # Sanitize a single column name
-    clean_name = sanitize_column_name("Customer Code")  # Returns "Customer_Code"
+    # Quote a column name for a specific dialect
+    quoted = quote_identifier("Customer Code", "postgres")  # '"Customer Code"'
 
-    # Sanitize all columns in a Spark DataFrame
-    df_clean = sanitize_dataframe_columns(df, adapter_type="databricks")
+    # Build CREATE TABLE from a Spark DataFrame schema
+    sql = build_create_table_sql(df, "postgres", '"public"."my_table"')
 """
 
-import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict
 
 # SQLGlot is used for dialect-aware identifier quoting when needed
 try:
@@ -49,159 +48,6 @@ ADAPTER_TO_SQLGLOT: Dict[str, str] = {
     "sqlserver": "tsql",
     "hive": "hive",
 }
-
-
-def sanitize_column_name(name: str) -> str:
-    """Sanitize a column name for universal SQL compatibility.
-
-    Transforms column names to be safe for all SQL dialects by:
-    - Stripping leading/trailing whitespace
-    - Replacing spaces and special characters with underscores
-    - Collapsing multiple consecutive underscores
-    - Prefixing with underscore if name starts with a digit
-    - Handling empty or all-special-character names
-
-    Args:
-        name: Original column name (e.g., "Customer Code", " Price ")
-
-    Returns:
-        Sanitized column name safe for all SQL dialects
-        (e.g., "Customer_Code", "Price")
-
-    Examples:
-        >>> sanitize_column_name("Customer Code")
-        'Customer_Code'
-        >>> sanitize_column_name(" Total Price ")
-        'Total_Price'
-        >>> sanitize_column_name("123_start")
-        '_123_start'
-        >>> sanitize_column_name("normal_col")
-        'normal_col'
-    """
-    if not name:
-        return "_column"
-
-    # Strip leading/trailing whitespace
-    result = name.strip()
-
-    if not result:
-        return "_column"
-
-    # Replace non-alphanumeric characters (except underscore) with underscore
-    result = re.sub(r"[^a-zA-Z0-9_]", "_", result)
-
-    # Collapse multiple consecutive underscores into one
-    result = re.sub(r"_+", "_", result)
-
-    # Remove leading/trailing underscores (created by special chars at edges)
-    result = result.strip("_")
-
-    # If empty after all processing, use default
-    if not result:
-        return "_column"
-
-    # Prefix with underscore if starts with a digit (SQL identifiers can't start with numbers)
-    if result[0].isdigit():
-        result = "_" + result
-
-    return result
-
-
-def needs_sanitization(name: str) -> bool:
-    """Check if a column name needs sanitization.
-
-    A column name needs sanitization if it:
-    - Has leading or trailing whitespace
-    - Contains spaces or special characters
-    - Starts with a digit
-    - Is empty
-
-    Args:
-        name: Column name to check
-
-    Returns:
-        True if the name contains characters that require sanitization
-
-    Examples:
-        >>> needs_sanitization("Customer Code")
-        True
-        >>> needs_sanitization(" Price ")
-        True
-        >>> needs_sanitization("normal_col")
-        False
-        >>> needs_sanitization("123start")
-        True
-    """
-    if not name:
-        return True
-
-    # Check for leading/trailing whitespace
-    if name != name.strip():
-        return True
-
-    # Check for non-alphanumeric characters (except underscore)
-    if re.search(r"[^a-zA-Z0-9_]", name):
-        return True
-
-    # Check if starts with digit
-    if name[0].isdigit():
-        return True
-
-    return False
-
-
-def sanitize_dataframe_columns(
-    df: Any, adapter_type: Optional[str] = None
-) -> Tuple[Any, Dict[str, str]]:
-    """Sanitize all column names in a Spark DataFrame.
-
-    Applies sanitization to all columns that need it, preserving
-    columns that are already valid SQL identifiers.
-
-    Args:
-        df: PySpark DataFrame with potentially problematic column names
-        adapter_type: Target database adapter type (for future dialect-specific handling)
-
-    Returns:
-        Tuple of:
-        - DataFrame with sanitized column names
-        - Dict mapping original names to new names (only for changed columns)
-
-    Example:
-        >>> df_clean, renames = sanitize_dataframe_columns(df, "databricks")
-        >>> print(renames)
-        {'Customer Code': 'Customer_Code', ' Price ': 'Price'}
-    """
-    renames: Dict[str, str] = {}
-    new_names: List[str] = []
-
-    for col in df.columns:
-        if needs_sanitization(col):
-            new_name = sanitize_column_name(col)
-            renames[col] = new_name
-            new_names.append(new_name)
-        else:
-            new_names.append(col)
-
-    # Handle duplicate column names after sanitization
-    seen: Dict[str, int] = {}
-    final_names: List[str] = []
-
-    for name in new_names:
-        if name in seen:
-            # Add suffix to make unique
-            seen[name] += 1
-            unique_name = f"{name}_{seen[name]}"
-            final_names.append(unique_name)
-        else:
-            seen[name] = 0
-            final_names.append(name)
-
-    # Apply renames to DataFrame
-    if renames:
-        df = df.toDF(*final_names)
-
-    return df, renames
 
 
 def quote_identifier(name: str, adapter_type: str) -> str:
@@ -321,6 +167,36 @@ def spark_type_to_sql_type(spark_type: Any, adapter_type: str) -> str:
     sqlglot_dialect = get_sqlglot_dialect(adapter_type)
     data_type = sqlglot_exp.DataType.build(sql_type)
     return data_type.sql(dialect=sqlglot_dialect)
+
+
+def build_create_table_sql(df: Any, adapter_type: str, quoted_table_name: str) -> str:
+    """Build a CREATE TABLE IF NOT EXISTS statement from a DataFrame schema.
+
+    Uses dialect-aware quoting for column names and dialect-specific SQL types
+    to generate a CREATE TABLE statement that preserves original column names
+    (including those with spaces, special characters, etc.) by quoting them.
+
+    Args:
+        df: PySpark DataFrame whose schema defines the table structure
+        adapter_type: Target database adapter type (e.g., "postgres", "databricks")
+        quoted_table_name: Already-quoted table name (e.g., '"schema"."table"')
+
+    Returns:
+        Complete CREATE TABLE IF NOT EXISTS SQL statement
+
+    Examples:
+        >>> build_create_table_sql(df, "postgres", '"public"."my_seeds"')
+        'CREATE TABLE IF NOT EXISTS "public"."my_seeds" (\\n  "Customer Code" ...'
+    """
+    col_defs = []
+
+    for field in df.schema.fields:
+        col_name = quote_identifier(field.name, adapter_type)
+        sql_type = spark_type_to_sql_type(field.dataType, adapter_type)
+        col_defs.append(f"{col_name} {sql_type}")
+
+    columns_sql = ",\n  ".join(col_defs)
+    return f"CREATE TABLE IF NOT EXISTS {quoted_table_name} (\n  {columns_sql}\n)"
 
 
 def spark_type_to_jdbc_type(spark_type: Any) -> str:
