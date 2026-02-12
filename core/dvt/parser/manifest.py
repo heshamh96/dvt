@@ -370,7 +370,9 @@ class ManifestLoader:
         # Set the files in the manifest and save the project_parser_files
         file_reader.read_files()
         self.manifest.files = file_reader.files
-        project_parser_files = orig_project_parser_files = file_reader.project_parser_files
+        project_parser_files = orig_project_parser_files = (
+            file_reader.project_parser_files
+        )
         self._perf_info.path_count = len(self.manifest.files)
         self._perf_info.read_files_elapsed = time.perf_counter() - start_read_files
 
@@ -406,7 +408,9 @@ class ManifestLoader:
                 self.partially_parsing = False
                 self.load_and_parse_macros(project_parser_files)
 
-            self._perf_info.load_macros_elapsed = time.perf_counter() - start_load_macros
+            self._perf_info.load_macros_elapsed = (
+                time.perf_counter() - start_load_macros
+            )
 
             # Now that the macros are parsed, parse the rest of the files.
             # This is currently done on a per project basis.
@@ -450,7 +454,9 @@ class ManifestLoader:
 
             self.cleanup_disabled()
 
-            self._perf_info.parse_project_elapsed = time.perf_counter() - start_parse_projects
+            self._perf_info.parse_project_elapsed = (
+                time.perf_counter() - start_parse_projects
+            )
 
             # patch_sources converts the UnparsedSourceDefinitions in the
             # Manifest.sources to SourceDefinition via 'patch_source'
@@ -478,7 +484,9 @@ class ManifestLoader:
             # determine whether they need processing.
             start_process = time.perf_counter()
             self.process_sources(self.root_project.project_name)
-            self.process_refs(self.root_project.project_name, self.root_project.dependencies)
+            self.process_refs(
+                self.root_project.project_name, self.root_project.dependencies
+            )
             self.process_unit_tests(self.root_project.project_name)
             self.process_docs(self.root_project)
             self.process_metrics(self.root_project)
@@ -489,13 +497,18 @@ class ManifestLoader:
             self.check_valid_access_property()
             self.check_valid_snapshot_config()
             self.check_valid_microbatch_config()
+            self.check_valid_target_config()
 
             semantic_manifest = SemanticManifest(self.manifest)
             if not semantic_manifest.validate():
-                raise dvt.exceptions.ParsingError("Semantic Manifest validation failed.")
+                raise dvt.exceptions.ParsingError(
+                    "Semantic Manifest validation failed."
+                )
 
             # update tracking data
-            self._perf_info.process_manifest_elapsed = time.perf_counter() - start_process
+            self._perf_info.process_manifest_elapsed = (
+                time.perf_counter() - start_process
+            )
             self._perf_info.static_analysis_parsed_path_count = (
                 self.manifest._parsing_info.static_analysis_parsed_path_count
             )
@@ -532,7 +545,9 @@ class ManifestLoader:
 
         return self.manifest
 
-    def safe_update_project_parser_files_partially(self, project_parser_files: Dict) -> Dict:
+    def safe_update_project_parser_files_partially(
+        self, project_parser_files: Dict
+    ) -> Dict:
         if self.saved_manifest is None:
             return project_parser_files
 
@@ -541,7 +556,8 @@ class ManifestLoader:
         if self.skip_parsing:
             # nothing changed, so we don't need to generate project_parser_files
             fire_event(
-                Note(msg="Nothing changed, skipping partial parsing."), level=EventLevel.DEBUG
+                Note(msg="Nothing changed, skipping partial parsing."),
+                level=EventLevel.DEBUG,
             )
             self.manifest = self.saved_manifest  # type: ignore[assignment]
         else:
@@ -559,7 +575,9 @@ class ManifestLoader:
                 # pp_files should still be the full set and manifest is new manifest,
                 # since get_parsing_files failed
                 fire_event(
-                    UnableToPartialParse(reason="an error occurred. Switching to full reparse.")
+                    UnableToPartialParse(
+                        reason="an error occurred. Switching to full reparse."
+                    )
                 )
 
                 # Get traceback info
@@ -653,7 +671,8 @@ class ManifestLoader:
         for node in self.manifest.nodes.values():
             if " " in node.name:
                 if (
-                    not improper_resource_names_unique_ids and not error_on_invalid_resource_name
+                    not improper_resource_names_unique_ids
+                    and not error_on_invalid_resource_name
                 ) or flags.DEBUG:
                     fire_event(
                         SpacesInResourceNameDeprecation(
@@ -800,7 +819,9 @@ class ManifestLoader:
 
     # This should only be called after the macros have been loaded
     def build_macro_resolver(self):
-        internal_package_names = get_adapter_package_names(self.root_project.credentials.type)
+        internal_package_names = get_adapter_package_names(
+            self.root_project.credentials.type
+        )
         self.macro_resolver = MacroResolver(
             self.manifest.macros, self.root_project.project_name, internal_package_names
         )
@@ -809,7 +830,9 @@ class ManifestLoader:
     # the 'macro_sql' to find depends_on.macros
     def macro_depends_on(self):
         macro_ctx = generate_macro_context(self.root_project)
-        macro_namespace = TestMacroNamespace(self.macro_resolver, {}, None, MacroStack(), [])
+        macro_namespace = TestMacroNamespace(
+            self.macro_resolver, {}, None, MacroStack(), []
+        )
         adapter = get_adapter(self.root_project)
         db_wrapper = ParseProvider().DatabaseWrapper(adapter, macro_namespace)
         for macro in self.manifest.macros.values():
@@ -826,18 +849,24 @@ class ManifestLoader:
                 package_name = macro.package_name
                 if "." in macro_name:
                     package_name, macro_name = macro_name.split(".")
-                dep_macro_id = self.macro_resolver.get_macro_id(package_name, macro_name)
+                dep_macro_id = self.macro_resolver.get_macro_id(
+                    package_name, macro_name
+                )
                 if dep_macro_id:
                     macro.depends_on.add_macro(dep_macro_id)  # will check for dupes
 
     def write_manifest_for_partial_parse(self):
-        path = os.path.join(self.root_project.project_target_path, PARTIAL_PARSE_FILE_NAME)
+        path = os.path.join(
+            self.root_project.project_target_path, PARTIAL_PARSE_FILE_NAME
+        )
         try:
             # This shouldn't be necessary, but we have gotten bug reports (#3757) of the
             # saved manifest not matching the code version.
             if self.manifest.metadata.dbt_version != __version__:
                 fire_event(
-                    UnableToPartialParse(reason="saved manifest contained the wrong version")
+                    UnableToPartialParse(
+                        reason="saved manifest contained the wrong version"
+                    )
                 )
                 self.manifest.metadata.dbt_version = __version__
             manifest_msgpack = self.manifest.to_msgpack(extended_mashumaro_encoder)
@@ -911,7 +940,9 @@ class ManifestLoader:
             != manifest.state_check.project_env_vars_hash
         ):
             fire_event(
-                UnableToPartialParse(reason="env vars used in dbt_project.yml have changed")
+                UnableToPartialParse(
+                    reason="env vars used in dbt_project.yml have changed"
+                )
             )
             valid = False
             reparse_reason = ReparseReason.proj_env_vars_changed
@@ -922,7 +953,9 @@ class ManifestLoader:
             if k not in manifest.state_check.project_hashes
         }
         if missing_keys:
-            fire_event(UnableToPartialParse(reason="a project dependency has been added"))
+            fire_event(
+                UnableToPartialParse(reason="a project dependency has been added")
+            )
             valid = False
             reparse_reason = ReparseReason.deps_changed
 
@@ -930,7 +963,9 @@ class ManifestLoader:
             if key in manifest.state_check.project_hashes:
                 old_value = manifest.state_check.project_hashes[key]
                 if new_value != old_value:
-                    fire_event(UnableToPartialParse(reason="a project config has changed"))
+                    fire_event(
+                        UnableToPartialParse(reason="a project config has changed")
+                    )
                     valid = False
                     reparse_reason = ReparseReason.project_config_changed
         return valid, reparse_reason
@@ -967,7 +1002,9 @@ class ManifestLoader:
             try:
                 with open(path, "rb") as fp:
                     manifest_mp = fp.read()
-                manifest: Manifest = Manifest.from_msgpack(manifest_mp, decoder=extended_mashumuro_decoder)  # type: ignore
+                manifest: Manifest = Manifest.from_msgpack(
+                    manifest_mp, decoder=extended_mashumuro_decoder
+                )  # type: ignore
                 # keep this check inside the try/except in case something about
                 # the file has changed in weird ways, perhaps due to being a
                 # different version of dbt
@@ -982,12 +1019,16 @@ class ManifestLoader:
                     return manifest
             except Exception as exc:
                 fire_event(
-                    ParsedFileLoadFailed(path=path, exc=str(exc), exc_info=traceback.format_exc())
+                    ParsedFileLoadFailed(
+                        path=path, exc=str(exc), exc_info=traceback.format_exc()
+                    )
                 )
                 reparse_reason = ReparseReason.load_file_failure
         else:
             fire_event(
-                UnableToPartialParse(reason="saved manifest not found. Starting full parse.")
+                UnableToPartialParse(
+                    reason="saved manifest not found. Starting full parse."
+                )
             )
             reparse_reason = ReparseReason.file_not_found
 
@@ -1027,7 +1068,9 @@ class ManifestLoader:
         # We are using the parsed cli_vars instead of config.args.vars, in order
         # to sort them and avoid reparsing because of ordering issues.
         secret_vars = [
-            v for k, v in config.cli_vars.items() if k.startswith(SECRET_ENV_PREFIX) and v.strip()
+            v
+            for k, v in config.cli_vars.items()
+            if k.startswith(SECRET_ENV_PREFIX) and v.strip()
         ]
         stringified_cli_vars = pprint.pformat(config.cli_vars)
         vars_hash = FileHash.from_contents(
@@ -1092,7 +1135,9 @@ class ManifestLoader:
         # This executes the callable macro_hook and sets the
         # query headers
         # This executes the callable macro_hook and sets the query headers
-        query_header_context = generate_query_header_context(adapter.config, self.manifest)
+        query_header_context = generate_query_header_context(
+            adapter.config, self.manifest
+        )
         self.macro_hook(query_header_context)
 
     # This creates a MacroManifest which contains the macros in
@@ -1103,7 +1148,9 @@ class ManifestLoader:
             # what is the manifest passed in actually used for?
             macro_parser = MacroParser(project, self.manifest)
             for path in macro_parser.get_paths():
-                source_file = load_source_file(path, ParseFileType.Macro, project.project_name, {})
+                source_file = load_source_file(
+                    path, ParseFileType.Macro, project.project_name, {}
+                )
                 block = FileBlock(source_file)
                 # This does not add the file to the manifest.files,
                 # but that shouldn't be necessary here.
@@ -1160,7 +1207,9 @@ class ManifestLoader:
 
     # Takes references in 'refs' array of nodes and exposures, finds the target
     # node, and updates 'depends_on.nodes' with the unique id
-    def process_refs(self, current_project: str, dependencies: Optional[Mapping[str, Project]]):
+    def process_refs(
+        self, current_project: str, dependencies: Optional[Mapping[str, Project]]
+    ):
         for node in self.manifest.nodes.values():
             if node.created_at < self.started_at:
                 continue
@@ -1458,7 +1507,9 @@ class ManifestLoader:
             node.config.final_validate()
 
     def check_valid_microbatch_config(self):
-        if self.manifest.use_microbatch_batches(project_name=self.root_project.project_name):
+        if self.manifest.use_microbatch_batches(
+            project_name=self.root_project.project_name
+        ):
             for node in self.manifest.nodes.values():
                 if (
                     node.config.materialized == "incremental"
@@ -1513,13 +1564,61 @@ class ManifestLoader:
 
                     # optional config: concurrent_batches (bool)
                     concurrent_batches = node.config.concurrent_batches
-                    if not isinstance(concurrent_batches, bool) and concurrent_batches is not None:
+                    if (
+                        not isinstance(concurrent_batches, bool)
+                        and concurrent_batches is not None
+                    ):
                         raise dvt.exceptions.ParsingError(
                             f"Microbatch model '{node.name}' optional 'concurrent_batches' config must be of type `bool` if specified, but got: {type(concurrent_batches)})."
                         )
 
+    def check_valid_target_config(self) -> None:
+        """Validate that config(target='X') and connection: X reference real targets.
+
+        DVT allows models to declare ``config(target='X')`` and sources to
+        declare ``connection: X`` where X must be a target defined in
+        profiles.yml.  This post-parse check catches typos and stale
+        references early, before compilation or execution.
+        """
+        try:
+            from dvt.config.profile import read_profile
+
+            raw_profiles = read_profile(get_flags().PROFILES_DIR)
+            profile_data = raw_profiles.get(self.root_project.profile_name, {})
+            available_targets = set(profile_data.get("outputs", {}).keys())
+        except Exception:
+            # If we can't read profiles, skip validation gracefully.
+            return
+
+        if not available_targets:
+            return
+
+        # Validate model config.target
+        for node in self.manifest.nodes.values():
+            target_val = getattr(getattr(node, "config", None), "target", None)
+            if target_val and target_val not in available_targets:
+                raise dvt.exceptions.ParsingError(
+                    f"Model '{node.name}' specifies config(target='{target_val}'), "
+                    f"but '{target_val}' is not a valid target in profile "
+                    f"'{self.root_project.profile_name}'. "
+                    f"Available targets: {sorted(available_targets)}"
+                )
+
+        # Validate source connection
+        for source in self.manifest.sources.values():
+            connection = getattr(getattr(source, "config", None), "connection", None)
+            if connection and connection not in available_targets:
+                raise dvt.exceptions.ParsingError(
+                    f"Source '{source.source_name}.{source.name}' specifies "
+                    f"connection: '{connection}', but '{connection}' is not a valid target "
+                    f"in profile '{self.root_project.profile_name}'. "
+                    f"Available targets: {sorted(available_targets)}"
+                )
+
     def check_forcing_batch_concurrency(self) -> None:
-        if self.manifest.use_microbatch_batches(project_name=self.root_project.project_name):
+        if self.manifest.use_microbatch_batches(
+            project_name=self.root_project.project_name
+        ):
             adapter = get_adapter(self.root_project)
 
             if not adapter.supports(Capability.MicrobatchConcurrency):
@@ -1540,7 +1639,9 @@ class ManifestLoader:
                     )
 
     def check_microbatch_model_has_a_filtered_input(self):
-        if self.manifest.use_microbatch_batches(project_name=self.root_project.project_name):
+        if self.manifest.use_microbatch_batches(
+            project_name=self.root_project.project_name
+        ):
             for node in self.manifest.nodes.values():
                 if (
                     node.config.materialized == "incremental"
@@ -1559,7 +1660,9 @@ class ManifestLoader:
                             has_input_with_event_time_config = True
 
                     if not has_input_with_event_time_config:
-                        fire_event(MicrobatchModelNoEventTimeInputs(model_name=node.name))
+                        fire_event(
+                            MicrobatchModelNoEventTimeInputs(model_name=node.name)
+                        )
 
     def check_function_default_arguments_ordering(self):
         for function in self.manifest.functions.values():
@@ -1574,7 +1677,9 @@ class ManifestLoader:
 
     def write_perf_info(self, target_path: str):
         path = os.path.join(target_path, PERF_INFO_FILE_NAME)
-        write_file(path, json.dumps(self._perf_info, cls=dvt.utils.JSONEncoder, indent=4))
+        write_file(
+            path, json.dumps(self._perf_info, cls=dvt.utils.JSONEncoder, indent=4)
+        )
         fire_event(ParsePerfInfoPath(path=path))
 
     def build_model_to_generic_tests_map(self) -> Dict[str, List[GenericTestNode]]:
@@ -1587,10 +1692,15 @@ class ManifestLoader:
                 model_to_generic_tests_map[node.attached_node].append(node)
         for _, nodes in self.manifest.disabled.items():
             for disabled_node in nodes:
-                if isinstance(disabled_node, GenericTestNode) and disabled_node.attached_node:
+                if (
+                    isinstance(disabled_node, GenericTestNode)
+                    and disabled_node.attached_node
+                ):
                     if disabled_node.attached_node not in model_to_generic_tests_map:
                         model_to_generic_tests_map[disabled_node.attached_node] = []
-                    model_to_generic_tests_map[disabled_node.attached_node].append(disabled_node)
+                    model_to_generic_tests_map[disabled_node.attached_node].append(
+                        disabled_node
+                    )
         return model_to_generic_tests_map
 
 
@@ -1694,7 +1804,9 @@ def _check_resource_uniqueness(
         if node.package_name not in name_resources:
             name_resources[node.package_name] = {"ver": {}, "unver": {}}
 
-        existing_unversioned_node = name_resources[node.package_name]["unver"].get(node.name)
+        existing_unversioned_node = name_resources[node.package_name]["unver"].get(
+            node.name
+        )
         if existing_unversioned_node is not None and not node.is_versioned:
             if get_flags().require_unique_project_resource_names:
                 raise DuplicateResourceNameError(existing_unversioned_node, node)
@@ -1728,7 +1840,9 @@ def _check_resource_uniqueness(
     for ver_unver_dict in name_resources.values():
         versioned_names = ver_unver_dict["ver"].keys()
         unversioned_names = ver_unver_dict["unver"].keys()
-        intersection_versioned = set(versioned_names).intersection(set(unversioned_names))
+        intersection_versioned = set(versioned_names).intersection(
+            set(unversioned_names)
+        )
         if intersection_versioned:
             for name in intersection_versioned:
                 versioned_node = ver_unver_dict["ver"][name]
@@ -1738,7 +1852,9 @@ def _check_resource_uniqueness(
                 )
 
 
-def _warn_for_unused_resource_config_paths(manifest: Manifest, config: RuntimeConfig) -> None:
+def _warn_for_unused_resource_config_paths(
+    manifest: Manifest, config: RuntimeConfig
+) -> None:
     resource_fqns: Mapping[str, PathSet] = manifest.get_resource_fqns()
     disabled_fqns: PathSet = frozenset(
         tuple(n.fqn) for n in list(chain.from_iterable(manifest.disabled.values()))
@@ -1754,7 +1870,9 @@ def _check_manifest(manifest: Manifest, config: RuntimeConfig) -> None:
 DocsContextCallback = Callable[[ResultNode], Dict[str, Any]]
 
 
-def _get_doc_blocks(description: str, manifest: Manifest, node_package: str) -> List[str]:
+def _get_doc_blocks(
+    description: str, manifest: Manifest, node_package: str
+) -> List[str]:
     ast = parse(description)
     doc_blocks: List[str] = []
 
@@ -1802,7 +1920,9 @@ def _process_docs_for_node(
     node.description = get_rendered(node.description, context)
 
     for column_name, column in node.columns.items():
-        column.doc_blocks = _get_doc_blocks(column.description, manifest, node.package_name)
+        column.doc_blocks = _get_doc_blocks(
+            column.description, manifest, node.package_name
+        )
         column.description = get_rendered(column.description, context)
 
 
@@ -1812,13 +1932,17 @@ def _process_docs_for_source(
     source: SourceDefinition,
     manifest: Manifest,
 ):
-    source.doc_blocks = _get_doc_blocks(source.description, manifest, source.package_name)
+    source.doc_blocks = _get_doc_blocks(
+        source.description, manifest, source.package_name
+    )
     source.description = get_rendered(source.description, context)
 
     source.source_description = get_rendered(source.source_description, context)
 
     for column in source.columns.values():
-        column.doc_blocks = _get_doc_blocks(column.description, manifest, source.package_name)
+        column.doc_blocks = _get_doc_blocks(
+            column.description, manifest, source.package_name
+        )
         column.description = get_rendered(column.description, context)
 
 
@@ -1857,13 +1981,18 @@ def _process_docs_for_semantic_model(
             entity.description = get_rendered(entity.description, context)
 
 
-def _process_docs_for_saved_query(context: Dict[str, Any], saved_query: SavedQuery) -> None:
+def _process_docs_for_saved_query(
+    context: Dict[str, Any], saved_query: SavedQuery
+) -> None:
     if saved_query.description:
         saved_query.description = get_rendered(saved_query.description, context)
 
 
 def _process_refs(
-    manifest: Manifest, current_project: str, node, dependencies: Optional[Mapping[str, Project]]
+    manifest: Manifest,
+    current_project: str,
+    node,
+    dependencies: Optional[Mapping[str, Project]],
 ) -> None:
     """Given a manifest and node in that manifest, process its refs"""
 
@@ -1974,18 +2103,18 @@ def _process_metric_node(
         return
 
     if metric.type is MetricType.SIMPLE or metric.type is MetricType.CUMULATIVE:
-        assert (
-            metric.type_params.measure is not None
-        ), f"{metric} should have a measure defined, but it does not."
+        assert metric.type_params.measure is not None, (
+            f"{metric} should have a measure defined, but it does not."
+        )
         metric.add_input_measure(metric.type_params.measure)
         _process_metric_depends_on(
             manifest=manifest, current_project=current_project, metric=metric
         )
     elif metric.type is MetricType.CONVERSION:
         conversion_type_params = metric.type_params.conversion_type_params
-        assert (
-            conversion_type_params
-        ), f"{metric.name} is a conversion metric and must have conversion_type_params defined."
+        assert conversion_type_params, (
+            f"{metric.name} is a conversion metric and must have conversion_type_params defined."
+        )
         metric.add_input_measure(conversion_type_params.base_measure)
         metric.add_input_measure(conversion_type_params.conversion_measure)
         _process_metric_depends_on(
@@ -1994,12 +2123,18 @@ def _process_metric_node(
     elif metric.type is MetricType.DERIVED or metric.type is MetricType.RATIO:
         input_metrics = metric.input_metrics
         if metric.type is MetricType.RATIO:
-            if metric.type_params.numerator is None or metric.type_params.denominator is None:
+            if (
+                metric.type_params.numerator is None
+                or metric.type_params.denominator is None
+            ):
                 raise dvt.exceptions.ParsingError(
                     "Invalid ratio metric. Both a numerator and denominator must be specified",
                     node=metric,
                 )
-            input_metrics = [metric.type_params.numerator, metric.type_params.denominator]
+            input_metrics = [
+                metric.type_params.numerator,
+                metric.type_params.denominator,
+            ]
 
         for input_metric in input_metrics:
             target_metric = manifest.resolve_metric(
@@ -2093,7 +2228,9 @@ def remove_dependent_project_references(manifest, external_node_unique_id):
         node.created_at = time.time()
 
 
-def _process_sources_for_exposure(manifest: Manifest, current_project: str, exposure: Exposure):
+def _process_sources_for_exposure(
+    manifest: Manifest, current_project: str, exposure: Exposure
+):
     target_source: Optional[Union[Disabled, SourceDefinition]] = None
     for source_name, table_name in exposure.sources:
         target_source = manifest.resolve_source(
@@ -2115,7 +2252,9 @@ def _process_sources_for_exposure(manifest: Manifest, current_project: str, expo
         exposure.depends_on.add_node(target_source_id)
 
 
-def _process_sources_for_metric(manifest: Manifest, current_project: str, metric: Metric):
+def _process_sources_for_metric(
+    manifest: Manifest, current_project: str, metric: Metric
+):
     target_source: Optional[Union[Disabled, SourceDefinition]] = None
     for source_name, table_name in metric.sources:
         target_source = manifest.resolve_source(
@@ -2137,7 +2276,9 @@ def _process_sources_for_metric(manifest: Manifest, current_project: str, metric
         metric.depends_on.add_node(target_source_id)
 
 
-def _process_sources_for_node(manifest: Manifest, current_project: str, node: ManifestNode):
+def _process_sources_for_node(
+    manifest: Manifest, current_project: str, node: ManifestNode
+):
     if isinstance(node, SeedNode):
         return
 

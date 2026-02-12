@@ -65,74 +65,10 @@ class ExceptionExit(CliException):
     def __init__(self, exception: Exception) -> None:
         super().__init__(ExitCodes.UnhandledError)
         self.exception = exception
-        # For UninstalledPackagesFoundError, PySparkNotInstalledError, adapter-missing, and
-        # project-not-found errors, don't print - they're already handled with clean messages in requires.py
-        from dvt.exceptions import UninstalledPackagesFoundError, PySparkNotInstalledError, DvtProfileError, DvtProjectError
-        skip_print = False
-        if isinstance(exception, UninstalledPackagesFoundError):
-            skip_print = True
-        elif isinstance(exception, PySparkNotInstalledError):
-            skip_print = True
-        elif isinstance(exception, DvtProfileError):
-            exc_str_check = str(exception)
-            if "Could not find adapter" in exc_str_check or "Run 'dvt sync'" in exc_str_check:
-                skip_print = True
-        elif isinstance(exception, DvtProjectError):
-            exc_str_check = str(exception)
-            if "No dbt_project.yml" in exc_str_check or "No dvt_project.yml" in exc_str_check or "not found at expected path" in exc_str_check:
-                skip_print = True
-
-        if skip_print:
-            # Set empty message so Click doesn't print it again
-            self.message = ""
-        else:
-            # Set message so Click will display it even if show() is not called
-            try:
-                self.message = str(exception)
-            except Exception:
-                self.message = f"{type(exception).__name__}: <exception str() failed>"
-            # Immediately print the exception to stderr so it's never silent
-            # Use format_exception to get the full traceback
-            exc_str = "".join(
-                traceback.format_exception(
-                    type(exception),
-                    exception,
-                    getattr(exception, "__traceback__", None),
-                )
-            )
-            sys.stderr.write(exc_str)
-            sys.stderr.flush()
+        # All error messages are already printed cleanly by postflight() in requires.py.
+        # Set empty message so Click doesn't print anything extra.
+        self.message = ""
 
     def show(self, _file: Optional[IO] = None) -> None:  # type: ignore[type-arg]
-        """Print the wrapped exception to stderr so exit code 2 is never silent."""
-        if self.exception is not None:
-            # For UninstalledPackagesFoundError, PySparkNotInstalledError, adapter-missing, and
-            # project-not-found errors, don't print - they're already handled with clean messages in requires.py
-            from dvt.exceptions import UninstalledPackagesFoundError, PySparkNotInstalledError, DvtProfileError, DvtProjectError
-            skip_print = False
-            if isinstance(self.exception, UninstalledPackagesFoundError):
-                skip_print = True
-            elif isinstance(self.exception, PySparkNotInstalledError):
-                skip_print = True
-            elif isinstance(self.exception, DvtProfileError):
-                exc_str_check = str(self.exception)
-                if "Could not find adapter" in exc_str_check or "Run 'dvt sync'" in exc_str_check:
-                    skip_print = True
-            elif isinstance(self.exception, DvtProjectError):
-                exc_str_check = str(self.exception)
-                if "No dbt_project.yml" in exc_str_check or "No dvt_project.yml" in exc_str_check or "not found at expected path" in exc_str_check:
-                    skip_print = True
-
-            if not skip_print:
-                exc_str = "".join(
-                    traceback.format_exception(
-                        type(self.exception),
-                        self.exception,
-                        getattr(self.exception, "__traceback__", None),
-                    )
-                )
-                sys.stderr.write(exc_str)
-                sys.stderr.flush()
-        elif self.message:
-            sys.stderr.write(f"{self.message}\n")
-            sys.stderr.flush()
+        """No-op: error messages are already handled by postflight() in requires.py."""
+        pass

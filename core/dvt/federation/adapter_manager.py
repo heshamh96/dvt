@@ -31,12 +31,28 @@ from dbt_common.events.base_types import EventLevel
 
 
 @dataclass
+class MinimalThreadedArgs:
+    """Minimal args implementing the ThreadedArgs protocol.
+
+    Required by dbt_common.utils.executor.executor() which checks
+    config.args.single_threaded to decide threading strategy.
+    """
+
+    single_threaded: bool = True  # Safe default for federation: single-threaded
+
+
+@dataclass
 class MinimalAdapterConfig:
     """Minimal config for adapter instantiation without full RuntimeConfig.
 
     Implements the AdapterRequiredConfig protocol with minimal fields
     needed for adapter instantiation, SQL execution, and compilation
     (target-aware compilation passes these adapters through ProviderContext).
+
+    When _runtime_config_proxy is set, unknown attribute lookups fall through
+    to the real RuntimeConfig. This allows the macro context system (which
+    expects a full RuntimeConfig) to work while keeping adapter-specific
+    fields (credentials, target_name) correct for the secondary adapter.
     """
 
     # HasCredentials protocol
@@ -44,6 +60,9 @@ class MinimalAdapterConfig:
     profile_name: str
     target_name: str
     threads: int = 4
+
+    # HasThreadingConfig protocol — required by executor() in get_catalog()
+    args: MinimalThreadedArgs = field(default_factory=MinimalThreadedArgs)
 
     # AdapterRequiredConfig protocol
     project_name: str = "dvt_federation"
@@ -59,6 +78,27 @@ class MinimalAdapterConfig:
     # Macro dispatch — used by BaseDatabaseWrapper._get_search_packages().
     # Empty list/dict = no custom dispatch order (use adapter defaults).
     dependencies: Dict[str, Any] = field(default_factory=dict)
+
+    # Dispatch config — used by project dispatch: entries
+    dispatch: list = field(default_factory=list)
+
+    # Optional proxy to a real RuntimeConfig for attribute fallback.
+    # Set this to enable full macro context support (docs generate, etc.).
+    _runtime_config_proxy: Any = field(default=None, repr=False)
+
+    def __getattr__(self, name: str) -> Any:
+        """Fall through to the RuntimeConfig proxy for unknown attributes.
+
+        This allows the macro context system to access RuntimeConfig methods
+        like load_dependencies(), vars, dispatch, etc. without needing to
+        replicate the entire RuntimeConfig interface here.
+        """
+        proxy = object.__getattribute__(self, "_runtime_config_proxy")
+        if proxy is not None:
+            return getattr(proxy, name)
+        raise AttributeError(
+            f"'{type(self).__name__}' object has no attribute '{name}'"
+        )
 
     def get_macro_search_order(self, namespace: str) -> Optional[list]:
         """Return macro search order for namespace (used by DatabaseWrapper)."""

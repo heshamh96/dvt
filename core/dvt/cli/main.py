@@ -288,7 +288,7 @@ def docs(ctx, **kwargs):
 @requires.manifest(write=False)
 def docs_generate(ctx, **kwargs):
     """Generate the documentation website for your project"""
-    from dvt.task.docs.generate import GenerateTask
+    from dvt.dvt_tasks.dvt_docs import DvtDocsGenerateTask as GenerateTask
 
     task = GenerateTask(
         ctx.obj["flags"],
@@ -358,7 +358,7 @@ def docs_serve(ctx, **kwargs):
 def compile(ctx, **kwargs):
     """Generates executable SQL from source, model, test, and analysis files. Compiled SQL files are written to the
     target/ directory."""
-    from dvt.task.compile import CompileTask
+    from dvt.dvt_tasks.dvt_compile import DvtCompileTask as CompileTask
 
     task = CompileTask(
         ctx.obj["flags"],

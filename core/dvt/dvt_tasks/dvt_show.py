@@ -3,6 +3,9 @@
 For models targeting non-default adapters (pushdown or federation),
 routes to ShowRunnerTargetAware which queries the materialized table
 on the correct target adapter.
+
+Uses DvtCompiler on the default ShowRunner path so that cross-dialect
+SQL transpilation is applied when previewing models.
 """
 
 from __future__ import annotations
@@ -11,6 +14,7 @@ from typing import Dict
 
 from dvt.adapters.factory import get_adapter
 from dvt.contracts.graph.nodes import SeedNode
+from dvt.dvt_compilation.dvt_compiler import DvtCompiler
 from dvt.dvt_runners.show_runner_target_aware import ShowRunnerTargetAware
 from dvt.federation.resolver import ExecutionPath, FederationResolver, ResolvedExecution
 from dvt.task.seed import SeedRunner
@@ -23,6 +27,8 @@ class DvtShowTask(ShowTask):
     def __init__(self, args, config, manifest=None):
         super().__init__(args, config, manifest)
         self._resolved_executions: Dict[str, ResolvedExecution] = {}
+        # DVT: Use DvtCompiler for cross-dialect transpilation
+        self.compiler = DvtCompiler(self.config)
 
     def _runtime_initialize(self):
         # Call base (which includes the parent's inline query handling)
@@ -104,5 +110,8 @@ class DvtShowTask(ShowTask):
                     # If adapter creation fails, fall back to default ShowRunner
                     pass
 
-        # Default: same-target pushdown — standard ShowRunner works
-        return ShowRunner(self.config, adapter, node, run_count, num_nodes)
+        # Default: same-target pushdown — standard ShowRunner with DvtCompiler
+        # for cross-dialect transpilation support
+        runner = ShowRunner(self.config, adapter, node, run_count, num_nodes)
+        runner.compiler = DvtCompiler(self.config)
+        return runner

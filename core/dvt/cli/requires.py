@@ -12,6 +12,7 @@ from typing import Dict, Optional
 _printed_uninstalled_packages_errors = set()
 _printed_adapter_missing_errors = set()
 _printed_project_not_found_errors = set()
+_printed_general_errors = set()
 
 
 def _extract_clean_adapter_error(exc_str: str) -> str:
@@ -35,6 +36,7 @@ def _is_project_not_found_error(exc: Exception) -> bool:
 def _extract_clean_project_error(exc_str: str) -> str:
     """Extract a clean, user-friendly message from project-not-found error."""
     return "❌ Not in a DVT project directory. Run from a folder with dbt_project.yml or use --project-dir."
+
 
 from click import Context
 
@@ -143,7 +145,9 @@ def preflight(func):
         ctx.with_resource(track_run(run_command=flags.WHICH))
 
         # Now that we have our logger, fire away!
-        fire_event(MainReportVersion(version=str(installed_version), log_version=LOG_VERSION))
+        fire_event(
+            MainReportVersion(version=str(installed_version), log_version=LOG_VERSION)
+        )
         flags_dict_str = cast_dict_to_dict_of_strings(get_flag_dict())
         fire_event(MainReportArgs(args=flags_dict_str))
 
@@ -178,7 +182,9 @@ def setup_record_replay():
             "DBT_ENGINE_RECORDER_FILE_PATH"
         ) or os.environ.get("DBT_RECORDER_FILE_PATH")
         recorder = Recorder(
-            RecorderMode.REPLAY, types=rec_types, previous_recording_path=previous_recording_path
+            RecorderMode.REPLAY,
+            types=rec_types,
+            previous_recording_path=previous_recording_path,
         )
     elif rec_mode == RecorderMode.DIFF:
         previous_recording_path = os.environ.get(
@@ -187,7 +193,9 @@ def setup_record_replay():
         # ensure types match the previous recording
         types = get_record_types_from_dict(previous_recording_path)
         recorder = Recorder(
-            RecorderMode.DIFF, types=types, previous_recording_path=previous_recording_path
+            RecorderMode.DIFF,
+            types=types,
+            previous_recording_path=previous_recording_path,
         )
     elif rec_mode == RecorderMode.RECORD:
         recorder = Recorder(RecorderMode.RECORD, types=rec_types)
@@ -224,8 +232,12 @@ def postflight(func):
         except DbtException as e:
             # For certain errors, don't fire event or print traceback - print once and skip event
             # to avoid duplicate messages as exception propagates through decorators
-            from dvt.exceptions import UninstalledPackagesFoundError, PySparkNotInstalledError
+            from dvt.exceptions import (
+                UninstalledPackagesFoundError,
+                PySparkNotInstalledError,
+            )
             from dvt.cli.exceptions import ExceptionExit as ExceptionExitType
+
             # Check if this is a special error type (either directly or wrapped in ExceptionExit)
             actual_exception = e.exception if isinstance(e, ExceptionExitType) else e
             if isinstance(actual_exception, PySparkNotInstalledError):
@@ -244,7 +256,8 @@ def postflight(func):
                     sys.stderr.flush()
                     _printed_uninstalled_packages_errors.add(exc_message)
             elif isinstance(actual_exception, DvtProfileError) and (
-                "Could not find adapter" in str(actual_exception) or "Run 'dvt sync'" in str(actual_exception)
+                "Could not find adapter" in str(actual_exception)
+                or "Run 'dvt sync'" in str(actual_exception)
             ):
                 # Adapter missing: print clean message once, NO traceback
                 clean_msg = _extract_clean_adapter_error(str(actual_exception))
@@ -252,7 +265,9 @@ def postflight(func):
                     sys.stderr.write(clean_msg + "\n")
                     sys.stderr.flush()
                     _printed_adapter_missing_errors.add(clean_msg)
-            elif isinstance(actual_exception, DvtProjectError) and _is_project_not_found_error(actual_exception):
+            elif isinstance(
+                actual_exception, DvtProjectError
+            ) and _is_project_not_found_error(actual_exception):
                 # Project not found: print clean message once, NO traceback
                 clean_msg = _extract_clean_project_error(str(actual_exception))
                 if clean_msg not in _printed_project_not_found_errors:
@@ -260,19 +275,23 @@ def postflight(func):
                     sys.stderr.flush()
                     _printed_project_not_found_errors.add(clean_msg)
             else:
-                fire_event(MainEncounteredError(exc=str(e)))
-                # Print exception immediately to stderr so it's never silent
-                sys.stderr.write(f"Error: {e}\n")
-                sys.stderr.write(traceback.format_exc())
-                sys.stderr.flush()
+                exc_message = str(e)
+                if exc_message not in _printed_general_errors:
+                    sys.stderr.write(f"\n{exc_message}\n")
+                    sys.stderr.flush()
+                    _printed_general_errors.add(exc_message)
             # Only wrap if not already wrapped
             if isinstance(e, ExceptionExitType):
                 raise e
             raise ExceptionExit(e)
         except BaseException as e:
             # Check if this is UninstalledPackagesFoundError, PySparkNotInstalledError, or adapter-missing DvtProfileError wrapped in ExceptionExit
-            from dvt.exceptions import UninstalledPackagesFoundError, PySparkNotInstalledError
+            from dvt.exceptions import (
+                UninstalledPackagesFoundError,
+                PySparkNotInstalledError,
+            )
             from dvt.cli.exceptions import ExceptionExit as ExceptionExitType
+
             actual_exception = e.exception if isinstance(e, ExceptionExitType) else e
             if isinstance(actual_exception, PySparkNotInstalledError):
                 # PySpark not installed: print clean message once, NO traceback
@@ -290,7 +309,8 @@ def postflight(func):
                     sys.stderr.flush()
                     _printed_uninstalled_packages_errors.add(exc_message)
             elif isinstance(actual_exception, DvtProfileError) and (
-                "Could not find adapter" in str(actual_exception) or "Run 'dvt sync'" in str(actual_exception)
+                "Could not find adapter" in str(actual_exception)
+                or "Run 'dvt sync'" in str(actual_exception)
             ):
                 # Adapter missing: print clean message once, NO traceback
                 clean_msg = _extract_clean_adapter_error(str(actual_exception))
@@ -298,7 +318,9 @@ def postflight(func):
                     sys.stderr.write(clean_msg + "\n")
                     sys.stderr.flush()
                     _printed_adapter_missing_errors.add(clean_msg)
-            elif isinstance(actual_exception, DvtProjectError) and _is_project_not_found_error(actual_exception):
+            elif isinstance(
+                actual_exception, DvtProjectError
+            ) and _is_project_not_found_error(actual_exception):
                 # Project not found: print clean message once, NO traceback
                 clean_msg = _extract_clean_project_error(str(actual_exception))
                 if clean_msg not in _printed_project_not_found_errors:
@@ -306,12 +328,13 @@ def postflight(func):
                     sys.stderr.flush()
                     _printed_project_not_found_errors.add(clean_msg)
             else:
-                fire_event(MainEncounteredError(exc=str(e)))
-                fire_event(MainStackTrace(stack_trace=traceback.format_exc()))
-                # Print exception immediately to stderr so it's never silent
-                sys.stderr.write(f"Error: {e}\n")
-                sys.stderr.write(traceback.format_exc())
-                sys.stderr.flush()
+                exc_message = (
+                    str(actual_exception) if actual_exception is not e else str(e)
+                )
+                if exc_message not in _printed_general_errors:
+                    sys.stderr.write(f"\n{exc_message}\n")
+                    sys.stderr.flush()
+                    _printed_general_errors.add(exc_message)
             # Only wrap if not already wrapped
             if isinstance(e, ExceptionExitType):
                 raise e
@@ -322,7 +345,9 @@ def postflight(func):
             try:
                 if get_flags().upload_to_artifacts_ingest_api:
                     upload_artifacts(
-                        get_flags().project_dir, get_flags().target_path, ctx.command.name
+                        get_flags().project_dir,
+                        get_flags().target_path,
+                        ctx.command.name,
                     )
 
             except Exception as e:
@@ -395,7 +420,9 @@ def profile(func):
         # TODO: Generalize safe access to flags.THREADS:
         # https://github.com/dbt-labs/dbt-core/issues/6259
         threads = getattr(flags, "THREADS", None)
-        profile = load_profile(flags.PROJECT_DIR, flags.VARS, flags.PROFILE, flags.TARGET, threads)
+        profile = load_profile(
+            flags.PROJECT_DIR, flags.VARS, flags.PROFILE, flags.TARGET, threads
+        )
         ctx.obj["profile"] = profile
         get_invocation_context().uses_adapter(profile.credentials.type)
 
@@ -511,7 +538,9 @@ def catalogs(func):
         flags = ctx.obj["flags"]
         ctx_project = ctx.obj["project"]
 
-        _catalogs = load_catalogs(flags.PROJECT_DIR, ctx_project.project_name, flags.VARS)
+        _catalogs = load_catalogs(
+            flags.PROJECT_DIR, ctx_project.project_name, flags.VARS
+        )
         ctx.obj["catalogs"] = _catalogs
 
         return func(*args, **kwargs)
@@ -548,12 +577,16 @@ def setup_manifest(ctx: Context, write: bool = True, write_perf_info: bool = Fal
     reqs = [ctx.obj.get(dep) for dep in req_strs]
 
     if None in reqs:
-        raise DvtProjectError("profile, project, and runtime_config required for manifest")
+        raise DvtProjectError(
+            "profile, project, and runtime_config required for manifest"
+        )
 
     runtime_config = ctx.obj["runtime_config"]
 
     catalogs = ctx.obj["catalogs"] if "catalogs" in ctx.obj else []
-    active_integrations = [get_active_write_integration(catalog) for catalog in catalogs]
+    active_integrations = [
+        get_active_write_integration(catalog) for catalog in catalogs
+    ]
 
     # if a manifest has already been set on the context, don't overwrite it
     if ctx.obj.get("manifest") is None:
@@ -570,7 +603,9 @@ def setup_manifest(ctx: Context, write: bool = True, write_perf_info: bool = Fal
         adapter = get_adapter(runtime_config)
         adapter.set_macro_context_generator(generate_runtime_macro_context)  # type: ignore[arg-type]
         adapter.set_macro_resolver(ctx.obj["manifest"])
-        query_header_context = generate_query_header_context(adapter.config, ctx.obj["manifest"])  # type: ignore[attr-defined]
+        query_header_context = generate_query_header_context(
+            adapter.config, ctx.obj["manifest"]
+        )  # type: ignore[attr-defined]
         adapter.connections.set_query_header(query_header_context)
         for integration in active_integrations:
             adapter.add_catalog_integration(integration)

@@ -361,6 +361,25 @@ class SourcePatcher:
         relation_cls = adapter.Relation
         return str(relation_cls.create_from(self.root_project, node))
 
+    def _get_available_targets(self) -> Optional[Set[str]]:
+        """Return the set of target names from profiles.yml (cached)."""
+        if hasattr(self, "_cached_available_targets"):
+            return self._cached_available_targets
+
+        try:
+            from dvt.config.profile import read_profile
+            from dvt.flags import get_flags
+
+            raw_profiles = read_profile(get_flags().PROFILES_DIR)
+            profile_data = raw_profiles.get(self.root_project.profile_name, {})
+            self._cached_available_targets: Optional[Set[str]] = set(
+                profile_data.get("outputs", {}).keys()
+            )
+        except Exception:
+            self._cached_available_targets = None
+
+        return self._cached_available_targets
+
     def _validate_source_connection(
         self, source: UnparsedSourceDefinition, file_path: str
     ) -> None:
@@ -371,7 +390,8 @@ class SourcePatcher:
         execution paths for cross-target queries.
 
         Raises:
-            ParsingError: If source is missing the required 'connection' property.
+            ParsingError: If source is missing the required 'connection' property,
+                or if the connection value is not a valid target in profiles.yml.
         """
         if source.connection is None:
             raise ParsingError(
@@ -387,6 +407,18 @@ class SourcePatcher:
                 f"The 'connection' value should match a target name from your profiles.yml.\n"
                 f"For example, if you have targets 'postgres_prod' and 'snowflake_dw',\n"
                 f"set connection: postgres_prod or connection: snowflake_dw."
+            )
+
+        # Validate that the connection value is a real target in profiles.yml
+        available_targets = self._get_available_targets()
+        if available_targets and source.connection not in available_targets:
+            raise ParsingError(
+                f"Source '{source.name}' in '{file_path}' specifies "
+                f"connection: '{source.connection}', but '{source.connection}' is not a valid "
+                f"target in profile '{self.root_project.profile_name}'.\n\n"
+                f"Available targets: {sorted(available_targets)}\n\n"
+                f"Check your profiles.yml and ensure the connection value matches "
+                f"one of the defined target names."
             )
 
     def warn_unused(self) -> None:
