@@ -139,7 +139,12 @@ class DuckDBExtractor(BaseExtractor):
 
         cursor = self._get_connection(config).cursor()
         cursor.execute(query)
-        hashes = {row[0]: row[1] for row in cursor.fetchall()}
+        hashes = {}
+        while True:
+            batch = cursor.fetchmany(config.batch_size)
+            if not batch:
+                break
+            hashes.update({row[0]: row[1] for row in batch})
         cursor.close()
         return hashes
 

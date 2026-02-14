@@ -213,8 +213,12 @@ class SnowflakeExtractor(BaseExtractor):
         cursor.execute(query)
 
         hashes = {}
-        for row in cursor.fetchall():
-            hashes[row[0]] = row[1]
+        while True:
+            batch = cursor.fetchmany(config.batch_size)
+            if not batch:
+                break
+            for row in batch:
+                hashes[row[0]] = row[1]
 
         cursor.close()
         return hashes

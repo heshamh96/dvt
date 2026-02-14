@@ -35,6 +35,7 @@ class LoadConfig:
     connection_config: Optional[Dict[str, Any]] = None  # profiles.yml connection
     jdbc_config: Optional[Dict[str, Any]] = None  # jdbc_load settings from computes.yml
     bucket_config: Optional[Dict[str, Any]] = None  # For staging (bulk load)
+    streaming_batch_size: int = 10000  # Rows per batch for streaming load
 
 
 @dataclass

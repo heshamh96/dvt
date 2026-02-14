@@ -101,23 +101,27 @@ class GenericExtractor(BaseExtractor):
         columns = [desc[0] for desc in cursor.description]
         hashes = {}
 
-        for row in cursor.fetchall():
-            row_dict = dict(zip(columns, row))
+        while True:
+            batch = cursor.fetchmany(config.batch_size)
+            if not batch:
+                break
+            for row in batch:
+                row_dict = dict(zip(columns, row))
 
-            # Build PK value
-            if len(config.pk_columns) == 1:
-                pk_value = str(row_dict.get(config.pk_columns[0], ""))
-            else:
-                pk_value = "|".join(
-                    str(row_dict.get(col, "")) for col in config.pk_columns
-                )
+                # Build PK value
+                if len(config.pk_columns) == 1:
+                    pk_value = str(row_dict.get(config.pk_columns[0], ""))
+                else:
+                    pk_value = "|".join(
+                        str(row_dict.get(col, "")) for col in config.pk_columns
+                    )
 
-            # Compute hash of all values
-            values = [str(row_dict.get(col, "")) for col in sorted(columns)]
-            row_str = "|".join(values)
-            row_hash = hashlib.md5(row_str.encode()).hexdigest()
+                # Compute hash of all values
+                values = [str(row_dict.get(col, "")) for col in sorted(columns)]
+                row_str = "|".join(values)
+                row_hash = hashlib.md5(row_str.encode()).hexdigest()
 
-            hashes[pk_value] = row_hash
+                hashes[pk_value] = row_hash
 
         cursor.close()
         return hashes

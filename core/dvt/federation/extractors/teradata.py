@@ -85,7 +85,12 @@ class TeradataExtractor(BaseExtractor):
 
         cursor = self._get_connection(config).cursor()
         cursor.execute(query)
-        hashes = {str(row[0]).strip(): str(row[1]).strip() for row in cursor.fetchall()}
+        hashes = {}
+        while True:
+            batch = cursor.fetchmany(config.batch_size)
+            if not batch:
+                break
+            hashes.update({str(row[0]).strip(): str(row[1]).strip() for row in batch})
         cursor.close()
         return hashes
 

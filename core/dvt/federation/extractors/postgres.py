@@ -5,6 +5,7 @@ Uses COPY TO STDOUT for efficient bulk export when available.
 Falls back to Spark JDBC for parallel reads.
 """
 
+import tempfile
 import time
 from io import BytesIO, StringIO
 from pathlib import Path
@@ -106,9 +107,16 @@ class PostgresExtractor(BaseExtractor):
     ) -> ExtractionResult:
         """Extract data from PostgreSQL to Parquet.
 
-        Tries COPY first, falls back to Spark JDBC.
+        Tries streaming COPY first (constant memory), then buffered COPY,
+        then falls back to Spark JDBC.
         """
-        # Try PostgreSQL COPY first (fast for small-medium tables)
+        # Try streaming COPY first (constant memory via OS page cache)
+        try:
+            return self._extract_copy_streaming(config, output_path)
+        except Exception as e:
+            self._log(f"Streaming COPY failed ({e}), trying buffered COPY...")
+
+        # Try buffered COPY (legacy, full dataset in memory)
         try:
             return self._extract_copy(config, output_path)
         except Exception as e:
@@ -117,14 +125,87 @@ class PostgresExtractor(BaseExtractor):
         # Fallback to Spark JDBC (parallel reads)
         return self._extract_jdbc(config, output_path)
 
+    def _extract_copy_streaming(
+        self,
+        config: ExtractionConfig,
+        output_path: Path,
+    ) -> ExtractionResult:
+        """Extract using PostgreSQL COPY TO STDOUT with streaming PyArrow.
+
+        Writes COPY output to a temp file (OS page cache handles buffering),
+        then streams through PyArrow CSV reader in batches to Parquet.
+        Memory: O(batch_size) instead of O(dataset).
+        """
+        start_time = time.time()
+
+        if not PYARROW_AVAILABLE:
+            raise ImportError("pyarrow required for Parquet. Run 'dvt sync'.")
+
+        import pyarrow.csv as pa_csv
+        import pyarrow.parquet as pq
+
+        conn = self._get_connection(config)
+        query = self.build_export_query(config)
+        copy_query = f"COPY ({query}) TO STDOUT WITH (FORMAT CSV, HEADER)"
+
+        with tempfile.NamedTemporaryFile(mode="w+b", suffix=".csv") as tmp:
+            # Phase A: PostgreSQL COPY -> temp file (OS page cache handles this)
+            cursor = conn.cursor()
+            cursor.copy_expert(copy_query, tmp)
+            tmp.flush()
+            tmp.seek(0)
+
+            # Phase B: Stream-read CSV in batches -> write Parquet incrementally
+            read_options = pa_csv.ReadOptions(
+                block_size=config.batch_size * 512  # ~512 bytes/row estimate
+            )
+            streaming_reader = pa_csv.open_csv(tmp, read_options=read_options)
+
+            # Ensure output directory exists
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+
+            writer = None
+            row_count = 0
+            try:
+                for batch in streaming_reader:
+                    if writer is None:
+                        writer = pq.ParquetWriter(
+                            str(output_path),
+                            batch.schema,
+                            compression="zstd",
+                        )
+                    writer.write_batch(batch)
+                    row_count += batch.num_rows
+            finally:
+                if writer:
+                    writer.close()
+
+            cursor.close()
+
+        elapsed = time.time() - start_time
+        self._log(
+            f"Extracted {row_count:,} rows from {config.source_name} "
+            f"via streaming COPY in {elapsed:.1f}s"
+        )
+
+        return ExtractionResult(
+            success=True,
+            source_name=config.source_name,
+            row_count=row_count,
+            output_path=output_path,
+            extraction_method="copy_streaming",
+            elapsed_seconds=elapsed,
+        )
+
     def _extract_copy(
         self,
         config: ExtractionConfig,
         output_path: Path,
     ) -> ExtractionResult:
-        """Extract using PostgreSQL COPY TO STDOUT.
+        """Extract using PostgreSQL COPY TO STDOUT (buffered).
 
-        Uses psycopg2's copy_expert for efficient streaming.
+        Uses psycopg2's copy_expert with in-memory StringIO buffer.
+        Legacy path — kept as fallback for streaming COPY.
         """
         start_time = time.time()
 
@@ -216,8 +297,12 @@ class PostgresExtractor(BaseExtractor):
         cursor.execute(query)
 
         hashes = {}
-        for row in cursor.fetchall():
-            hashes[row[0]] = row[1]
+        while True:
+            batch = cursor.fetchmany(config.batch_size)
+            if not batch:
+                break
+            for row in batch:
+                hashes[row[0]] = row[1]
 
         cursor.close()
         return hashes

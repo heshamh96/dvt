@@ -114,10 +114,11 @@ class DatabricksExtractor(BaseExtractor):
         config: ExtractionConfig,
         output_path: Path,
     ) -> ExtractionResult:
-        """Extract using native cursor with PyArrow.
+        """Extract using native cursor with streaming PyArrow.
 
-        This method uses the databricks-sql-connector to fetch data
-        and writes to Parquet via PyArrow. Suitable for small-medium tables.
+        Uses fetchmany() to process data in batches and writes Parquet
+        incrementally via ParquetWriter. Memory: O(batch_size) instead
+        of O(dataset).
         """
         start_time = time.time()
 
@@ -136,34 +137,51 @@ class DatabricksExtractor(BaseExtractor):
         cursor = conn.cursor()
         cursor.execute(query)
 
-        # Fetch all data and column names
-        rows = cursor.fetchall()
         column_names = [desc[0] for desc in cursor.description]
-        cursor.close()
-
-        # Convert to PyArrow table
-        if rows:
-            # Build arrays for each column
-            arrays = []
-            for col_idx in range(len(column_names)):
-                col_data = [row[col_idx] for row in rows]
-                arrays.append(pa.array(col_data))
-
-            table = pa.table(dict(zip(column_names, arrays)))
-        else:
-            # Empty table with schema
-            table = pa.table({name: [] for name in column_names})
 
         # Ensure output directory exists
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        pq.write_table(table, output_path, compression="zstd")
 
-        row_count = len(rows)
+        writer = None
+        row_count = 0
+
+        try:
+            while True:
+                rows = cursor.fetchmany(config.batch_size)
+                if not rows:
+                    break
+
+                # Build RecordBatch from chunk
+                arrays = []
+                for col_idx in range(len(column_names)):
+                    col_data = [row[col_idx] for row in rows]
+                    arrays.append(pa.array(col_data))
+                batch = pa.record_batch(arrays, names=column_names)
+
+                if writer is None:
+                    writer = pq.ParquetWriter(
+                        str(output_path),
+                        batch.schema,
+                        compression="zstd",
+                    )
+                writer.write_batch(batch)
+                row_count += len(rows)
+        finally:
+            if writer:
+                writer.close()
+            cursor.close()
+
+        # Handle empty result set (no batches written)
+        if writer is None:
+            # Write an empty Parquet file with schema
+            empty_table = pa.table({name: [] for name in column_names})
+            pq.write_table(empty_table, output_path, compression="zstd")
+
         elapsed = time.time() - start_time
 
         self._log(
             f"Extracted {row_count:,} rows from {config.source_name} "
-            f"via native cursor in {elapsed:.1f}s"
+            f"via streaming cursor in {elapsed:.1f}s"
         )
 
         return ExtractionResult(
@@ -171,7 +189,7 @@ class DatabricksExtractor(BaseExtractor):
             source_name=config.source_name,
             row_count=row_count,
             output_path=output_path,
-            extraction_method="native_cursor",
+            extraction_method="native_cursor_streaming",
             elapsed_seconds=elapsed,
         )
 
@@ -274,7 +292,12 @@ class DatabricksExtractor(BaseExtractor):
         conn = self._get_connection(config)
         cursor = conn.cursor()
         cursor.execute(query)
-        hashes = {row[0]: row[1] for row in cursor.fetchall()}
+        hashes = {}
+        while True:
+            batch = cursor.fetchmany(config.batch_size)
+            if not batch:
+                break
+            hashes.update({row[0]: row[1] for row in batch})
         cursor.close()
         return hashes
 
