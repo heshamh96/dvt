@@ -1,9 +1,12 @@
 """
 MySQL extractor for EL layer.
 
-Uses Spark JDBC for parallel extraction.
+Extraction priority:
+1. Pipe-based: mysql --batch | PyArrow streaming (if mysql CLI on PATH)
+2. Spark JDBC: parallel reads (default fallback)
 """
 
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -29,6 +32,8 @@ class MySQLExtractor(BaseExtractor):
         "starrocks",
         "doris",
     ]
+
+    cli_tool = "mysql"
 
     def _get_connection(self, config: ExtractionConfig = None) -> Any:
         """Get or create a MySQL database connection.
@@ -87,12 +92,58 @@ class MySQLExtractor(BaseExtractor):
         self._lazy_connection = driver.connect(**connect_kwargs)
         return self._lazy_connection
 
+    def _build_extraction_command(self, config: ExtractionConfig) -> List[str]:
+        """Build mysql CLI command for tab-delimited output."""
+        conn_config = config.connection_config or self.connection_config or {}
+        query = self.build_export_query(config)
+        return [
+            "mysql",
+            "-h",
+            conn_config.get("host", "localhost"),
+            "-P",
+            str(conn_config.get("port", 3306)),
+            "-u",
+            conn_config.get("user", "root"),
+            conn_config.get("database", ""),
+            "-e",
+            query,
+            "--batch",
+            "--raw",  # tab-separated, no escaping
+        ]
+
+    def _build_extraction_env(self, config: ExtractionConfig) -> Dict[str, str]:
+        """Build env with MYSQL_PWD for mysql subprocess."""
+        conn_config = config.connection_config or self.connection_config or {}
+        env = os.environ.copy()
+        password = conn_config.get("password", "")
+        if password:
+            env["MYSQL_PWD"] = str(password)
+        return env
+
+    def _get_csv_parse_options(self):
+        """MySQL --batch outputs tab-delimited data."""
+        try:
+            import pyarrow.csv as pa_csv
+
+            return pa_csv.ParseOptions(delimiter="\t")
+        except ImportError:
+            return None
+
     def extract(
         self,
         config: ExtractionConfig,
         output_path: Path,
     ) -> ExtractionResult:
-        """Extract data from MySQL to Parquet using Spark JDBC."""
+        """Extract data from MySQL to Parquet.
+
+        Tries pipe (mysql CLI) first, falls back to Spark JDBC.
+        """
+        if self._has_cli_tool():
+            try:
+                return self._extract_via_pipe(config, output_path)
+            except Exception as e:
+                self._log(f"Pipe extraction failed ({e}), falling back to JDBC...")
+
         return self._extract_jdbc(config, output_path)
 
     def extract_hashes(

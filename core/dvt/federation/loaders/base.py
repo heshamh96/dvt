@@ -18,9 +18,13 @@ Usage:
     result = loader.load(df, config, adapter=adapter)
 """
 
+import os
+import shutil
+import subprocess
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 
@@ -230,6 +234,136 @@ class BaseLoader(ABC):
                 self._log(f"Create table note: {e}")
             # Commit DDL so it's visible to other connections (COPY, JDBC)
             self._safe_commit(adapter)
+
+    # =========================================================================
+    # Pipe-Based Loading - Tier 1 (CLI tool + PyArrow streaming)
+    # =========================================================================
+
+    # CLI tool name for pipe loading (override in subclass, e.g., "psql")
+    cli_tool: Optional[str] = None
+
+    def _has_cli_tool(self) -> bool:
+        """Check if the CLI tool for pipe loading is available on PATH."""
+        return self.cli_tool is not None and shutil.which(self.cli_tool) is not None
+
+    def _build_load_command(self, config: LoadConfig) -> List[str]:
+        """Build CLI command for pipe loading.
+
+        Override in subclass to provide database-specific CLI arguments.
+
+        Args:
+            config: Load configuration
+
+        Returns:
+            Command list for subprocess.Popen
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not implement _build_load_command"
+        )
+
+    def _build_load_env(self, config: LoadConfig) -> Dict[str, str]:
+        """Build environment variables for pipe loading subprocess.
+
+        Override in subclass to set password env vars (PGPASSWORD, MYSQL_PWD, etc.).
+
+        Args:
+            config: Load configuration
+
+        Returns:
+            Environment dict for subprocess.Popen
+        """
+        return os.environ.copy()
+
+    def _get_csv_write_delimiter(self) -> str:
+        """Get CSV delimiter for pipe loading output.
+
+        Override in subclass if target DB CLI expects non-standard delimiter
+        (e.g., tab-delimited for MySQL LOAD DATA).
+
+        Returns:
+            Delimiter character
+        """
+        return ","
+
+    def _load_via_pipe(
+        self,
+        parquet_path: str,
+        config: LoadConfig,
+    ) -> int:
+        """Load data via PyArrow streaming Parquet-to-CSV + CLI tool pipe.
+
+        Reads a Parquet file in batches using PyArrow, converts each batch
+        to CSV, and streams it to the target database's CLI tool via stdin.
+
+        Memory: ~1-10MB (one PyArrow RecordBatch + CSV write buffer).
+
+        Args:
+            parquet_path: Path to the Parquet file/directory to load
+            config: Load configuration
+
+        Returns:
+            Number of rows loaded
+
+        Raises:
+            RuntimeError: If the CLI tool process exits with error
+            ImportError: If pyarrow is not available
+        """
+        try:
+            import pyarrow as pa
+            import pyarrow.csv as pa_csv
+            import pyarrow.parquet as pq
+        except ImportError:
+            raise ImportError("pyarrow required for pipe loading. Run 'dvt sync'.")
+
+        cmd = self._build_load_command(config)
+        env = self._build_load_env(config)
+        delimiter = self._get_csv_write_delimiter()
+
+        self._log(f"Loading {config.table_name} via pipe ({self.cli_tool})...")
+
+        proc = subprocess.Popen(
+            cmd,
+            stdin=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=env,
+        )
+
+        try:
+            parquet_file = pq.ParquetFile(parquet_path)
+            first_batch = True
+            row_count = 0
+
+            for batch in parquet_file.iter_batches(batch_size=65536):
+                sink = pa.BufferOutputStream()
+                write_options = pa_csv.WriteOptions(
+                    include_header=first_batch,
+                    delimiter=delimiter,
+                )
+                pa_csv.write_csv(
+                    pa.Table.from_batches([batch]),
+                    sink,
+                    write_options=write_options,
+                )
+                proc.stdin.write(sink.getvalue().to_pybytes())
+                row_count += len(batch)
+                first_batch = False
+
+            proc.stdin.close()
+
+        except Exception:
+            proc.kill()
+            proc.wait()
+            raise
+
+        proc.wait()
+        if proc.returncode != 0:
+            stderr_output = proc.stderr.read().decode("utf-8", errors="replace")
+            raise RuntimeError(
+                f"{self.cli_tool} load failed (exit {proc.returncode}): "
+                f"{stderr_output[:500]}"
+            )
+
+        return row_count
 
     # =========================================================================
     # Spark JDBC Load - Default Data Loading Method

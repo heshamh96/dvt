@@ -1,9 +1,14 @@
 """
 SQL Server extractor for EL layer.
-Uses Spark JDBC for extraction.
+
+Extraction priority:
+1. Pipe-based: bcp queryout | PyArrow streaming (if bcp on PATH)
+2. Spark JDBC: parallel reads (default fallback)
+
 Also handles Azure Synapse and Fabric.
 """
 
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -21,6 +26,8 @@ class SQLServerExtractor(BaseExtractor):
     """
 
     adapter_types = ["sqlserver", "synapse", "fabric"]
+
+    cli_tool = "bcp"
 
     def _get_connection(self, config: ExtractionConfig = None) -> Any:
         """Get or create a SQL Server database connection.
@@ -84,8 +91,47 @@ class SQLServerExtractor(BaseExtractor):
         self._lazy_connection = pyodbc.connect(conn_str)
         return self._lazy_connection
 
+    def _build_extraction_command(self, config: ExtractionConfig) -> List[str]:
+        """Build bcp queryout command for CSV output."""
+        conn_config = config.connection_config or self.connection_config or {}
+        query = self.build_export_query(config)
+        server = conn_config.get("host", "localhost")
+        port = conn_config.get("port", 1433)
+        return [
+            "bcp",
+            query,
+            "queryout",
+            "/dev/stdout",
+            "-S",
+            f"{server},{port}",
+            "-U",
+            conn_config.get("user", ""),
+            "-P",
+            conn_config.get("password", ""),
+            "-d",
+            conn_config.get("database", ""),
+            "-c",
+            "-t",
+            ",",  # character mode, comma-separated
+            "-C",
+            "65001",  # UTF-8 codepage
+        ]
+
+    def _build_extraction_env(self, config: ExtractionConfig) -> Dict[str, str]:
+        """Build env for bcp subprocess (no special env vars needed)."""
+        return os.environ.copy()
+
     def extract(self, config: ExtractionConfig, output_path: Path) -> ExtractionResult:
-        """Extract data from SQL Server to Parquet using Spark JDBC."""
+        """Extract data from SQL Server to Parquet.
+
+        Tries pipe (bcp) first, falls back to Spark JDBC.
+        """
+        if self._has_cli_tool():
+            try:
+                return self._extract_via_pipe(config, output_path)
+            except Exception as e:
+                self._log(f"Pipe extraction failed ({e}), falling back to JDBC...")
+
         return self._extract_jdbc(config, output_path)
 
     def extract_hashes(self, config: ExtractionConfig) -> Dict[str, str]:

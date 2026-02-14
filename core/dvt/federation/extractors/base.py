@@ -10,6 +10,9 @@ Extraction priority:
 3. Spark JDBC (default fallback - parallel reads via spark.read.jdbc)
 """
 
+import os
+import shutil
+import subprocess
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -267,6 +270,153 @@ class BaseExtractor(ABC):
             query += f" WHERE {where_clause}"
 
         return query
+
+    # =========================================================================
+    # Pipe-Based Extraction - Tier 1 (CLI tool + PyArrow streaming)
+    # =========================================================================
+
+    # CLI tool name for pipe extraction (override in subclass, e.g., "psql")
+    cli_tool: Optional[str] = None
+
+    def _has_cli_tool(self) -> bool:
+        """Check if the CLI tool for pipe extraction is available on PATH."""
+        return self.cli_tool is not None and shutil.which(self.cli_tool) is not None
+
+    def _build_extraction_command(self, config: ExtractionConfig) -> List[str]:
+        """Build CLI command for pipe extraction.
+
+        Override in subclass to provide database-specific CLI arguments.
+
+        Args:
+            config: Extraction configuration
+
+        Returns:
+            Command list for subprocess.Popen
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not implement _build_extraction_command"
+        )
+
+    def _build_extraction_env(self, config: ExtractionConfig) -> Dict[str, str]:
+        """Build environment variables for pipe extraction subprocess.
+
+        Override in subclass to set password env vars (PGPASSWORD, MYSQL_PWD, etc.).
+
+        Args:
+            config: Extraction configuration
+
+        Returns:
+            Environment dict for subprocess.Popen
+        """
+        return os.environ.copy()
+
+    def _get_csv_parse_options(self) -> Any:
+        """Get PyArrow CSV parse options for this extractor's CLI output.
+
+        Override in subclass if CLI tool outputs non-standard CSV
+        (e.g., MySQL --batch outputs tab-delimited).
+
+        Returns:
+            pyarrow.csv.ParseOptions or None for defaults
+        """
+        return None
+
+    def _extract_via_pipe(
+        self,
+        config: ExtractionConfig,
+        output_path: Path,
+    ) -> ExtractionResult:
+        """Extract data via CLI tool pipe + PyArrow streaming CSV-to-Parquet.
+
+        Spawns the database CLI tool as a subprocess, reads its CSV stdout
+        through PyArrow's streaming CSV reader in bounded batches, and writes
+        each batch to a Parquet file incrementally.
+
+        Memory: ~64KB kernel pipe buffer + ~1-10MB PyArrow batch buffer.
+
+        Args:
+            config: Extraction configuration
+            output_path: Path to write Parquet file
+
+        Returns:
+            ExtractionResult with success status and metadata
+        """
+        start_time = time.time()
+
+        try:
+            import pyarrow.csv as pa_csv
+            import pyarrow.parquet as pq
+        except ImportError:
+            raise ImportError("pyarrow required for pipe extraction. Run 'dvt sync'.")
+
+        cmd = self._build_extraction_command(config)
+        env = self._build_extraction_env(config)
+
+        self._log(f"Extracting {config.source_name} via pipe ({self.cli_tool})...")
+
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=env,
+        )
+
+        try:
+            read_options = pa_csv.ReadOptions(block_size=1 << 20)  # 1MB blocks
+            parse_options = self._get_csv_parse_options()
+
+            open_csv_kwargs: Dict[str, Any] = {"read_options": read_options}
+            if parse_options is not None:
+                open_csv_kwargs["parse_options"] = parse_options
+
+            reader = pa_csv.open_csv(proc.stdout, **open_csv_kwargs)
+
+            # Ensure output directory exists
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+
+            writer = None
+            row_count = 0
+            try:
+                for batch in reader:
+                    if writer is None:
+                        writer = pq.ParquetWriter(
+                            str(output_path),
+                            batch.schema,
+                            compression="zstd",
+                        )
+                    writer.write_batch(batch)
+                    row_count += batch.num_rows
+            finally:
+                if writer:
+                    writer.close()
+
+        except Exception:
+            proc.kill()
+            proc.wait()
+            raise
+
+        proc.wait()
+        if proc.returncode != 0:
+            stderr_output = proc.stderr.read().decode("utf-8", errors="replace")
+            raise RuntimeError(
+                f"{self.cli_tool} extraction failed (exit {proc.returncode}): "
+                f"{stderr_output[:500]}"
+            )
+
+        elapsed = time.time() - start_time
+        self._log(
+            f"Extracted {row_count:,} rows from {config.source_name} "
+            f"via pipe ({self.cli_tool}) in {elapsed:.1f}s"
+        )
+
+        return ExtractionResult(
+            success=True,
+            source_name=config.source_name,
+            row_count=row_count,
+            output_path=output_path,
+            extraction_method="pipe",
+            elapsed_seconds=elapsed,
+        )
 
     # =========================================================================
     # Spark JDBC Extraction - Default Fallback for All Extractors

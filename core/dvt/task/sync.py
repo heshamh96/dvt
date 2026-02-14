@@ -717,6 +717,16 @@ class SyncTask(BaseTask):
                 "ℹ️  No cloud connector JARs needed (no S3/GCS/Azure buckets configured)."
             )
 
+        # 9) CLI tool detection: check for pipe-optimized data transfer tools
+        from dvt.task.cli_tools import detect_cli_tools, format_cli_tool_report
+
+        _sync_log("🔧 Detecting CLI tools for pipe-optimized data transfer...")
+        cli_results = detect_cli_tools(adapter_types)
+        cli_report = format_cli_tool_report(cli_results)
+        if cli_report:
+            for line in cli_report.splitlines():
+                _sync_log(line)
+
         # Show Java warnings and installation instructions if any
         if java_warnings:
             _sync_log("")

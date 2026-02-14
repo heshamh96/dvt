@@ -2,16 +2,21 @@
 PostgreSQL loader with COPY FROM optimization.
 
 Load priority:
-1. PostgreSQL COPY FROM - fast streaming load (no staging needed)
-2. Spark JDBC with adapter DDL - fallback
+1. Pipe-based: Spark result -> temp Parquet -> PyArrow batch -> psql COPY FROM STDIN
+2. PostgreSQL streaming COPY FROM via toLocalIterator (constant memory)
+3. PostgreSQL buffered COPY FROM (full dataset in memory)
+4. Spark JDBC with adapter DDL - fallback
 
 COPY FROM is significantly faster than JDBC INSERT for large datasets
 because it streams data directly to the database without per-row overhead.
 """
 
+import os
+import shutil
 import time
 from io import StringIO
-from typing import Any, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 from dvt.federation.loaders.base import BaseLoader, LoadConfig, LoadResult
 
@@ -90,6 +95,85 @@ class PostgresLoader(BaseLoader):
         "timescaledb",
     ]
 
+    cli_tool = "psql"
+
+    def _build_load_command(self, config: LoadConfig) -> List[str]:
+        """Build psql COPY FROM STDIN command."""
+        conn_config = config.connection_config or {}
+        # Use the table_name as-is (already qualified)
+        return [
+            "psql",
+            "-h",
+            conn_config.get("host", "localhost"),
+            "-p",
+            str(conn_config.get("port", 5432)),
+            "-U",
+            conn_config.get("user", "postgres"),
+            "-d",
+            conn_config.get("database", "postgres"),
+            "-c",
+            f"COPY {config.table_name} FROM STDIN WITH (FORMAT csv, HEADER)",
+            "--no-psqlrc",
+            "--quiet",
+        ]
+
+    def _build_load_env(self, config: LoadConfig) -> Dict[str, str]:
+        """Build env with PGPASSWORD for psql subprocess."""
+        conn_config = config.connection_config or {}
+        env = os.environ.copy()
+        password = conn_config.get("password", "")
+        if password:
+            env["PGPASSWORD"] = str(password)
+        return env
+
+    def _load_pipe(
+        self,
+        df: Any,
+        config: LoadConfig,
+        adapter: Optional[Any] = None,
+    ) -> LoadResult:
+        """Load via pipe: Spark result -> temp Parquet -> PyArrow -> psql COPY FROM STDIN.
+
+        Steps:
+        1. DDL via adapter (DROP + CREATE) on the same psycopg2 connection or adapter
+        2. Write Spark DataFrame to temp Parquet
+        3. Stream Parquet -> CSV via PyArrow batches -> psql stdin pipe
+        4. Clean up temp Parquet
+
+        Memory: ~1-10MB (PyArrow batch + CSV buffer).
+        """
+        start_time = time.time()
+
+        # DDL via adapter
+        if adapter:
+            self._execute_ddl(adapter, config)
+            self._create_table_with_adapter(adapter, df, config)
+
+        # Write Spark result to temp Parquet
+        temp_parquet = str(
+            Path(os.environ.get("DVT_STAGING_DIR", "/tmp"))
+            / f"_dvt_pipe_load_{config.table_name.replace('.', '_')}.parquet"
+        )
+        self._log("Writing Spark result to temp Parquet for pipe load...")
+        df.write.mode("overwrite").option("compression", "zstd").parquet(temp_parquet)
+
+        try:
+            row_count = self._load_via_pipe(temp_parquet, config)
+        finally:
+            # Clean up temp Parquet
+            shutil.rmtree(temp_parquet, ignore_errors=True)
+
+        elapsed = time.time() - start_time
+        self._log(f"Loaded {row_count:,} rows via pipe (psql) in {elapsed:.1f}s")
+
+        return LoadResult(
+            success=True,
+            table_name=config.table_name,
+            row_count=row_count,
+            load_method="pipe",
+            elapsed_seconds=elapsed,
+        )
+
     def load(
         self,
         df: Any,
@@ -98,8 +182,8 @@ class PostgresLoader(BaseLoader):
     ) -> LoadResult:
         """Load DataFrame to PostgreSQL.
 
-        Tries streaming COPY FROM first (constant memory via toLocalIterator),
-        then buffered COPY FROM, then falls back to Spark JDBC.
+        Tries pipe (psql) first, then streaming COPY FROM, buffered COPY FROM,
+        then falls back to Spark JDBC.
 
         Args:
             df: PySpark DataFrame to load
@@ -109,7 +193,14 @@ class PostgresLoader(BaseLoader):
         Returns:
             LoadResult with success status and metadata
         """
-        # Try streaming COPY first (constant memory)
+        # Try pipe load first (psql + PyArrow streaming, ~1-10MB memory)
+        if self._has_cli_tool():
+            try:
+                return self._load_pipe(df, config, adapter)
+            except Exception as e:
+                self._log(f"Pipe load failed ({e}), trying streaming COPY...")
+
+        # Try streaming COPY (constant memory via toLocalIterator)
         try:
             return self._load_copy_streaming(df, config, adapter)
         except Exception as e:

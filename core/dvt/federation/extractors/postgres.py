@@ -1,10 +1,14 @@
 """
 PostgreSQL extractor for EL layer.
 
-Uses COPY TO STDOUT for efficient bulk export when available.
-Falls back to Spark JDBC for parallel reads.
+Extraction priority:
+1. Pipe-based: psql COPY TO STDOUT | PyArrow streaming (if psql on PATH)
+2. In-process streaming COPY: psycopg2 copy_expert + PyArrow batch reader
+3. In-process buffered COPY: psycopg2 copy_expert + in-memory buffer
+4. Spark JDBC: parallel reads (default fallback)
 """
 
+import os
 import tempfile
 import time
 from io import BytesIO, StringIO
@@ -48,6 +52,8 @@ class PostgresExtractor(BaseExtractor):
         "timescaledb",
         # Note: redshift has its own extractor with native S3 UNLOAD
     ]
+
+    cli_tool = "psql"
 
     def _get_connection(self, config: ExtractionConfig = None) -> Any:
         """Get or create a database connection.
@@ -100,6 +106,35 @@ class PostgresExtractor(BaseExtractor):
         )
         return self._lazy_connection
 
+    def _build_extraction_command(self, config: ExtractionConfig) -> List[str]:
+        """Build psql COPY TO STDOUT command."""
+        conn_config = config.connection_config or self.connection_config or {}
+        query = self.build_export_query(config)
+        return [
+            "psql",
+            "-h",
+            conn_config.get("host", "localhost"),
+            "-p",
+            str(conn_config.get("port", 5432)),
+            "-U",
+            conn_config.get("user", "postgres"),
+            "-d",
+            conn_config.get("database", "postgres"),
+            "-c",
+            f"COPY ({query}) TO STDOUT WITH (FORMAT csv, HEADER)",
+            "--no-psqlrc",
+            "--quiet",
+        ]
+
+    def _build_extraction_env(self, config: ExtractionConfig) -> Dict[str, str]:
+        """Build env with PGPASSWORD for psql subprocess."""
+        conn_config = config.connection_config or self.connection_config or {}
+        env = os.environ.copy()
+        password = conn_config.get("password", "")
+        if password:
+            env["PGPASSWORD"] = str(password)
+        return env
+
     def extract(
         self,
         config: ExtractionConfig,
@@ -107,10 +142,17 @@ class PostgresExtractor(BaseExtractor):
     ) -> ExtractionResult:
         """Extract data from PostgreSQL to Parquet.
 
-        Tries streaming COPY first (constant memory), then buffered COPY,
+        Tries pipe (psql) first, then streaming COPY, buffered COPY,
         then falls back to Spark JDBC.
         """
-        # Try streaming COPY first (constant memory via OS page cache)
+        # Try pipe extraction first (psql + PyArrow streaming, ~64KB memory)
+        if self._has_cli_tool():
+            try:
+                return self._extract_via_pipe(config, output_path)
+            except Exception as e:
+                self._log(f"Pipe extraction failed ({e}), trying streaming COPY...")
+
+        # Try streaming COPY (constant memory via OS page cache)
         try:
             return self._extract_copy_streaming(config, output_path)
         except Exception as e:
