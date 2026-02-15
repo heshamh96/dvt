@@ -134,20 +134,75 @@ class PostgresLoader(BaseLoader):
     ) -> LoadResult:
         """Load via pipe: Spark result -> temp Parquet -> PyArrow -> psql COPY FROM STDIN.
 
-        Steps:
-        1. DDL via adapter (DROP + CREATE) on the same psycopg2 connection or adapter
-        2. Write Spark DataFrame to temp Parquet
-        3. Stream Parquet -> CSV via PyArrow batches -> psql stdin pipe
-        4. Clean up temp Parquet
+        DDL contract:
+        - dvt run (default):         TRUNCATE + INSERT (preserves table structure)
+        - dvt run --full-refresh:    DROP + CREATE + INSERT (rebuilds structure)
+
+        If adapter is available, DDL runs via adapter with proper quoting.
+        Otherwise, DDL runs via a dedicated psycopg2 connection to ensure
+        transactional visibility for the psql subprocess.
 
         Memory: ~1-10MB (PyArrow batch + CSV buffer).
         """
         start_time = time.time()
 
-        # DDL via adapter
+        if not config.connection_config:
+            raise ValueError("connection_config required for pipe load")
+
+        # DDL via dedicated psycopg2 connection (same as buffered COPY path)
+        # to avoid transaction visibility issues between adapter and psql subprocess.
+        try:
+            import psycopg2
+        except ImportError:
+            raise ImportError(
+                "psycopg2 required for pipe load. pip install psycopg2-binary"
+            )
+
         if adapter:
-            self._execute_ddl(adapter, config)
-            self._create_table_with_adapter(adapter, df, config)
+            from dvt.federation.adapter_manager import get_quoted_table_name
+
+            quoted_table = get_quoted_table_name(adapter, config.table_name)
+        else:
+            quoted_table = config.table_name
+
+        from dvt.utils.identifiers import build_create_table_sql
+        from dvt.federation.auth.postgres import PostgresAuthHandler
+
+        adapter_type = config.connection_config.get("type", "postgres")
+        create_sql = build_create_table_sql(df, adapter_type, quoted_table)
+
+        handler = PostgresAuthHandler()
+        connect_kwargs = handler.get_native_connection_kwargs(config.connection_config)
+
+        conn = psycopg2.connect(**connect_kwargs)
+        conn.autocommit = False
+        cursor = conn.cursor()
+
+        try:
+            if config.full_refresh or (
+                config.mode == "overwrite" and not config.truncate
+            ):
+                # --full-refresh: DROP + CREATE
+                self._log(f"Dropping {config.table_name}...")
+                cursor.execute(f"DROP TABLE IF EXISTS {quoted_table} CASCADE")
+                self._log(f"Creating table {config.table_name}...")
+                cursor.execute(create_sql)
+            elif config.mode == "overwrite" and config.truncate:
+                # Default dvt run: TRUNCATE + INSERT (preserves structure)
+                # Create table first if it doesn't exist (first run)
+                cursor.execute(
+                    create_sql.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS")
+                )
+                self._log(f"Truncating {config.table_name}...")
+                cursor.execute(f"TRUNCATE TABLE {quoted_table}")
+
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cursor.close()
+            conn.close()
 
         # Write Spark result to temp Parquet
         temp_parquet = str(
@@ -280,13 +335,24 @@ class PostgresLoader(BaseLoader):
             conn.autocommit = False
             cursor = conn.cursor()
 
-            # DDL: DROP + CREATE for overwrite mode
-            if config.mode == "overwrite":
+            # DDL contract:
+            # - dvt run --full-refresh: DROP + CREATE (rebuild structure)
+            # - dvt run (default):      CREATE IF NOT EXISTS + TRUNCATE (preserve structure)
+            if config.full_refresh or (
+                config.mode == "overwrite" and not config.truncate
+            ):
+                # --full-refresh: DROP + CREATE
                 self._log(f"Dropping {config.table_name}...")
                 cursor.execute(f"DROP TABLE IF EXISTS {quoted_table} CASCADE")
-
-            self._log(f"Creating table {config.table_name} via adapter DDL...")
-            cursor.execute(create_sql)
+                self._log(f"Creating table {config.table_name}...")
+                cursor.execute(create_sql)
+            elif config.mode == "overwrite" and config.truncate:
+                # Default dvt run: TRUNCATE + INSERT (preserves structure)
+                cursor.execute(
+                    create_sql.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS")
+                )
+                self._log(f"Truncating {config.table_name}...")
+                cursor.execute(f"TRUNCATE TABLE {quoted_table}")
 
             # Stream via _SparkRowPipe (toLocalIterator under the hood)
             columns = df.columns
@@ -389,21 +455,24 @@ class PostgresLoader(BaseLoader):
             conn.autocommit = False
             cursor = conn.cursor()
 
-            # DDL: Always DROP + CREATE for overwrite mode.
-            # We always re-create the table from the current DataFrame schema
-            # rather than truncating, because:
-            # 1. The old schema may have NOT NULL constraints from previous runs
-            #    that don't match the current data (Spark nullable inference is
-            #    unreliable for federated sources).
-            # 2. Column types/names may have changed between runs.
-            # 3. CREATE TABLE IF NOT EXISTS would be a no-op on an existing table.
-            if config.mode == "overwrite":
+            # DDL contract:
+            # - dvt run --full-refresh: DROP + CREATE (rebuild structure)
+            # - dvt run (default):      CREATE IF NOT EXISTS + TRUNCATE (preserve structure)
+            if config.full_refresh or (
+                config.mode == "overwrite" and not config.truncate
+            ):
+                # --full-refresh: DROP + CREATE
                 self._log(f"Dropping {config.table_name}...")
                 cursor.execute(f"DROP TABLE IF EXISTS {quoted_table} CASCADE")
-
-            # DDL: CREATE TABLE with properly quoted column names
-            self._log(f"Creating table {config.table_name} via adapter DDL...")
-            cursor.execute(create_sql)
+                self._log(f"Creating table {config.table_name}...")
+                cursor.execute(create_sql)
+            elif config.mode == "overwrite" and config.truncate:
+                # Default dvt run: TRUNCATE + INSERT (preserves structure)
+                cursor.execute(
+                    create_sql.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS")
+                )
+                self._log(f"Truncating {config.table_name}...")
+                cursor.execute(f"TRUNCATE TABLE {quoted_table}")
 
             # Collect DataFrame to driver
             self._log("Collecting DataFrame for COPY...")

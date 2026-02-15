@@ -154,11 +154,16 @@ class GenericLoader(BaseLoader):
     ) -> LoadResult:
         """Load via pipe: Spark result -> temp Parquet -> PyArrow -> CLI stdin.
 
+        DDL contract (via adapter):
+        - dvt run (default):         TRUNCATE + INSERT (preserves table structure)
+        - dvt run --full-refresh:    DROP + CREATE + INSERT (rebuilds structure)
+
         Steps:
-        1. DDL via adapter (DROP + CREATE)
-        2. Write Spark DataFrame to temp Parquet
-        3. Stream Parquet -> CSV via PyArrow batches -> CLI stdin pipe
-        4. Clean up temp Parquet
+        1. DDL via adapter (TRUNCATE or DROP+CREATE per contract)
+        2. CREATE TABLE IF NOT EXISTS via adapter
+        3. Write Spark DataFrame to temp Parquet
+        4. Stream Parquet -> CSV via PyArrow batches -> CLI stdin pipe
+        5. Clean up temp Parquet
 
         Memory: ~1-10MB (PyArrow batch + CSV buffer).
         """
@@ -168,7 +173,9 @@ class GenericLoader(BaseLoader):
         original_cli_tool = self.cli_tool
         self.cli_tool = tool_name
 
-        # DDL via adapter
+        # DDL via adapter — respects full_refresh vs truncate contract
+        # (MySQL/ClickHouse: DDL auto-commits, always visible to subprocess)
+        # (SQL Server: committed DDL visible to subprocess)
         if adapter:
             self._execute_ddl(adapter, config)
             self._create_table_with_adapter(adapter, df, config)
