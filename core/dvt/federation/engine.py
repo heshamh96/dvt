@@ -411,8 +411,11 @@ class FederationEngine:
         if not sources:
             return {"success": True, "sources_extracted": 0, "total_rows": 0}
 
-        # Extract all sources
-        result = el_layer.extract_sources_parallel(sources, full_refresh=False)
+        # Extract all sources (full_refresh=True forces re-extraction)
+        full_refresh = getattr(
+            getattr(self.config, "args", None), "FULL_REFRESH", False
+        )
+        result = el_layer.extract_sources_parallel(sources, full_refresh=full_refresh)
 
         return {
             "success": result.success,
@@ -657,11 +660,16 @@ class FederationEngine:
         # Get JDBC load settings from computes.yml
         jdbc_config = self._get_jdbc_load_config()
 
+        # Check --full-refresh flag from CLI args
+        full_refresh = getattr(
+            getattr(self.config, "args", None), "FULL_REFRESH", False
+        )
+
         load_config = LoadConfig(
             table_name=f"{model.schema}.{model.name}",
             mode=mode,
-            truncate=True,
-            full_refresh=False,
+            truncate=not full_refresh,
+            full_refresh=full_refresh,
             connection_config=target_config,
             jdbc_config=jdbc_config,
             bucket_config=bucket_config if can_bulk_load else None,
