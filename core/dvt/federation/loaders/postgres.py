@@ -190,9 +190,8 @@ class PostgresLoader(BaseLoader):
             elif config.mode == "overwrite" and config.truncate:
                 # Default dvt run: TRUNCATE + INSERT (preserves structure)
                 # Create table first if it doesn't exist (first run)
-                cursor.execute(
-                    create_sql.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS")
-                )
+                # build_create_table_sql already includes IF NOT EXISTS
+                cursor.execute(create_sql)
                 self._log(f"Truncating {config.table_name}...")
                 cursor.execute(f"TRUNCATE TABLE {quoted_table}")
 
@@ -348,9 +347,8 @@ class PostgresLoader(BaseLoader):
                 cursor.execute(create_sql)
             elif config.mode == "overwrite" and config.truncate:
                 # Default dvt run: TRUNCATE + INSERT (preserves structure)
-                cursor.execute(
-                    create_sql.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS")
-                )
+                # build_create_table_sql already includes IF NOT EXISTS
+                cursor.execute(create_sql)
                 self._log(f"Truncating {config.table_name}...")
                 cursor.execute(f"TRUNCATE TABLE {quoted_table}")
 
@@ -468,9 +466,8 @@ class PostgresLoader(BaseLoader):
                 cursor.execute(create_sql)
             elif config.mode == "overwrite" and config.truncate:
                 # Default dvt run: TRUNCATE + INSERT (preserves structure)
-                cursor.execute(
-                    create_sql.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS")
-                )
+                # build_create_table_sql already includes IF NOT EXISTS
+                cursor.execute(create_sql)
                 self._log(f"Truncating {config.table_name}...")
                 cursor.execute(f"TRUNCATE TABLE {quoted_table}")
 

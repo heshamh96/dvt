@@ -58,7 +58,9 @@ def _mock_psycopg2_connect(mock_cursor, mock_conn):
 
 def _mock_pg_helpers():
     """Create patchers for PostgresAuthHandler and build_create_table_sql."""
-    create_sql = 'CREATE TABLE "public"."test_table" ("id" INTEGER, "name" TEXT)'
+    create_sql = (
+        'CREATE TABLE IF NOT EXISTS "public"."test_table" ("id" INTEGER, "name" TEXT)'
+    )
 
     mock_auth = patch(
         "dvt.federation.auth.postgres.PostgresAuthHandler.get_native_connection_kwargs",
@@ -457,8 +459,10 @@ class TestDDLContractConsistency:
             assert "DROP TABLE IF EXISTS" in src, (
                 f"{method_name} doesn't have DROP path"
             )
-            assert "CREATE TABLE IF NOT EXISTS" in src, (
-                f"{method_name} doesn't have CREATE IF NOT EXISTS path"
+            # build_create_table_sql provides IF NOT EXISTS;
+            # verify each method uses create_sql in the TRUNCATE path
+            assert "cursor.execute(create_sql)" in src, (
+                f"{method_name} doesn't use create_sql for table creation"
             )
 
     def test_load_config_defaults(self):
