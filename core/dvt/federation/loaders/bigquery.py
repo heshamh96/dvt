@@ -136,10 +136,31 @@ class BigQueryLoader(BaseLoader):
             client = bigquery.Client(project=project)
 
         try:
-            # Handle overwrite mode:
-            # - full_refresh=True: DROP + CREATE
-            # - full_refresh=False: TRUNCATE (if exists) or let LOAD DATA create
-            if config.mode == "overwrite":
+            # Handle DDL via adapter for proper quoting when available
+            if adapter and config.mode == "overwrite":
+                from dvt.federation.adapter_manager import get_quoted_table_name
+
+                quoted_table = get_quoted_table_name(adapter, config.table_name)
+
+                with adapter.connection_named("dvt_loader"):
+                    if config.full_refresh:
+                        self._log(f"Dropping {config.table_name} (full refresh)...")
+                        try:
+                            adapter.execute(f"DROP TABLE IF EXISTS {quoted_table}")
+                        except Exception:
+                            pass
+                        self._safe_commit(adapter)
+                        # Create table from DataFrame schema
+                        self._create_table_with_adapter(adapter, df, config)
+                    elif config.truncate:
+                        self._log(f"Truncating {config.table_name}...")
+                        try:
+                            adapter.execute(f"TRUNCATE TABLE {quoted_table}")
+                        except Exception:
+                            pass  # Table may not exist yet
+                        self._safe_commit(adapter)
+            elif config.mode == "overwrite":
+                # Fallback: DDL via BigQuery client (no adapter quoting)
                 if config.full_refresh:
                     self._log(f"Dropping {config.table_name} (full refresh)...")
                     try:
@@ -153,28 +174,20 @@ class BigQueryLoader(BaseLoader):
                     try:
                         client.query(f"TRUNCATE TABLE {config.table_name}").result()
                     except Exception:
-                        # Table may not exist yet - LOAD DATA will create it
-                        pass
-                else:
-                    self._log(f"Dropping {config.table_name}...")
-                    try:
-                        client.query(
-                            f"DROP TABLE IF EXISTS {config.table_name}"
-                        ).result()
-                    except Exception:
                         pass
 
             # Use BigQuery load job for Parquet files
             self._log(f"Loading {config.table_name} via LOAD DATA...")
 
             # Configure load job
+            # DDL already handled above — use WRITE_APPEND to avoid
+            # redundant truncation by the load job itself.
+            # autodetect=True lets BQ infer schema from Parquet when
+            # table was DROPped without explicit CREATE (no-adapter fallback).
             job_config = bigquery.LoadJobConfig(
                 source_format=bigquery.SourceFormat.PARQUET,
-                write_disposition=(
-                    bigquery.WriteDisposition.WRITE_TRUNCATE
-                    if config.mode == "overwrite"
-                    else bigquery.WriteDisposition.WRITE_APPEND
-                ),
+                write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
+                autodetect=True,
             )
 
             # Load from GCS (use spark_path which is gs:// format)

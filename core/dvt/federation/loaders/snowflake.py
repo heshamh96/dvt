@@ -121,46 +121,81 @@ class SnowflakeLoader(BaseLoader):
         df.write.mode("overwrite").option("compression", "snappy").parquet(spark_path)
         row_count = df.count()
 
-        # Build COPY INTO SQL
-        copy_sql = f"""
-            COPY INTO {config.table_name}
-            FROM '{native_path}'
-            FILE_FORMAT = (TYPE = PARQUET)
-            {creds_clause}
-            MATCH_BY_COLUMN_NAME = CASE_INSENSITIVE
-            PURGE = TRUE
-        """
+        # Execute DDL via adapter for proper quoting, COPY via native connection
+        if adapter:
+            from dvt.federation.adapter_manager import get_quoted_table_name
 
-        # Execute COPY INTO
-        connect_kwargs = handler.get_native_connection_kwargs(connection)
-        conn = snowflake.connector.connect(**connect_kwargs)
-        try:
-            cursor = conn.cursor()
+            quoted_table = get_quoted_table_name(adapter, config.table_name)
 
-            # Handle overwrite mode:
-            # - full_refresh=True: DROP + CREATE
-            # - full_refresh=False: TRUNCATE (if exists) or let COPY INTO create
-            if config.mode == "overwrite":
-                if config.full_refresh:
-                    self._log(f"Dropping {config.table_name} (full refresh)...")
-                    cursor.execute(f"DROP TABLE IF EXISTS {config.table_name}")
-                elif config.truncate:
-                    self._log(f"Truncating {config.table_name}...")
-                    try:
-                        cursor.execute(f"TRUNCATE TABLE IF EXISTS {config.table_name}")
-                    except Exception:
-                        # Table may not exist yet - COPY INTO will create it
-                        pass
-                else:
-                    self._log(f"Dropping {config.table_name}...")
-                    cursor.execute(f"DROP TABLE IF EXISTS {config.table_name}")
+            # Build COPY INTO SQL with properly quoted table name
+            copy_sql = f"""
+                COPY INTO {quoted_table}
+                FROM '{native_path}'
+                FILE_FORMAT = (TYPE = PARQUET)
+                {creds_clause}
+                MATCH_BY_COLUMN_NAME = CASE_INSENSITIVE
+                PURGE = TRUE
+            """
 
-            self._log(f"Loading {config.table_name} via COPY INTO...")
-            cursor.execute(copy_sql)
-            cursor.close()
+            with adapter.connection_named("dvt_loader"):
+                if config.mode == "overwrite":
+                    if config.full_refresh:
+                        self._log(f"Dropping {config.table_name} (full refresh)...")
+                        adapter.execute(f"DROP TABLE IF EXISTS {quoted_table}")
+                        self._safe_commit(adapter)
+                        # Create table from DataFrame schema
+                        self._create_table_with_adapter(adapter, df, config)
+                    elif config.truncate:
+                        self._log(f"Truncating {config.table_name}...")
+                        try:
+                            adapter.execute(f"TRUNCATE TABLE IF EXISTS {quoted_table}")
+                        except Exception:
+                            pass  # Table may not exist yet
+                        self._safe_commit(adapter)
 
-        finally:
-            conn.close()
+            # COPY INTO uses native connection (needs creds clause)
+            connect_kwargs = handler.get_native_connection_kwargs(connection)
+            conn = snowflake.connector.connect(**connect_kwargs)
+            try:
+                cursor = conn.cursor()
+                self._log(f"Loading {config.table_name} via COPY INTO...")
+                cursor.execute(copy_sql)
+                cursor.close()
+            finally:
+                conn.close()
+        else:
+            # Fallback: native connection for DDL (no adapter quoting)
+            copy_sql = f"""
+                COPY INTO {config.table_name}
+                FROM '{native_path}'
+                FILE_FORMAT = (TYPE = PARQUET)
+                {creds_clause}
+                MATCH_BY_COLUMN_NAME = CASE_INSENSITIVE
+                PURGE = TRUE
+            """
+            connect_kwargs = handler.get_native_connection_kwargs(connection)
+            conn = snowflake.connector.connect(**connect_kwargs)
+            try:
+                cursor = conn.cursor()
+
+                if config.mode == "overwrite":
+                    if config.full_refresh:
+                        self._log(f"Dropping {config.table_name} (full refresh)...")
+                        cursor.execute(f"DROP TABLE IF EXISTS {config.table_name}")
+                    elif config.truncate:
+                        self._log(f"Truncating {config.table_name}...")
+                        try:
+                            cursor.execute(
+                                f"TRUNCATE TABLE IF EXISTS {config.table_name}"
+                            )
+                        except Exception:
+                            pass
+
+                self._log(f"Loading {config.table_name} via COPY INTO...")
+                cursor.execute(copy_sql)
+                cursor.close()
+            finally:
+                conn.close()
 
         elapsed = time.time() - start_time
         self._log(f"Loaded {row_count:,} rows via COPY INTO in {elapsed:.1f}s")

@@ -120,46 +120,85 @@ class RedshiftLoader(BaseLoader):
         df.write.mode("overwrite").option("compression", "snappy").parquet(spark_path)
         row_count = df.count()
 
-        # Build COPY SQL
-        copy_sql = f"""
-            COPY {config.table_name}
-            FROM '{native_path}'
-            {creds_clause}
-            FORMAT AS PARQUET
-            REGION '{region}'
-        """
+        # Execute DDL + COPY via adapter for proper quoting
+        if adapter:
+            from dvt.federation.adapter_manager import get_quoted_table_name
 
-        # Execute COPY
-        connect_kwargs = handler.get_native_connection_kwargs(connection)
-        conn = redshift_connector.connect(**connect_kwargs)
-        try:
-            conn.autocommit = True
-            cursor = conn.cursor()
+            quoted_table = get_quoted_table_name(adapter, config.table_name)
 
-            # Handle overwrite mode:
-            # - full_refresh=True: DROP CASCADE + CREATE
-            # - full_refresh=False: TRUNCATE (if exists) or let COPY create
-            if config.mode == "overwrite":
-                if config.full_refresh:
-                    self._log(f"Dropping {config.table_name} CASCADE (full refresh)...")
-                    cursor.execute(f"DROP TABLE IF EXISTS {config.table_name} CASCADE")
-                elif config.truncate:
-                    self._log(f"Truncating {config.table_name}...")
-                    try:
-                        cursor.execute(f"TRUNCATE TABLE {config.table_name}")
-                    except Exception:
-                        # Table may not exist yet - COPY will create it
-                        pass
-                else:
-                    self._log(f"Dropping {config.table_name}...")
-                    cursor.execute(f"DROP TABLE IF EXISTS {config.table_name} CASCADE")
+            # Build COPY SQL with properly quoted table name
+            copy_sql = f"""
+                COPY {quoted_table}
+                FROM '{native_path}'
+                {creds_clause}
+                FORMAT AS PARQUET
+                REGION '{region}'
+            """
 
-            self._log(f"Loading {config.table_name} via COPY...")
-            cursor.execute(copy_sql)
-            cursor.close()
+            with adapter.connection_named("dvt_loader"):
+                if config.mode == "overwrite":
+                    if config.full_refresh:
+                        self._log(
+                            f"Dropping {config.table_name} CASCADE (full refresh)..."
+                        )
+                        adapter.execute(f"DROP TABLE IF EXISTS {quoted_table} CASCADE")
+                        self._safe_commit(adapter)
+                        # Create table from DataFrame schema
+                        self._create_table_with_adapter(adapter, df, config)
+                    elif config.truncate:
+                        self._log(f"Truncating {config.table_name}...")
+                        try:
+                            adapter.execute(f"TRUNCATE TABLE {quoted_table}")
+                        except Exception:
+                            pass  # Table may not exist yet - COPY will create it
+                        self._safe_commit(adapter)
 
-        finally:
-            conn.close()
+            # COPY still uses native connection (adapter can't do COPY with creds)
+            connect_kwargs = handler.get_native_connection_kwargs(connection)
+            conn = redshift_connector.connect(**connect_kwargs)
+            try:
+                conn.autocommit = True
+                cursor = conn.cursor()
+                self._log(f"Loading {config.table_name} via COPY...")
+                cursor.execute(copy_sql)
+                cursor.close()
+            finally:
+                conn.close()
+        else:
+            # Fallback: native connection for DDL (no adapter quoting)
+            copy_sql = f"""
+                COPY {config.table_name}
+                FROM '{native_path}'
+                {creds_clause}
+                FORMAT AS PARQUET
+                REGION '{region}'
+            """
+            connect_kwargs = handler.get_native_connection_kwargs(connection)
+            conn = redshift_connector.connect(**connect_kwargs)
+            try:
+                conn.autocommit = True
+                cursor = conn.cursor()
+
+                if config.mode == "overwrite":
+                    if config.full_refresh:
+                        self._log(
+                            f"Dropping {config.table_name} CASCADE (full refresh)..."
+                        )
+                        cursor.execute(
+                            f"DROP TABLE IF EXISTS {config.table_name} CASCADE"
+                        )
+                    elif config.truncate:
+                        self._log(f"Truncating {config.table_name}...")
+                        try:
+                            cursor.execute(f"TRUNCATE TABLE {config.table_name}")
+                        except Exception:
+                            pass
+
+                self._log(f"Loading {config.table_name} via COPY...")
+                cursor.execute(copy_sql)
+                cursor.close()
+            finally:
+                conn.close()
 
         elapsed = time.time() - start_time
         self._log(f"Loaded {row_count:,} rows via COPY in {elapsed:.1f}s")

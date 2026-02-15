@@ -115,12 +115,16 @@ class DatabricksLoader(BaseLoader):
                 if config.full_refresh:
                     self._log(f"Dropping {config.table_name}...")
                     adapter.execute(f"DROP TABLE IF EXISTS {quoted_table}")
+                    self._safe_commit(adapter)
+                    # Create table from DataFrame schema
+                    self._create_table_with_adapter(adapter, df, config)
                 elif config.truncate:
                     self._log(f"Truncating {config.table_name}...")
                     try:
                         adapter.execute(f"TRUNCATE TABLE {quoted_table}")
                     except Exception:
                         pass  # Table might not exist
+                    self._safe_commit(adapter)
 
                 # Execute COPY INTO
                 self._log(f"Loading {config.table_name} via COPY INTO...")
