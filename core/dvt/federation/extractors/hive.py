@@ -120,6 +120,8 @@ class HiveExtractor(BaseExtractor):
         cursor.close()
         return columns
 
-    def detect_primary_key(self, schema: str, table: str) -> List[str]:
+    def detect_primary_key(
+        self, schema: str, table: str, config: ExtractionConfig = None
+    ) -> List[str]:
         # Hive doesn't support PKs
         return []

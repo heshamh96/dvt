@@ -4,7 +4,7 @@ Uses Spark JDBC for extraction - writes to staging for consistency.
 """
 
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from dvt.federation.extractors.base import (
     BaseExtractor,
@@ -21,6 +21,18 @@ class SparkExtractor(BaseExtractor):
     """
 
     adapter_types = ["spark"]
+
+    def _get_connection(self, config: ExtractionConfig = None) -> Any:
+        """Get the Spark connection.
+
+        Spark extractors typically have the connection injected directly.
+        """
+        if self.connection is not None:
+            return self.connection
+        raise ValueError(
+            "SparkExtractor requires a connection to be provided directly. "
+            "Set extractor.connection before calling extraction methods."
+        )
 
     def extract(self, config: ExtractionConfig, output_path: Path) -> ExtractionResult:
         """Extract data from Spark to Parquet using Spark JDBC."""
@@ -50,7 +62,8 @@ class SparkExtractor(BaseExtractor):
         if config.predicates:
             query += f" WHERE {' AND '.join(config.predicates)}"
 
-        cursor = self.connection.cursor()
+        conn = self._get_connection(config)
+        cursor = conn.cursor()
         cursor.execute(query)
         hashes = {}
         while True:
@@ -62,19 +75,27 @@ class SparkExtractor(BaseExtractor):
         return hashes
 
     def get_row_count(
-        self, schema: str, table: str, predicates: Optional[List[str]] = None
+        self,
+        schema: str,
+        table: str,
+        predicates: Optional[List[str]] = None,
+        config: ExtractionConfig = None,
     ) -> int:
         query = f"SELECT COUNT(*) FROM {schema}.{table}"
         if predicates:
             query += f" WHERE {' AND '.join(predicates)}"
-        cursor = self.connection.cursor()
+        conn = self._get_connection(config)
+        cursor = conn.cursor()
         cursor.execute(query)
         count = cursor.fetchone()[0]
         cursor.close()
         return count
 
-    def get_columns(self, schema: str, table: str) -> List[Dict[str, str]]:
-        cursor = self.connection.cursor()
+    def get_columns(
+        self, schema: str, table: str, config: ExtractionConfig = None
+    ) -> List[Dict[str, str]]:
+        conn = self._get_connection(config)
+        cursor = conn.cursor()
         cursor.execute(f"DESCRIBE {schema}.{table}")
         columns = []
         for row in cursor.fetchall():
@@ -83,6 +104,8 @@ class SparkExtractor(BaseExtractor):
         cursor.close()
         return columns
 
-    def detect_primary_key(self, schema: str, table: str) -> List[str]:
+    def detect_primary_key(
+        self, schema: str, table: str, config: ExtractionConfig = None
+    ) -> List[str]:
         # Spark SQL doesn't support PKs
         return []

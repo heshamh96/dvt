@@ -354,13 +354,14 @@ class PostgresExtractor(BaseExtractor):
         schema: str,
         table: str,
         predicates: Optional[List[str]] = None,
+        config: ExtractionConfig = None,
     ) -> int:
         """Get row count using COUNT(*)."""
         query = f"SELECT COUNT(*) FROM {schema}.{table}"
         if predicates:
             query += f" WHERE {' AND '.join(predicates)}"
 
-        conn = self._get_connection()
+        conn = self._get_connection(config)
         cursor = conn.cursor()
         cursor.execute(query)
         count = cursor.fetchone()[0]
@@ -371,6 +372,7 @@ class PostgresExtractor(BaseExtractor):
         self,
         schema: str,
         table: str,
+        config: ExtractionConfig = None,
     ) -> List[Dict[str, str]]:
         """Get column metadata from information_schema."""
         query = """
@@ -379,7 +381,7 @@ class PostgresExtractor(BaseExtractor):
             WHERE table_schema = %s AND table_name = %s
             ORDER BY ordinal_position
         """
-        conn = self._get_connection()
+        conn = self._get_connection(config)
         cursor = conn.cursor()
         cursor.execute(query, (schema, table))
 
@@ -394,6 +396,7 @@ class PostgresExtractor(BaseExtractor):
         self,
         schema: str,
         table: str,
+        config: ExtractionConfig = None,
     ) -> List[str]:
         """Detect primary key from pg_index."""
         query = """
@@ -404,7 +407,7 @@ class PostgresExtractor(BaseExtractor):
             AND i.indisprimary
             ORDER BY array_position(i.indkey, a.attnum)
         """
-        conn = self._get_connection()
+        conn = self._get_connection(config)
         cursor = conn.cursor()
         try:
             cursor.execute(query, (f"{schema}.{table}",))
@@ -416,7 +419,7 @@ class PostgresExtractor(BaseExtractor):
 
         # If no primary key found, try to find a unique index
         if not pk_cols:
-            pk_cols = self._detect_unique_index(schema, table)
+            pk_cols = self._detect_unique_index(schema, table, config)
 
         return pk_cols
 
@@ -424,22 +427,37 @@ class PostgresExtractor(BaseExtractor):
         self,
         schema: str,
         table: str,
+        config: ExtractionConfig = None,
     ) -> List[str]:
-        """Fallback: detect unique index columns."""
-        query = """
-            SELECT a.attname
+        """Fallback: detect columns from the first unique index found."""
+        # Get the first unique (non-primary) index OID
+        idx_query = """
+            SELECT i.indexrelid
             FROM pg_index i
-            JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
             WHERE i.indrelid = %s::regclass
             AND i.indisunique
             AND NOT i.indisprimary
-            ORDER BY array_position(i.indkey, a.attnum)
-            LIMIT 10
+            LIMIT 1
         """
-        conn = self._get_connection()
+        conn = self._get_connection(config)
         cursor = conn.cursor()
         try:
-            cursor.execute(query, (f"{schema}.{table}",))
+            cursor.execute(idx_query, (f"{schema}.{table}",))
+            idx_row = cursor.fetchone()
+            if not idx_row:
+                return []
+            index_oid = idx_row[0]
+
+            # Get columns for that specific index
+            col_query = """
+                SELECT a.attname
+                FROM pg_index i
+                JOIN pg_attribute a ON a.attrelid = i.indrelid
+                    AND a.attnum = ANY(i.indkey)
+                WHERE i.indexrelid = %s
+                ORDER BY array_position(i.indkey, a.attnum)
+            """
+            cursor.execute(col_query, (index_oid,))
             return [row[0] for row in cursor.fetchall()]
         except Exception:
             return []

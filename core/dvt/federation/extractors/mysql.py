@@ -96,7 +96,7 @@ class MySQLExtractor(BaseExtractor):
         """Build mysql CLI command for tab-delimited output."""
         conn_config = config.connection_config or self.connection_config or {}
         query = self.build_export_query(config)
-        return [
+        cmd = [
             "mysql",
             "-h",
             conn_config.get("host", "localhost"),
@@ -104,12 +104,19 @@ class MySQLExtractor(BaseExtractor):
             str(conn_config.get("port", 3306)),
             "-u",
             conn_config.get("user", "root"),
-            conn_config.get("database", ""),
-            "-e",
-            query,
-            "--batch",
-            "--raw",  # tab-separated, no escaping
         ]
+        database = conn_config.get("database", "")
+        if database:
+            cmd.extend(["-D", database])
+        cmd.extend(
+            [
+                "-e",
+                query,
+                "--batch",
+                "--raw",  # tab-separated, no escaping
+            ]
+        )
+        return cmd
 
     def _build_extraction_env(self, config: ExtractionConfig) -> Dict[str, str]:
         """Build env with MYSQL_PWD for mysql subprocess."""

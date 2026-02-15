@@ -62,14 +62,15 @@ class FireboltExtractor(BaseExtractor):
         pk_expr = (
             config.pk_columns[0]
             if len(config.pk_columns) == 1
-            else f"CONCAT({', '.join(config.pk_columns)})"
+            else "CONCAT(" + ", '|', ".join(config.pk_columns) + ")"
         )
 
         cols = config.columns or [
             c["name"] for c in self.get_columns(config.schema, config.table)
         ]
         col_exprs = [f"COALESCE(CAST({c} AS TEXT), '')" for c in cols]
-        hash_expr = f"MD5(CONCAT({', '.join(col_exprs)}))"
+        concat_hash = ", '|', ".join(col_exprs)
+        hash_expr = f"MD5(CONCAT({concat_hash}))"
 
         query = f"""
             SELECT CAST({pk_expr} AS TEXT) as _pk, {hash_expr} as _hash
@@ -120,6 +121,8 @@ class FireboltExtractor(BaseExtractor):
         cursor.close()
         return columns
 
-    def detect_primary_key(self, schema: str, table: str) -> List[str]:
+    def detect_primary_key(
+        self, schema: str, table: str, config: ExtractionConfig = None
+    ) -> List[str]:
         # Firebolt uses PRIMARY INDEX
         return []

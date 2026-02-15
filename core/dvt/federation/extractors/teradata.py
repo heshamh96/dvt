@@ -43,14 +43,10 @@ class TeradataExtractor(BaseExtractor):
                 "teradatasql is required for Teradata extraction. Install with: pip install teradatasql"
             )
 
-        # Build connection kwargs
-        kwargs = {
-            "host": conn_config.get("host", ""),
-            "user": conn_config.get("user", ""),
-            "password": conn_config.get("password", ""),
-        }
-        if conn_config.get("database"):
-            kwargs["database"] = conn_config["database"]
+        from dvt.federation.auth.teradata import TeradataAuthHandler
+
+        handler = TeradataAuthHandler()
+        kwargs = handler.get_native_connection_kwargs(conn_config)
 
         self._lazy_connection = teradatasql.connect(**kwargs)
         return self._lazy_connection
@@ -67,7 +63,7 @@ class TeradataExtractor(BaseExtractor):
         pk_expr = (
             config.pk_columns[0]
             if len(config.pk_columns) == 1
-            else f"CONCAT({', '.join(config.pk_columns)})"
+            else " || '|' || ".join(config.pk_columns)
         )
 
         cols = config.columns or [

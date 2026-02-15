@@ -83,22 +83,38 @@ class ClickHouseExtractor(BaseExtractor):
             def __init__(self, ch_client):
                 self._client = ch_client
                 self._result = None
+                self._row_idx = 0
 
             def execute(self, query, params=None):
                 self._result = self._client.query(query)
+                self._row_idx = 0
 
             def fetchone(self):
-                if self._result and self._result.result_rows:
-                    return self._result.result_rows[0]
+                if self._result and self._row_idx < len(self._result.result_rows):
+                    row = self._result.result_rows[self._row_idx]
+                    self._row_idx += 1
+                    return row
                 return None
+
+            def fetchmany(self, size=1):
+                if not self._result:
+                    return []
+                rows = self._result.result_rows
+                end = min(self._row_idx + size, len(rows))
+                batch = rows[self._row_idx : end]
+                self._row_idx = end
+                return batch
 
             def fetchall(self):
                 if self._result:
-                    return self._result.result_rows
+                    remaining = self._result.result_rows[self._row_idx :]
+                    self._row_idx = len(self._result.result_rows)
+                    return remaining
                 return []
 
             def close(self):
                 self._result = None
+                self._row_idx = 0
 
         self._lazy_connection = ClickHouseConnectionWrapper(client)
         return self._lazy_connection
@@ -120,14 +136,16 @@ class ClickHouseExtractor(BaseExtractor):
             "--query",
             f"{query} FORMAT CSVWithNames",
         ]
-        password = conn_config.get("password", "")
-        if password:
-            cmd.extend(["--password", str(password)])
         return cmd
 
     def _build_extraction_env(self, config: ExtractionConfig) -> Dict[str, str]:
-        """Build env for clickhouse-client subprocess."""
-        return os.environ.copy()
+        """Build env with CLICKHOUSE_PASSWORD for clickhouse-client subprocess."""
+        conn_config = config.connection_config or self.connection_config or {}
+        env = os.environ.copy()
+        password = conn_config.get("password", "")
+        if password:
+            env["CLICKHOUSE_PASSWORD"] = str(password)
+        return env
 
     def extract(self, config: ExtractionConfig, output_path: Path) -> ExtractionResult:
         """Extract data from ClickHouse to Parquet.
@@ -150,14 +168,15 @@ class ClickHouseExtractor(BaseExtractor):
         pk_expr = (
             config.pk_columns[0]
             if len(config.pk_columns) == 1
-            else f"concat({', '.join(config.pk_columns)})"
+            else "concat(" + ", '|', ".join(config.pk_columns) + ")"
         )
 
         cols = config.columns or [
             c["name"] for c in self.get_columns(config.schema, config.table)
         ]
         col_exprs = [f"ifNull(toString({c}), '')" for c in cols]
-        hash_expr = f"lower(hex(MD5(concat({', '.join(col_exprs)}))))"
+        concat_hash = ", '|', ".join(col_exprs)
+        hash_expr = f"lower(hex(MD5(concat({concat_hash}))))"
 
         query = f"""
             SELECT toString({pk_expr}) as _pk, {hash_expr} as _hash
@@ -207,9 +226,15 @@ class ClickHouseExtractor(BaseExtractor):
     ) -> List[str]:
         cursor = self._get_connection(config).cursor()
         try:
+            # Use {schema:Identifier} / {table:Identifier} to avoid SQL injection
+            # clickhouse_connect doesn't support standard parameterized queries
+            # for system tables, so we sanitize by stripping quotes
+            safe_schema = schema.replace("'", "")
+            safe_table = table.replace("'", "")
             cursor.execute(
                 f"SELECT name FROM system.columns "
-                f"WHERE database='{schema}' AND table='{table}' AND is_in_primary_key=1"
+                f"WHERE database = '{safe_schema}' AND table = '{safe_table}' "
+                f"AND is_in_primary_key = 1"
             )
             pk_cols = [row[0] for row in cursor.fetchall()]
         except Exception:

@@ -670,7 +670,11 @@ class TestClickHouseExtractorPipe:
         assert ext.cli_tool == "clickhouse-client"
 
     def test_build_extraction_command(self):
-        """Should build correct clickhouse-client command with CSVWithNames."""
+        """Should build correct clickhouse-client command with CSVWithNames.
+
+        Password is passed via CLICKHOUSE_PASSWORD env var (not --password flag)
+        to avoid exposing secrets in process listings.
+        """
         from dvt.federation.extractors.base import ExtractionConfig
 
         ext = self._make_extractor()
@@ -691,7 +695,11 @@ class TestClickHouseExtractorPipe:
         assert cmd[0] == "clickhouse-client"
         assert "--host" in cmd
         assert "ch.example.com" in cmd
-        assert "--password" in cmd
+        # Password must NOT appear in command args (security)
+        assert "--password" not in cmd
+        # Password goes via env var instead
+        env = ext._build_extraction_env(config)
+        assert env.get("CLICKHOUSE_PASSWORD") == "chpass"
         # Query should include FORMAT CSVWithNames
         query_idx = cmd.index("--query") + 1
         assert "FORMAT CSVWithNames" in cmd[query_idx]

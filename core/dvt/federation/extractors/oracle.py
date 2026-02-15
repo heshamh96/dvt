@@ -85,14 +85,16 @@ class OracleExtractor(BaseExtractor):
         pk_expr = (
             config.pk_columns[0]
             if len(config.pk_columns) == 1
-            else f"CONCAT({', '.join(config.pk_columns)})"
+            else " || '|' || ".join(config.pk_columns)
         )
 
         cols = config.columns or [
             c["name"] for c in self.get_columns(config.schema, config.table)
         ]
         col_exprs = [f"NVL(TO_CHAR({c}), '')" for c in cols]
-        hash_expr = f"LOWER(RAWTOHEX(DBMS_CRYPTO.HASH(UTL_RAW.CAST_TO_RAW({' || '.join(col_exprs)}), 2)))"
+        # Use STANDARD_HASH (12c+) — no special grants needed unlike DBMS_CRYPTO
+        concat_hash = " || '|' || ".join(col_exprs)
+        hash_expr = f"LOWER(STANDARD_HASH({concat_hash}, 'MD5'))"
 
         query = f"""
             SELECT TO_CHAR({pk_expr}) as _pk, {hash_expr} as _hash

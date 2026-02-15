@@ -86,8 +86,9 @@ class DuckDBExtractor(BaseExtractor):
         query = self.build_export_query(config)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
+        safe_path = str(output_path).replace("'", "''")
         copy_sql = (
-            f"COPY ({query}) TO '{output_path}' (FORMAT 'parquet', COMPRESSION 'zstd')"
+            f"COPY ({query}) TO '{safe_path}' (FORMAT 'parquet', COMPRESSION 'zstd')"
         )
         cursor = self._get_connection(config).cursor()
         cursor.execute(copy_sql)
@@ -174,6 +175,8 @@ class DuckDBExtractor(BaseExtractor):
         cursor.close()
         return columns
 
-    def detect_primary_key(self, schema: str, table: str) -> List[str]:
+    def detect_primary_key(
+        self, schema: str, table: str, config: ExtractionConfig = None
+    ) -> List[str]:
         # DuckDB doesn't enforce PKs, return empty
         return []

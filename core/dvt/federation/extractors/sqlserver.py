@@ -121,6 +121,34 @@ class SQLServerExtractor(BaseExtractor):
         """Build env for bcp subprocess (no special env vars needed)."""
         return os.environ.copy()
 
+    def _get_csv_read_options(self, config: ExtractionConfig):
+        """Override: bcp queryout does NOT emit column headers.
+
+        Fetch column names from metadata and supply them to PyArrow's
+        ReadOptions so the first data row isn't consumed as headers.
+        """
+        try:
+            import pyarrow.csv as pa_csv
+        except ImportError:
+            return None
+
+        # Get column names from metadata
+        col_info = self.get_columns(config.schema, config.table, config)
+        column_names = [c["name"] for c in col_info]
+
+        if column_names:
+            return pa_csv.ReadOptions(
+                block_size=1 << 20,
+                column_names=column_names,
+                autogenerate_column_names=False,
+            )
+        else:
+            # Fallback: let PyArrow auto-generate column names
+            return pa_csv.ReadOptions(
+                block_size=1 << 20,
+                autogenerate_column_names=True,
+            )
+
     def extract(self, config: ExtractionConfig, output_path: Path) -> ExtractionResult:
         """Extract data from SQL Server to Parquet.
 
@@ -142,14 +170,14 @@ class SQLServerExtractor(BaseExtractor):
         pk_expr = (
             config.pk_columns[0]
             if len(config.pk_columns) == 1
-            else f"CONCAT({', '.join(config.pk_columns)})"
+            else f"CONCAT_WS('|', {', '.join(config.pk_columns)})"
         )
 
         cols = config.columns or [
-            c["name"] for c in self.get_columns(config.schema, config.table)
+            c["name"] for c in self.get_columns(config.schema, config.table, config)
         ]
         col_exprs = [f"ISNULL(CAST({c} AS NVARCHAR(MAX)), '')" for c in cols]
-        hash_expr = f"LOWER(CONVERT(VARCHAR(32), HASHBYTES('MD5', CONCAT({', '.join(col_exprs)})), 2))"
+        hash_expr = f"LOWER(CONVERT(VARCHAR(32), HASHBYTES('MD5', CONCAT_WS('|', {', '.join(col_exprs)})), 2))"
 
         query = f"""
             SELECT CAST({pk_expr} AS NVARCHAR(MAX)) as _pk, {hash_expr} as _hash

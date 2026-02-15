@@ -103,24 +103,38 @@ class BigQueryExtractor(BaseExtractor):
         class BigQueryCursorWrapper:
             def __init__(self, bq_client):
                 self._client = bq_client
-                self._result = None
+                self._rows = None  # Materialized list of tuples
 
             def execute(self, query, params=None):
-                self._result = self._client.query(query).result()
+                result = self._client.query(query).result()
+                self._rows = [tuple(row.values()) for row in result]
+                self._row_idx = 0
 
             def fetchone(self):
-                if self._result:
-                    for row in self._result:
-                        return tuple(row.values())
+                if self._rows and self._row_idx < len(self._rows):
+                    row = self._rows[self._row_idx]
+                    self._row_idx += 1
+                    return row
                 return None
 
+            def fetchmany(self, size=1):
+                if not self._rows:
+                    return []
+                end = min(self._row_idx + size, len(self._rows))
+                batch = self._rows[self._row_idx : end]
+                self._row_idx = end
+                return batch
+
             def fetchall(self):
-                if self._result:
-                    return [tuple(row.values()) for row in self._result]
+                if self._rows:
+                    remaining = self._rows[self._row_idx :]
+                    self._row_idx = len(self._rows)
+                    return remaining
                 return []
 
             def close(self):
-                self._result = None
+                self._rows = None
+                self._row_idx = 0
 
         self._lazy_connection = BigQueryConnectionWrapper(client)
         return self._lazy_connection
@@ -162,62 +176,52 @@ class BigQueryExtractor(BaseExtractor):
         """Extract using BigQuery EXPORT DATA."""
         start_time = time.time()
 
-        try:
-            from dvt.federation.cloud_storage import CloudStorageHelper
+        from dvt.federation.cloud_storage import CloudStorageHelper
 
-            helper = CloudStorageHelper(bucket_config)
-            query = self.build_export_query(config)
+        helper = CloudStorageHelper(bucket_config)
+        query = self.build_export_query(config)
 
-            # Generate unique staging path
-            staging_suffix = helper.generate_staging_path(config.source_name)
-            # BigQuery EXPORT DATA uses gs:// paths with wildcard for output
-            native_path = helper.get_native_path(staging_suffix, dialect="bigquery")
-            gcs_path = f"{native_path}*.parquet"
+        # Generate unique staging path
+        staging_suffix = helper.generate_staging_path(config.source_name)
+        # BigQuery EXPORT DATA uses gs:// paths with wildcard for output
+        native_path = helper.get_native_path(staging_suffix, dialect="bigquery")
+        gcs_path = f"{native_path}*.parquet"
 
-            export_sql = f"""
-                EXPORT DATA OPTIONS(
-                    uri='{gcs_path}',
-                    format='PARQUET',
-                    overwrite=true,
-                    compression='ZSTD'
-                ) AS
-                {query}
-            """
+        export_sql = f"""
+            EXPORT DATA OPTIONS(
+                uri='{gcs_path}',
+                format='PARQUET',
+                overwrite=true,
+                compression='ZSTD'
+            ) AS
+            {query}
+        """
 
-            cursor = self._get_connection(config).cursor()
-            cursor.execute(export_sql)
-            cursor.close()
+        cursor = self._get_connection(config).cursor()
+        cursor.execute(export_sql)
+        cursor.close()
 
-            # Get row count
-            count_query = f"SELECT COUNT(*) FROM ({query})"
-            cursor = self._get_connection(config).cursor()
-            cursor.execute(count_query)
-            row_count = cursor.fetchone()[0]
-            cursor.close()
+        # Get row count
+        count_query = f"SELECT COUNT(*) FROM ({query})"
+        cursor = self._get_connection(config).cursor()
+        cursor.execute(count_query)
+        row_count = cursor.fetchone()[0]
+        cursor.close()
 
-            elapsed = time.time() - start_time
-            self._log(
-                f"Exported {row_count:,} rows from {config.source_name} "
-                f"to GCS in {elapsed:.1f}s (parallel)"
-            )
+        elapsed = time.time() - start_time
+        self._log(
+            f"Exported {row_count:,} rows from {config.source_name} "
+            f"to GCS in {elapsed:.1f}s (parallel)"
+        )
 
-            return ExtractionResult(
-                success=True,
-                source_name=config.source_name,
-                row_count=row_count,
-                output_path=output_path,
-                extraction_method="native_parallel",
-                elapsed_seconds=elapsed,
-            )
-
-        except Exception as e:
-            elapsed = time.time() - start_time
-            return ExtractionResult(
-                success=False,
-                source_name=config.source_name,
-                error=str(e),
-                elapsed_seconds=elapsed,
-            )
+        return ExtractionResult(
+            success=True,
+            source_name=config.source_name,
+            row_count=row_count,
+            output_path=output_path,
+            extraction_method="native_parallel",
+            elapsed_seconds=elapsed,
+        )
 
     def extract_hashes(
         self,
@@ -230,7 +234,7 @@ class BigQueryExtractor(BaseExtractor):
         pk_expr = (
             config.pk_columns[0]
             if len(config.pk_columns) == 1
-            else f"CONCAT({', '.join(config.pk_columns)})"
+            else "CONCAT(" + ", '|', ".join(config.pk_columns) + ")"
         )
 
         if config.columns:
@@ -239,9 +243,10 @@ class BigQueryExtractor(BaseExtractor):
             col_info = self.get_columns(config.schema, config.table)
             cols = [c["name"] for c in col_info]
 
-        # BigQuery uses TO_HEX(MD5(...))
+        # BigQuery uses TO_HEX(MD5(...)) — insert '|' separators between columns
         col_exprs = [f"IFNULL(CAST({c} AS STRING), '')" for c in cols]
-        hash_expr = f"TO_HEX(MD5(CONCAT({', '.join(col_exprs)})))"
+        concat_hash = ", '|', ".join(col_exprs)
+        hash_expr = f"TO_HEX(MD5(CONCAT({concat_hash})))"
 
         query = f"""
             SELECT
@@ -293,10 +298,11 @@ class BigQueryExtractor(BaseExtractor):
         config: ExtractionConfig = None,
     ) -> List[Dict[str, str]]:
         """Get column metadata from INFORMATION_SCHEMA."""
+        safe_table = table.replace("'", "")
         query = f"""
             SELECT column_name, data_type
             FROM `{schema}.INFORMATION_SCHEMA.COLUMNS`
-            WHERE table_name = '{table}'
+            WHERE table_name = '{safe_table}'
             ORDER BY ordinal_position
         """
         cursor = self._get_connection(config).cursor()
@@ -319,10 +325,11 @@ class BigQueryExtractor(BaseExtractor):
 
         Note: BigQuery primary keys are relatively new and optional.
         """
+        safe_table = table.replace("'", "")
         query = f"""
             SELECT column_name
             FROM `{schema}.INFORMATION_SCHEMA.KEY_COLUMN_USAGE`
-            WHERE table_name = '{table}'
+            WHERE table_name = '{safe_table}'
             AND constraint_name LIKE '%_pk'
             ORDER BY ordinal_position
         """

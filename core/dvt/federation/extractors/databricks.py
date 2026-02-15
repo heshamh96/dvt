@@ -202,68 +202,56 @@ class DatabricksExtractor(BaseExtractor):
         """Extract using Databricks COPY INTO."""
         start_time = time.time()
 
-        try:
-            from dvt.federation.cloud_storage import CloudStorageHelper
+        from dvt.federation.cloud_storage import CloudStorageHelper
 
-            bucket_type = bucket_config.get("type")
-            query = self.build_export_query(config)
+        bucket_type = bucket_config.get("type")
+        query = self.build_export_query(config)
 
-            # Handle HDFS separately (not covered by CloudStorageHelper)
-            if bucket_type == "hdfs":
-                hdfs_path = bucket_config.get("path", "").rstrip("/")
-                import uuid
+        # Handle HDFS separately (not covered by CloudStorageHelper)
+        if bucket_type == "hdfs":
+            hdfs_path = bucket_config.get("path", "").rstrip("/")
+            import uuid
 
-                export_id = str(uuid.uuid4())[:8]
-                cloud_path = f"{hdfs_path}/{config.source_name}_{export_id}/"
-            else:
-                helper = CloudStorageHelper(bucket_config)
-                staging_suffix = helper.generate_staging_path(config.source_name)
-                # Use native path for Databricks (s3://, gs://, abfss://)
-                cloud_path = helper.get_native_path(
-                    staging_suffix, dialect="databricks"
-                )
+            export_id = str(uuid.uuid4())[:8]
+            cloud_path = f"{hdfs_path}/{config.source_name}_{export_id}/"
+        else:
+            helper = CloudStorageHelper(bucket_config)
+            staging_suffix = helper.generate_staging_path(config.source_name)
+            # Use native path for Databricks (s3://, gs://, abfss://)
+            cloud_path = helper.get_native_path(staging_suffix, dialect="databricks")
 
-            copy_sql = f"""
-                COPY INTO '{cloud_path}'
-                FROM ({query})
-                FILEFORMAT = PARQUET
-            """
+        copy_sql = f"""
+            COPY INTO '{cloud_path}'
+            FROM ({query})
+            FILEFORMAT = PARQUET
+        """
 
-            conn = self._get_connection(config)
-            cursor = conn.cursor()
-            cursor.execute(copy_sql)
+        conn = self._get_connection(config)
+        cursor = conn.cursor()
+        cursor.execute(copy_sql)
 
-            # Get row count
-            count_cursor = conn.cursor()
-            count_cursor.execute(f"SELECT COUNT(*) FROM ({query}) t")
-            row_count = count_cursor.fetchone()[0]
-            count_cursor.close()
+        # Get row count
+        count_cursor = conn.cursor()
+        count_cursor.execute(f"SELECT COUNT(*) FROM ({query}) t")
+        row_count = count_cursor.fetchone()[0]
+        count_cursor.close()
 
-            cursor.close()
-            elapsed = time.time() - start_time
+        cursor.close()
+        elapsed = time.time() - start_time
 
-            self._log(
-                f"Exported {row_count:,} rows from {config.source_name} "
-                f"to {bucket_type.upper()} in {elapsed:.1f}s (parallel)"
-            )
+        self._log(
+            f"Exported {row_count:,} rows from {config.source_name} "
+            f"to {bucket_type.upper()} in {elapsed:.1f}s (parallel)"
+        )
 
-            return ExtractionResult(
-                success=True,
-                source_name=config.source_name,
-                row_count=row_count,
-                output_path=output_path,
-                extraction_method="native_parallel",
-                elapsed_seconds=elapsed,
-            )
-
-        except Exception as e:
-            elapsed = time.time() - start_time
-            return ExtractionResult(
-                success=False,
-                source_name=config.source_name,
-                error=str(e),
-                elapsed_seconds=elapsed,
-            )
+        return ExtractionResult(
+            success=True,
+            source_name=config.source_name,
+            row_count=row_count,
+            output_path=output_path,
+            extraction_method="native_parallel",
+            elapsed_seconds=elapsed,
+        )
 
     def extract_hashes(self, config: ExtractionConfig) -> Dict[str, str]:
         """Extract row hashes using Spark SQL MD5 function."""
@@ -302,20 +290,26 @@ class DatabricksExtractor(BaseExtractor):
         return hashes
 
     def get_row_count(
-        self, schema: str, table: str, predicates: Optional[List[str]] = None
+        self,
+        schema: str,
+        table: str,
+        predicates: Optional[List[str]] = None,
+        config: ExtractionConfig = None,
     ) -> int:
         query = f"SELECT COUNT(*) FROM {schema}.{table}"
         if predicates:
             query += f" WHERE {' AND '.join(predicates)}"
-        conn = self._get_connection()
+        conn = self._get_connection(config)
         cursor = conn.cursor()
         cursor.execute(query)
         count = cursor.fetchone()[0]
         cursor.close()
         return count
 
-    def get_columns(self, schema: str, table: str) -> List[Dict[str, str]]:
-        conn = self._get_connection()
+    def get_columns(
+        self, schema: str, table: str, config: ExtractionConfig = None
+    ) -> List[Dict[str, str]]:
+        conn = self._get_connection(config)
         cursor = conn.cursor()
         cursor.execute(f"DESCRIBE TABLE {schema}.{table}")
         columns = []
@@ -325,6 +319,8 @@ class DatabricksExtractor(BaseExtractor):
         cursor.close()
         return columns
 
-    def detect_primary_key(self, schema: str, table: str) -> List[str]:
+    def detect_primary_key(
+        self, schema: str, table: str, config: ExtractionConfig = None
+    ) -> List[str]:
         # Databricks/Delta doesn't have traditional PKs
         return []

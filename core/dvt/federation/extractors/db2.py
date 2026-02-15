@@ -62,14 +62,16 @@ class DB2Extractor(BaseExtractor):
         pk_expr = (
             config.pk_columns[0]
             if len(config.pk_columns) == 1
-            else f"CONCAT({', '.join(config.pk_columns)})"
+            else " || '|' || ".join(config.pk_columns)
         )
 
         cols = config.columns or [
             c["name"] for c in self.get_columns(config.schema, config.table)
         ]
         col_exprs = [f"COALESCE(CAST({c} AS VARCHAR(32000)), '')" for c in cols]
-        hash_expr = f"LOWER(HEX(HASH(CONCAT({', '.join(col_exprs)}), 2)))"
+        # DB2 HASH method: 0=MD5, 1=SHA-1, 2=SHA-256 — use 0 for MD5
+        concat_hash = " || '|' || ".join(col_exprs)
+        hash_expr = f"LOWER(HEX(HASH({concat_hash}, 0)))"
 
         query = f"""
             SELECT CAST({pk_expr} AS VARCHAR(1000)) as _pk, {hash_expr} as _hash

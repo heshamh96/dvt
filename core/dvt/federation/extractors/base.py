@@ -321,6 +321,20 @@ class BaseExtractor(ABC):
         """
         return None
 
+    def _get_csv_read_options(self, config: ExtractionConfig) -> Any:
+        """Get PyArrow CSV read options for this extractor's CLI output.
+
+        Override in subclass if CLI tool does not emit column headers
+        (e.g., bcp queryout for SQL Server).
+
+        Args:
+            config: Extraction configuration (for column name lookup)
+
+        Returns:
+            pyarrow.csv.ReadOptions or None for defaults
+        """
+        return None
+
     def _extract_via_pipe(
         self,
         config: ExtractionConfig,
@@ -362,7 +376,11 @@ class BaseExtractor(ABC):
         )
 
         try:
-            read_options = pa_csv.ReadOptions(block_size=1 << 20)  # 1MB blocks
+            # Check for subclass-specific read options (e.g., bcp no-header fix)
+            read_options = self._get_csv_read_options(config)
+            if read_options is None:
+                read_options = pa_csv.ReadOptions(block_size=1 << 20)  # 1MB blocks
+
             parse_options = self._get_csv_parse_options()
 
             open_csv_kwargs: Dict[str, Any] = {"read_options": read_options}
@@ -395,9 +413,10 @@ class BaseExtractor(ABC):
             proc.wait()
             raise
 
+        # Capture stderr before wait to avoid potential deadlock
+        stderr_output = proc.stderr.read().decode("utf-8", errors="replace")
         proc.wait()
         if proc.returncode != 0:
-            stderr_output = proc.stderr.read().decode("utf-8", errors="replace")
             raise RuntimeError(
                 f"{self.cli_tool} extraction failed (exit {proc.returncode}): "
                 f"{stderr_output[:500]}"
