@@ -329,11 +329,23 @@ class BaseLoader(ABC):
         )
 
         try:
-            parquet_file = pq.ParquetFile(parquet_path)
+            # Handle both single Parquet files and Spark-style directories
+            parquet_path_obj = Path(parquet_path)
+            if parquet_path_obj.is_dir():
+                # Spark writes Parquet as a directory with part files.
+                # Use ParquetDataset to stream batches across all part files.
+                import pyarrow.dataset as ds
+
+                dataset = ds.dataset(parquet_path, format="parquet")
+                batches = dataset.to_batches(batch_size=65536)
+            else:
+                pf = pq.ParquetFile(parquet_path)
+                batches = pf.iter_batches(batch_size=65536)
+
             first_batch = True
             row_count = 0
 
-            for batch in parquet_file.iter_batches(batch_size=65536):
+            for batch in batches:
                 sink = pa.BufferOutputStream()
                 write_options = pa_csv.WriteOptions(
                     include_header=first_batch,
