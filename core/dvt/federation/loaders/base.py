@@ -286,8 +286,13 @@ class FederationLoader:
                 # Create table with properly quoted column names via adapter
                 self._create_table_with_adapter(adapter, df, config)
                 write_mode = "append"  # Table cleared by DDL, just append
+            elif adapter and config.mode == "append":
+                # Incremental append: ensure table exists (CREATE IF NOT EXISTS),
+                # then append data. No TRUNCATE or DROP.
+                self._create_table_with_adapter(adapter, df, config)
+                write_mode = "append"
             else:
-                # Pure Spark JDBC mode
+                # Pure Spark JDBC mode (no adapter)
                 write_mode = config.mode
                 # Set truncate property for Spark to handle
                 if (

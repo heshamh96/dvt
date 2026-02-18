@@ -90,6 +90,13 @@ class FederationEngine:
         model's target dialect (e.g., Snowflake SQL). We translate
         to Spark SQL using SQLGlot.
 
+        For incremental models, {{ this }} in the compiled SQL resolves to
+        the target table reference (e.g., "dvt_test"."my_model"). We register
+        a local Delta staging copy of the model's own output as a Spark temp
+        view, and rewrite {{ this }} references to point to it. This enables:
+        - Filter-based: WHERE col > (SELECT MAX(col) FROM {{ this }})
+        - Left-join-based: LEFT JOIN {{ this }} ON ... WHERE {{ this }}.id IS NULL
+
         Args:
             model: ModelNode to execute
             resolution: Resolved execution details
@@ -123,6 +130,13 @@ class FederationEngine:
                     f"Could not create EL layer for bucket '{resolution.bucket}'"
                 )
 
+            # 2a. Handle --full-refresh for model staging
+            full_refresh = getattr(
+                getattr(self.config, "args", None), "FULL_REFRESH", False
+            )
+            if full_refresh:
+                self._clear_model_staging(el_layer, model)
+
             # 3. Determine the SQL dialect of the compiled SQL.
             # DVT: With target-aware compilation, the compiled SQL is in the
             # TARGET adapter's dialect (e.g., databricks backticks when the
@@ -141,7 +155,7 @@ class FederationEngine:
                 source_dialect=source_dialect,
             )
 
-            # 5. Extract sources to staging bucket (with pushdown)
+            # 6. Extract sources to staging bucket (with pushdown)
             self._log(f"Extracting {len(source_mappings)} sources to staging...")
             extraction_result = self._extract_sources(
                 model=model,
@@ -160,7 +174,7 @@ class FederationEngine:
                 f"from {extraction_result.get('sources_extracted', 0)} sources"
             )
 
-            # 6. Register staged data as temp views
+            # 7. Register staged data as temp views
             view_mappings = self._register_temp_views(
                 spark=spark,
                 model=model,
@@ -169,7 +183,17 @@ class FederationEngine:
                 source_mappings=source_mappings,
             )
 
-            # 7. Translate SQL: model dialect -> Spark SQL
+            # 7a. Register model's own Delta staging as {{ this }} temp view
+            # (for incremental models that reference their own target table)
+            self._register_model_self_view(
+                spark=spark,
+                model=model,
+                el_layer=el_layer,
+                view_prefix=view_prefix,
+                view_mappings=view_mappings,
+            )
+
+            # 8. Translate SQL: model dialect -> Spark SQL
             spark_sql = self._translate_to_spark(
                 compiled_sql=compiled_sql,
                 source_dialect=source_dialect,
@@ -178,10 +202,10 @@ class FederationEngine:
 
             self._log(f"Executing Spark SQL...")
 
-            # 8. Execute in Spark
+            # 9. Execute in Spark
             result_df = spark.sql(spark_sql)
 
-            # 9. Write to target (try bucket first, fallback to JDBC)
+            # 10. Write to target
             load_result = self._write_to_target(
                 df=result_df,
                 model=model,
@@ -190,6 +214,15 @@ class FederationEngine:
 
             if not load_result.success:
                 raise RuntimeError(f"Load failed: {load_result.error}")
+
+            # 11. Save model output to Delta staging for future {{ this }} resolution
+            self._save_model_staging(
+                spark=spark,
+                el_layer=el_layer,
+                model=model,
+                result_df=result_df,
+                resolution=resolution,
+            )
 
             elapsed = time.time() - start_time
             self._log(
@@ -516,6 +549,150 @@ class FederationEngine:
 
         return view_mappings
 
+    # =========================================================================
+    # Model Self-Staging for {{ this }} Resolution
+    # =========================================================================
+
+    def _get_model_staging_id(self, model: Any) -> str:
+        """Get the staging identifier for a model's own Delta table.
+
+        Uses the model's unique_id to create a stable, unique staging path
+        that persists across runs for incremental models.
+
+        Args:
+            model: ModelNode
+
+        Returns:
+            Staging identifier like 'model.project.my_model'
+        """
+        return model.unique_id
+
+    def _register_model_self_view(
+        self,
+        spark: Any,
+        model: Any,
+        el_layer: ELLayer,
+        view_prefix: str,
+        view_mappings: Dict[str, str],
+    ) -> None:
+        """Register the model's own Delta staging as a temp view for {{ this }}.
+
+        When an incremental model references {{ this }}, dbt resolves it to
+        the target table reference (e.g., "dvt_test"."my_model"). On the
+        federation path, Spark can't access the remote target — so we register
+        a local Delta staging copy of the model's previous output as a temp view
+        and add it to view_mappings so _translate_to_spark() rewrites the reference.
+
+        This enables both incremental patterns:
+        - Filter: WHERE col > (SELECT MAX(col) FROM {{ this }})
+        - Anti-join: LEFT JOIN {{ this }} t ON ... WHERE t.id IS NULL
+
+        On first run (no Delta staging exists), this is a no-op because
+        is_incremental() returned False during compilation, so the compiled SQL
+        does not contain {{ this }} references.
+
+        Args:
+            spark: SparkSession
+            model: ModelNode
+            el_layer: EL layer with staging paths
+            view_prefix: Unique prefix for temp view names
+            view_mappings: Dict to update with {{ this }} mapping (mutated in place)
+        """
+        model_staging_id = self._get_model_staging_id(model)
+
+        # Check if model has Delta staging from a previous run
+        if not el_layer.staging_exists(model_staging_id):
+            return  # First run — no staging, is_incremental() was False
+
+        staging_path = el_layer.get_staging_path(model_staging_id)
+        staging_path_obj = Path(str(staging_path))
+
+        # Read Delta staging (or legacy Parquet fallback)
+        if staging_path_obj.is_dir() and (staging_path_obj / "_delta_log").is_dir():
+            df = spark.read.format("delta").load(str(staging_path))
+        else:
+            df = spark.read.parquet(str(staging_path))
+
+        # Register as temp view
+        view_name = f"{view_prefix}_this"
+        df.createOrReplaceTempView(view_name)
+
+        # Add all possible {{ this }} reference forms to view_mappings.
+        # After Jinja resolution, {{ this }} becomes a quoted table reference
+        # like "dvt_test"."my_model" or `dvt_test`.`my_model`. SQLGlot parses
+        # these into exp.Table nodes with db=schema, name=table_name.
+        schema = model.schema or ""
+        table = model.name
+        database = getattr(model, "database", None) or ""
+
+        # 3-part: database.schema.table
+        if database and schema:
+            view_mappings[f"{database}.{schema}.{table}"] = view_name
+        # 2-part: schema.table (most common for {{ this }})
+        if schema:
+            view_mappings[f"{schema}.{table}"] = view_name
+        # 1-part: just table name
+        view_mappings[table] = view_name
+
+        self._log(f"  Registered {{ this }} view: {view_name} ({df.count()} rows)")
+
+    def _save_model_staging(
+        self,
+        spark: Any,
+        el_layer: ELLayer,
+        model: Any,
+        result_df: Any,
+        resolution: ResolvedExecution,
+    ) -> None:
+        """Save the model's result DataFrame to Delta staging.
+
+        After a successful load to the target database, we save a local Delta
+        copy of the output. On subsequent incremental runs, this Delta table is
+        registered as the {{ this }} temp view so Spark can resolve self-references
+        without querying the remote target.
+
+        For incremental models (mode=append), we APPEND to the existing Delta
+        staging — mirroring what happens on the target. For table models
+        (mode=overwrite), we OVERWRITE the Delta staging.
+
+        Args:
+            spark: SparkSession
+            el_layer: EL layer for staging paths
+            model: ModelNode
+            result_df: PySpark DataFrame with the model's output
+            resolution: Resolved execution details
+        """
+        model_staging_id = self._get_model_staging_id(model)
+        staging_path = el_layer.state_manager.bucket_path / f"{model_staging_id}.delta"
+
+        mat = resolution.coerced_materialization or resolution.original_materialization
+        delta_mode = "append" if mat == "incremental" else "overwrite"
+
+        try:
+            result_df.write.format("delta").mode(delta_mode).option(
+                "delta.columnMapping.mode", "name"
+            ).option("delta.minReaderVersion", "2").option(
+                "delta.minWriterVersion", "5"
+            ).option("mergeSchema", "true").save(str(staging_path))
+        except Exception as e:
+            # Non-fatal: model staging is an optimization for future incremental runs.
+            # The current run already loaded to the target successfully.
+            self._log(f"  Warning: Could not save model staging for {model.name}: {e}")
+
+    def _clear_model_staging(self, el_layer: ELLayer, model: Any) -> None:
+        """Clear the model's Delta staging on --full-refresh.
+
+        When full_refresh is requested, the model's Delta staging must be cleared
+        so that is_incremental() returns False (target table is rebuilt) and the
+        next run starts fresh.
+
+        Args:
+            el_layer: EL layer for staging management
+            model: ModelNode
+        """
+        model_staging_id = self._get_model_staging_id(model)
+        el_layer.state_manager.clear_staging(model_staging_id)
+
     def _translate_to_spark(
         self,
         compiled_sql: str,
@@ -657,23 +834,31 @@ class FederationEngine:
 
         # Determine write mode based on materialization
         mat = resolution.coerced_materialization or resolution.original_materialization
-        if mat == "incremental":
-            mode = "append"
-        else:
-            mode = "overwrite"
-
-        # Get JDBC load settings from computes.yml
-        jdbc_config = self._get_jdbc_load_config()
 
         # Check --full-refresh flag from CLI args
         full_refresh = getattr(
             getattr(self.config, "args", None), "FULL_REFRESH", False
         )
 
+        if mat == "incremental" and not full_refresh:
+            # Incremental: append new rows to existing table.
+            # On first run the table may not exist — the loader handles this
+            # by using Spark JDBC mode="append" which auto-creates if needed.
+            mode = "append"
+            truncate = False
+        else:
+            # Table/view materialization or incremental with --full-refresh:
+            # DDL contract: TRUNCATE+INSERT (default) or DROP+CREATE (--full-refresh)
+            mode = "overwrite"
+            truncate = not full_refresh
+
+        # Get JDBC load settings from computes.yml
+        jdbc_config = self._get_jdbc_load_config()
+
         load_config = LoadConfig(
             table_name=f"{model.schema}.{model.name}",
             mode=mode,
-            truncate=not full_refresh,
+            truncate=truncate,
             full_refresh=full_refresh,
             connection_config=target_config,
             jdbc_config=jdbc_config,
