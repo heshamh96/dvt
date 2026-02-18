@@ -391,10 +391,9 @@ class FederationEngine:
             # Get pushable operations for this source
             ops = pushable_ops.get(dep_id, PushableOperations(dep_id, source.name))
 
-            # NOTE: Column pushdown is disabled for now because of case sensitivity
-            # issues with PostgreSQL. SQLGlot lowercases unquoted column names,
-            # but PostgreSQL preserves case for quoted identifiers.
-            # TODO: Fix column case handling in QueryOptimizer
+            # Column pushdown: pass optimizer columns through to EL layer.
+            # Case resolution (SQLGlot lowercases) is handled downstream
+            # in el_layer._resolve_column_names() against real DB metadata.
             sources.append(
                 SourceConfig(
                     source_name=dep_id,
@@ -403,8 +402,9 @@ class FederationEngine:
                     table=source.name,
                     connection=None,  # Will be created by extractor
                     connection_config=connection_config,
-                    columns=None,  # Extract all columns to avoid case issues
+                    columns=ops.columns or None,
                     predicates=ops.predicates or None,
+                    limit=ops.limit,
                 )
             )
 

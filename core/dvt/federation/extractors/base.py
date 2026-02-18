@@ -29,6 +29,7 @@ class ExtractionConfig:
     table: str  # Table name
     columns: Optional[List[str]] = None  # Columns to extract (None = all)
     predicates: Optional[List[str]] = None  # WHERE predicates to push down
+    limit: Optional[int] = None  # LIMIT to push down (None = all rows)
     pk_columns: Optional[List[str]] = None  # Primary key columns for incremental
     batch_size: int = 100000  # Rows per batch
     bucket_config: Optional[Dict[str, Any]] = None  # Bucket type and credentials
@@ -210,22 +211,34 @@ class BaseExtractor(ABC):
         self,
         config: ExtractionConfig,
     ) -> str:
-        """Build the SELECT query for extraction.
+        """Build the SELECT query for extraction using SQLGlot.
+
+        Uses QueryOptimizer.build_extraction_query() for dialect-aware SQL
+        generation with proper identifier quoting and LIMIT syntax.
 
         Args:
             config: Extraction configuration
 
         Returns:
-            SQL query string
+            SQL query string with columns, predicates, and LIMIT applied
         """
-        columns = ", ".join(config.columns) if config.columns else "*"
-        query = f"SELECT {columns} FROM {config.schema}.{config.table}"
+        from dvt.federation.query_optimizer import PushableOperations, QueryOptimizer
 
-        if config.predicates:
-            where_clause = " AND ".join(config.predicates)
-            query += f" WHERE {where_clause}"
+        ops = PushableOperations(
+            source_id=config.source_name,
+            source_alias=config.table,
+            columns=config.columns or [],
+            predicates=config.predicates or [],
+            limit=config.limit,
+        )
 
-        return query
+        optimizer = QueryOptimizer()
+        return optimizer.build_extraction_query(
+            schema=config.schema,
+            table=config.table,
+            operations=ops,
+            target_dialect=self.dialect,
+        )
 
     def build_hash_query(
         self,

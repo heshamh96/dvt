@@ -43,6 +43,7 @@ class SourceConfig:
     )
     columns: Optional[List[str]] = None
     predicates: Optional[List[str]] = None
+    limit: Optional[int] = None
     pk_columns: Optional[List[str]] = None
     batch_size: int = 100000
 
@@ -59,6 +60,39 @@ class ELResult:
     elapsed_seconds: float
     results: Dict[str, ExtractionResult]
     errors: Dict[str, str]
+
+
+def _resolve_column_names(
+    optimizer_columns: Optional[List[str]],
+    real_columns: List[Dict[str, str]],
+) -> Optional[List[str]]:
+    """Match optimizer's potentially-lowercased column names to actual DB column names.
+
+    SQLGlot normalizes unquoted identifiers to lowercase. This function
+    resolves them against the real column metadata from the source database
+    using case-insensitive matching.
+
+    Args:
+        optimizer_columns: Column names extracted by QueryOptimizer (may be lowercased)
+        real_columns: Column metadata from extractor.get_columns() with 'name' key
+
+    Returns:
+        List of real column names with correct casing, or None for SELECT *
+    """
+    if not optimizer_columns:
+        return None  # SELECT * — extract all columns
+
+    # Build case-insensitive lookup: lowercased_name -> real_name
+    real_name_map = {c["name"].lower(): c["name"] for c in real_columns}
+
+    resolved = []
+    for col in optimizer_columns:
+        real_name = real_name_map.get(col.lower())
+        if real_name:
+            resolved.append(real_name)
+        # else: column not found in source — skip (defensive, e.g. computed column)
+
+    return resolved if resolved else None
 
 
 class ELLayer:
@@ -297,13 +331,18 @@ class ELLayer:
         if not pk_columns:
             pk_columns = extractor.detect_primary_key(source.schema, source.table)
 
+        # Resolve optimizer column names to real DB column names (case-insensitive).
+        # SQLGlot may have lowercased the names; we match against real metadata.
+        resolved_columns = _resolve_column_names(source.columns, columns_info)
+
         # Build extraction config with connection info for JDBC fallback
         config = ExtractionConfig(
             source_name=source.source_name,
             schema=source.schema,
             table=source.table,
-            columns=source.columns,
+            columns=resolved_columns,
             predicates=source.predicates,
+            limit=source.limit,
             pk_columns=pk_columns,
             batch_size=source.batch_size,
             bucket_config=self.bucket_config,
