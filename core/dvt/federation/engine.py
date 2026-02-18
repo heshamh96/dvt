@@ -855,6 +855,25 @@ class FederationEngine:
         # Get JDBC load settings from computes.yml
         jdbc_config = self._get_jdbc_load_config()
 
+        # Read incremental_strategy and unique_key from model config (Phase 4).
+        # These drive merge/delete+insert load strategies in the loader.
+        incremental_strategy = None
+        unique_key = None
+        if mat == "incremental" and not full_refresh:
+            model_config = getattr(model, "config", None)
+            if model_config:
+                incremental_strategy = getattr(
+                    model_config, "incremental_strategy", None
+                )
+                raw_unique_key = getattr(model_config, "unique_key", None)
+                # Normalize unique_key to List[str] or None
+                if isinstance(raw_unique_key, str):
+                    unique_key = [raw_unique_key]
+                elif isinstance(raw_unique_key, list):
+                    unique_key = raw_unique_key
+                else:
+                    unique_key = None
+
         load_config = LoadConfig(
             table_name=f"{model.schema}.{model.name}",
             mode=mode,
@@ -862,6 +881,8 @@ class FederationEngine:
             full_refresh=full_refresh,
             connection_config=target_config,
             jdbc_config=jdbc_config,
+            incremental_strategy=incremental_strategy,
+            unique_key=unique_key,
         )
 
         return loader.load(df, load_config, adapter=adapter)

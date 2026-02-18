@@ -80,8 +80,9 @@ class FederationLoader:
         """Load DataFrame into target database.
 
         Dispatches to the appropriate load strategy:
-        - Default: JDBC INSERT (with DDL via adapter)
-        - Phase 4: merge, delete+insert via temp table pattern
+        - Default: JDBC INSERT (append or overwrite with DDL via adapter)
+        - merge: Temp table + MERGE SQL (upsert via unique_key)
+        - delete+insert: Temp table + DELETE matching + INSERT
 
         Args:
             df: PySpark DataFrame to load
@@ -91,8 +92,15 @@ class FederationLoader:
         Returns:
             LoadResult with success status and metadata
         """
-        # Phase 4 will add merge/delete+insert dispatch here
-        return self._load_jdbc(df, config, adapter)
+        strategy = config.incremental_strategy
+
+        if strategy == "merge" and config.unique_key and adapter:
+            return self._load_merge(df, config, adapter)
+        elif strategy == "delete+insert" and config.unique_key and adapter:
+            return self._load_delete_insert(df, config, adapter)
+        else:
+            # Default: append (incremental), overwrite (table/full-refresh)
+            return self._load_jdbc(df, config, adapter)
 
     # =========================================================================
     # DDL Operations via Adapter
@@ -337,6 +345,419 @@ class FederationLoader:
                 error=str(e),
                 elapsed_seconds=elapsed,
             )
+
+    # =========================================================================
+    # MERGE Load (Phase 4)
+    # =========================================================================
+
+    def _get_staging_table_name(self, config: LoadConfig) -> str:
+        """Generate a staging table name for merge/delete+insert operations.
+
+        Creates a temp table name in the same schema as the target table.
+        Uses a deterministic name based on the target table to avoid collisions.
+
+        Args:
+            config: Load configuration with table_name
+
+        Returns:
+            Staging table name like 'schema._dvt_staging_my_model'
+        """
+        from dvt.federation.adapter_manager import parse_table_name
+
+        parts = parse_table_name(config.table_name)
+        schema = parts.get("schema") or ""
+        identifier = parts.get("identifier") or "model"
+        staging_id = f"_dvt_staging_{identifier}"
+        if schema:
+            return f"{schema}.{staging_id}"
+        return staging_id
+
+    def _write_to_staging_table(
+        self,
+        df: Any,
+        staging_table: str,
+        config: LoadConfig,
+    ) -> None:
+        """Write DataFrame to a staging table in the target database via JDBC.
+
+        Creates (or overwrites) a staging table that MERGE/DELETE+INSERT
+        can reference. Both the target table and staging table must be in
+        the same database for the MERGE SQL to work natively.
+
+        Args:
+            df: PySpark DataFrame to write
+            staging_table: Fully qualified staging table name
+            config: Load configuration (for connection + JDBC settings)
+        """
+        from dvt.federation.auth import get_auth_handler
+        from dvt.federation.spark_manager import SparkManager
+
+        adapter_type = config.connection_config.get("type", "")
+        spark_manager = SparkManager.get_instance()
+        jdbc_url = spark_manager.get_jdbc_url(config.connection_config)
+        jdbc_driver = spark_manager.get_jdbc_driver(adapter_type)
+
+        auth_handler = get_auth_handler(adapter_type)
+        jdbc_props = auth_handler.get_jdbc_properties(config.connection_config)
+
+        jdbc_settings = config.jdbc_config or {}
+        num_partitions = jdbc_settings.get("num_partitions", 4)
+        batch_size = jdbc_settings.get("batch_size", 10000)
+
+        properties = {
+            **jdbc_props,
+            "driver": jdbc_driver,
+            "batchsize": str(batch_size),
+        }
+
+        if num_partitions > 1:
+            df = df.repartition(num_partitions)
+
+        self._log(f"Writing to staging table {staging_table}...")
+        df.write.jdbc(
+            url=jdbc_url,
+            table=staging_table,
+            mode="overwrite",
+            properties=properties,
+        )
+
+    def _drop_staging_table(self, adapter: Any, staging_table: str) -> None:
+        """Drop the staging table after merge/delete+insert.
+
+        Args:
+            adapter: dbt adapter instance
+            staging_table: Fully qualified staging table name
+        """
+        from dvt.federation.adapter_manager import get_quoted_table_name
+
+        quoted = get_quoted_table_name(adapter, staging_table)
+        with adapter.connection_named("dvt_loader"):
+            try:
+                adapter.execute(f"DROP TABLE IF EXISTS {quoted}")
+            except Exception:
+                pass  # Best-effort cleanup
+            self._safe_commit(adapter)
+
+    def _load_merge(
+        self,
+        df: Any,
+        config: LoadConfig,
+        adapter: Any,
+    ) -> LoadResult:
+        """Load using MERGE via temp table pattern.
+
+        1. Ensure target table exists (CREATE IF NOT EXISTS)
+        2. Write result DataFrame to a staging table via Spark JDBC
+        3. Execute dialect-specific MERGE SQL via the adapter
+        4. Drop the staging table
+
+        The MERGE executes entirely inside the target database — both
+        the target table and staging table are in the same DB.
+
+        Args:
+            df: PySpark DataFrame to load
+            config: Load configuration (must have unique_key)
+            adapter: dbt adapter for MERGE SQL execution
+
+        Returns:
+            LoadResult with load_method='merge'
+        """
+        start_time = time.time()
+        staging_table = self._get_staging_table_name(config)
+
+        try:
+            # 1. Ensure target table exists
+            self._create_table_with_adapter(adapter, df, config)
+
+            # 2. Write to staging table
+            self._write_to_staging_table(df, staging_table, config)
+
+            # 3. Execute MERGE SQL
+            adapter_type = config.connection_config.get("type", "")
+            columns = [f.name for f in df.schema.fields]
+            merge_sql = self._build_merge_sql(
+                adapter_type=adapter_type,
+                adapter=adapter,
+                target_table=config.table_name,
+                staging_table=staging_table,
+                unique_key=config.unique_key,
+                columns=columns,
+            )
+
+            self._log(f"Executing MERGE into {config.table_name}...")
+            with adapter.connection_named("dvt_loader"):
+                adapter.execute(merge_sql)
+                self._safe_commit(adapter)
+
+            row_count = df.count()
+            elapsed = time.time() - start_time
+            self._log(f"Merged {row_count:,} rows in {elapsed:.1f}s")
+
+            return LoadResult(
+                success=True,
+                table_name=config.table_name,
+                row_count=row_count,
+                load_method="merge",
+                elapsed_seconds=elapsed,
+            )
+
+        except Exception as e:
+            elapsed = time.time() - start_time
+            self._log(f"MERGE load failed: {e}")
+            return LoadResult(
+                success=False,
+                table_name=config.table_name,
+                error=str(e),
+                elapsed_seconds=elapsed,
+            )
+        finally:
+            # Always clean up staging table
+            try:
+                self._drop_staging_table(adapter, staging_table)
+            except Exception:
+                pass
+
+    def _build_merge_sql(
+        self,
+        adapter_type: str,
+        adapter: Any,
+        target_table: str,
+        staging_table: str,
+        unique_key: List[str],
+        columns: List[str],
+    ) -> str:
+        """Generate dialect-specific MERGE SQL.
+
+        Different databases have different MERGE syntax:
+        - Postgres: INSERT ... ON CONFLICT ... DO UPDATE SET
+        - MySQL: INSERT ... ON DUPLICATE KEY UPDATE
+        - Redshift: DELETE + INSERT (no native MERGE)
+        - Databricks/Snowflake/BigQuery/SQL Server: MERGE INTO ... USING ... ON
+
+        Args:
+            adapter_type: Target database adapter type
+            adapter: dbt adapter for quoting
+            target_table: Target table name
+            staging_table: Staging table name
+            unique_key: Columns for match condition
+            columns: All column names in the DataFrame
+
+        Returns:
+            SQL string for the merge operation
+        """
+        from dvt.federation.adapter_manager import get_quoted_table_name
+        from dvt.utils.identifiers import quote_identifier
+
+        qt = get_quoted_table_name(adapter, target_table)
+        qs = get_quoted_table_name(adapter, staging_table)
+
+        # Quote column names and unique keys
+        qcols = [quote_identifier(c, adapter_type) for c in columns]
+        qkeys = [quote_identifier(k, adapter_type) for k in unique_key]
+        non_key_cols = [c for c in columns if c not in unique_key]
+        q_non_key = [quote_identifier(c, adapter_type) for c in non_key_cols]
+
+        at = adapter_type.lower()
+
+        if at == "postgres":
+            # INSERT ... ON CONFLICT (...) DO UPDATE SET ...
+            col_list = ", ".join(qcols)
+            key_list = ", ".join(qkeys)
+            select_list = ", ".join(qcols)
+            update_set = (
+                ", ".join(f"{c} = EXCLUDED.{c}" for c in q_non_key)
+                if q_non_key
+                else qkeys[0] + " = EXCLUDED." + qkeys[0]
+            )
+            return (
+                f"INSERT INTO {qt} ({col_list}) "
+                f"SELECT {select_list} FROM {qs} "
+                f"ON CONFLICT ({key_list}) DO UPDATE SET {update_set}"
+            )
+
+        elif at == "mysql":
+            # INSERT ... ON DUPLICATE KEY UPDATE ...
+            col_list = ", ".join(qcols)
+            select_list = ", ".join(qcols)
+            update_set = (
+                ", ".join(f"{c} = VALUES({c})" for c in q_non_key)
+                if q_non_key
+                else qkeys[0] + " = VALUES(" + qkeys[0] + ")"
+            )
+            return (
+                f"INSERT INTO {qt} ({col_list}) "
+                f"SELECT {select_list} FROM {qs} "
+                f"ON DUPLICATE KEY UPDATE {update_set}"
+            )
+
+        elif at == "redshift":
+            # Redshift has no native MERGE — use DELETE + INSERT
+            on_clause = " AND ".join(f"{qt}.{k} = {qs}.{k}" for k in qkeys)
+            col_list = ", ".join(qcols)
+            return (
+                f"DELETE FROM {qt} USING {qs} WHERE {on_clause};\n"
+                f"INSERT INTO {qt} ({col_list}) SELECT {col_list} FROM {qs}"
+            )
+
+        else:
+            # Standard MERGE INTO for Databricks, Snowflake, BigQuery, SQL Server
+            on_clause = " AND ".join(f"target.{k} = stg.{k}" for k in qkeys)
+
+            if q_non_key:
+                update_set = ", ".join(f"target.{c} = stg.{c}" for c in q_non_key)
+            else:
+                # All columns are keys — just update the first key (no-op update)
+                update_set = f"target.{qkeys[0]} = stg.{qkeys[0]}"
+
+            col_list = ", ".join(qcols)
+            val_list = ", ".join(f"stg.{c}" for c in qcols)
+
+            return (
+                f"MERGE INTO {qt} AS target "
+                f"USING {qs} AS stg "
+                f"ON {on_clause} "
+                f"WHEN MATCHED THEN UPDATE SET {update_set} "
+                f"WHEN NOT MATCHED THEN INSERT ({col_list}) VALUES ({val_list})"
+            )
+
+    # =========================================================================
+    # DELETE+INSERT Load (Phase 4)
+    # =========================================================================
+
+    def _load_delete_insert(
+        self,
+        df: Any,
+        config: LoadConfig,
+        adapter: Any,
+    ) -> LoadResult:
+        """Load using DELETE+INSERT via temp table pattern.
+
+        1. Ensure target table exists (CREATE IF NOT EXISTS)
+        2. Write result DataFrame to a staging table via Spark JDBC
+        3. DELETE matching rows from target (by unique_key)
+        4. INSERT all staging rows into target
+        5. Drop the staging table
+
+        Args:
+            df: PySpark DataFrame to load
+            config: Load configuration (must have unique_key)
+            adapter: dbt adapter for SQL execution
+
+        Returns:
+            LoadResult with load_method='delete+insert'
+        """
+        start_time = time.time()
+        staging_table = self._get_staging_table_name(config)
+
+        try:
+            # 1. Ensure target table exists
+            self._create_table_with_adapter(adapter, df, config)
+
+            # 2. Write to staging table
+            self._write_to_staging_table(df, staging_table, config)
+
+            # 3. Execute DELETE + INSERT
+            adapter_type = config.connection_config.get("type", "")
+            columns = [f.name for f in df.schema.fields]
+            delete_sql, insert_sql = self._build_delete_insert_sql(
+                adapter_type=adapter_type,
+                adapter=adapter,
+                target_table=config.table_name,
+                staging_table=staging_table,
+                unique_key=config.unique_key,
+                columns=columns,
+            )
+
+            self._log(f"Executing DELETE+INSERT into {config.table_name}...")
+            with adapter.connection_named("dvt_loader"):
+                adapter.execute(delete_sql)
+                adapter.execute(insert_sql)
+                self._safe_commit(adapter)
+
+            row_count = df.count()
+            elapsed = time.time() - start_time
+            self._log(f"Delete+inserted {row_count:,} rows in {elapsed:.1f}s")
+
+            return LoadResult(
+                success=True,
+                table_name=config.table_name,
+                row_count=row_count,
+                load_method="delete+insert",
+                elapsed_seconds=elapsed,
+            )
+
+        except Exception as e:
+            elapsed = time.time() - start_time
+            self._log(f"DELETE+INSERT load failed: {e}")
+            return LoadResult(
+                success=False,
+                table_name=config.table_name,
+                error=str(e),
+                elapsed_seconds=elapsed,
+            )
+        finally:
+            # Always clean up staging table
+            try:
+                self._drop_staging_table(adapter, staging_table)
+            except Exception:
+                pass
+
+    def _build_delete_insert_sql(
+        self,
+        adapter_type: str,
+        adapter: Any,
+        target_table: str,
+        staging_table: str,
+        unique_key: List[str],
+        columns: List[str],
+    ) -> tuple:
+        """Generate DELETE + INSERT SQL for delete+insert strategy.
+
+        Args:
+            adapter_type: Target database adapter type
+            adapter: dbt adapter for quoting
+            target_table: Target table name
+            staging_table: Staging table name
+            unique_key: Columns for match condition
+            columns: All column names
+
+        Returns:
+            Tuple of (delete_sql, insert_sql)
+        """
+        from dvt.federation.adapter_manager import get_quoted_table_name
+        from dvt.utils.identifiers import quote_identifier
+
+        qt = get_quoted_table_name(adapter, target_table)
+        qs = get_quoted_table_name(adapter, staging_table)
+
+        qkeys = [quote_identifier(k, adapter_type) for k in unique_key]
+        qcols = [quote_identifier(c, adapter_type) for c in columns]
+
+        at = adapter_type.lower()
+
+        if at in ("postgres", "redshift"):
+            # DELETE ... USING ... WHERE
+            on_clause = " AND ".join(f"{qt}.{k} = {qs}.{k}" for k in qkeys)
+            delete_sql = f"DELETE FROM {qt} USING {qs} WHERE {on_clause}"
+        else:
+            # Standard: DELETE WHERE unique_key IN (SELECT ... FROM staging)
+            if len(qkeys) == 1:
+                delete_sql = (
+                    f"DELETE FROM {qt} WHERE {qkeys[0]} IN "
+                    f"(SELECT {qkeys[0]} FROM {qs})"
+                )
+            else:
+                # Multi-column key: use EXISTS with correlated subquery
+                corr_clause = " AND ".join(f"{qt}.{k} = stg.{k}" for k in qkeys)
+                delete_sql = (
+                    f"DELETE FROM {qt} WHERE EXISTS "
+                    f"(SELECT 1 FROM {qs} AS stg WHERE {corr_clause})"
+                )
+
+        col_list = ", ".join(qcols)
+        insert_sql = f"INSERT INTO {qt} ({col_list}) SELECT {col_list} FROM {qs}"
+
+        return delete_sql, insert_sql
 
 
 # Backward compatibility alias
