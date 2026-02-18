@@ -1,30 +1,23 @@
 """
-Base loader class for EL layer.
+Federation loader — single JDBC + adapter loader for all targets.
 
-Loaders are responsible for loading DataFrames into target databases.
+Loads DataFrames into target databases using:
+- Spark JDBC (df.write.jdbc()) for bulk INSERT with parallel writers
+- dbt adapter for DDL (CREATE/DROP/TRUNCATE) with proper dialect quoting
 
-Load priority:
-1. DDL via dbt adapter (proper quoting, connection management)
-2. Data via Spark JDBC (parallel writes)
-3. Optional: Bulk load from cloud storage (COPY INTO)
+This replaces the previous per-adapter loader hierarchy (PostgresLoader,
+DatabricksLoader, SnowflakeLoader, etc.) which had COPY/pipe paths that
+added complexity without significant benefit for federation workloads.
 
 Usage:
     from dvt.federation.loaders import get_loader
-    from dvt.federation.adapter_manager import AdapterManager
 
-    adapter = AdapterManager.get_adapter(profile, target, profiles_dir)
-    loader = get_loader(adapter_type, on_progress=print)
-
+    loader = get_loader(on_progress=print)
     result = loader.load(df, config, adapter=adapter)
 """
 
-import os
-import shutil
-import subprocess
 import time
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 
@@ -33,13 +26,14 @@ class LoadConfig:
     """Configuration for a single load operation."""
 
     table_name: str  # Fully qualified table name (schema.table or catalog.schema.table)
-    mode: str = "overwrite"  # 'overwrite', 'append', 'ignore', 'error'
+    mode: str = "overwrite"  # 'overwrite', 'append'
     truncate: bool = True  # Use TRUNCATE instead of DROP for overwrite
     full_refresh: bool = False  # --full-refresh: DROP + CREATE + INSERT
     connection_config: Optional[Dict[str, Any]] = None  # profiles.yml connection
     jdbc_config: Optional[Dict[str, Any]] = None  # jdbc_load settings from computes.yml
-    bucket_config: Optional[Dict[str, Any]] = None  # For staging (bulk load)
-    streaming_batch_size: int = 10000  # Rows per batch for streaming load
+    # Phase 4 additions (placeholders):
+    incremental_strategy: Optional[str] = None  # 'append', 'delete+insert', 'merge'
+    unique_key: Optional[List[str]] = None  # For merge/delete+insert
 
 
 @dataclass
@@ -50,24 +44,17 @@ class LoadResult:
     table_name: str
     row_count: int = 0
     error: Optional[str] = None
-    load_method: str = "jdbc"  # 'jdbc', 'copy', 'bulk_load'
+    load_method: str = "jdbc"  # 'jdbc', 'merge', 'delete+insert'
     elapsed_seconds: float = 0.0
 
 
-class BaseLoader(ABC):
-    """Base class for database loaders.
+class FederationLoader:
+    """Single loader for all federation targets.
 
-    Provides:
-    - DDL execution via dbt adapter (proper quoting per dialect)
-    - Data loading via Spark JDBC (parallel writes)
-    - Optional bulk load for cloud storage
-
-    Subclasses override load() to add database-specific optimizations
-    (e.g., PostgreSQL COPY FROM, Snowflake COPY INTO).
+    Uses Spark JDBC for data transfer + dbt adapter for DDL.
+    All adapters (Postgres, Databricks, Snowflake, BigQuery, etc.)
+    use the same JDBC + adapter pattern.
     """
-
-    # Adapter types this loader handles (set by subclass)
-    adapter_types: List[str] = []
 
     def __init__(
         self,
@@ -84,19 +71,6 @@ class BaseLoader(ABC):
         """Log a progress message."""
         self.on_progress(message)
 
-    def supports_bulk_load(self, bucket_type: str) -> bool:
-        """Check if this loader supports bulk load from bucket type.
-
-        Cloud loaders (Snowflake, BigQuery, Redshift, etc.) override
-        this to return True for their supported cloud storage types.
-        """
-        return False
-
-    def get_bulk_load_bucket_types(self) -> List[str]:
-        """Get list of bucket types this loader can bulk load from."""
-        return []
-
-    @abstractmethod
     def load(
         self,
         df: Any,  # pyspark.sql.DataFrame
@@ -104,6 +78,10 @@ class BaseLoader(ABC):
         adapter: Optional[Any] = None,
     ) -> LoadResult:
         """Load DataFrame into target database.
+
+        Dispatches to the appropriate load strategy:
+        - Default: JDBC INSERT (with DDL via adapter)
+        - Phase 4: merge, delete+insert via temp table pattern
 
         Args:
             df: PySpark DataFrame to load
@@ -113,7 +91,8 @@ class BaseLoader(ABC):
         Returns:
             LoadResult with success status and metadata
         """
-        pass
+        # Phase 4 will add merge/delete+insert dispatch here
+        return self._load_jdbc(df, config, adapter)
 
     # =========================================================================
     # DDL Operations via Adapter
@@ -173,7 +152,7 @@ class BaseLoader(ABC):
                 except Exception:
                     # Table might not exist - will be created by Spark
                     pass
-            # Commit DDL so it's visible to other connections (COPY, JDBC)
+            # Commit DDL so it's visible to other connections (JDBC)
             self._safe_commit(adapter)
 
     def _ensure_schema_exists(
@@ -232,153 +211,11 @@ class BaseLoader(ABC):
             except Exception as e:
                 # Table might already exist (IF NOT EXISTS not supported everywhere)
                 self._log(f"Create table note: {e}")
-            # Commit DDL so it's visible to other connections (COPY, JDBC)
+            # Commit DDL so it's visible to other connections (JDBC)
             self._safe_commit(adapter)
 
     # =========================================================================
-    # Pipe-Based Loading - Tier 1 (CLI tool + PyArrow streaming)
-    # =========================================================================
-
-    # CLI tool name for pipe loading (override in subclass, e.g., "psql")
-    cli_tool: Optional[str] = None
-
-    def _has_cli_tool(self) -> bool:
-        """Check if the CLI tool for pipe loading is available on PATH."""
-        return self.cli_tool is not None and shutil.which(self.cli_tool) is not None
-
-    def _build_load_command(self, config: LoadConfig) -> List[str]:
-        """Build CLI command for pipe loading.
-
-        Override in subclass to provide database-specific CLI arguments.
-
-        Args:
-            config: Load configuration
-
-        Returns:
-            Command list for subprocess.Popen
-        """
-        raise NotImplementedError(
-            f"{self.__class__.__name__} does not implement _build_load_command"
-        )
-
-    def _build_load_env(self, config: LoadConfig) -> Dict[str, str]:
-        """Build environment variables for pipe loading subprocess.
-
-        Override in subclass to set password env vars (PGPASSWORD, MYSQL_PWD, etc.).
-
-        Args:
-            config: Load configuration
-
-        Returns:
-            Environment dict for subprocess.Popen
-        """
-        return os.environ.copy()
-
-    def _get_csv_write_delimiter(self) -> str:
-        """Get CSV delimiter for pipe loading output.
-
-        Override in subclass if target DB CLI expects non-standard delimiter
-        (e.g., tab-delimited for MySQL LOAD DATA).
-
-        Returns:
-            Delimiter character
-        """
-        return ","
-
-    def _load_via_pipe(
-        self,
-        parquet_path: str,
-        config: LoadConfig,
-    ) -> int:
-        """Load data via PyArrow streaming Parquet-to-CSV + CLI tool pipe.
-
-        Reads a Parquet file in batches using PyArrow, converts each batch
-        to CSV, and streams it to the target database's CLI tool via stdin.
-
-        Memory: ~1-10MB (one PyArrow RecordBatch + CSV write buffer).
-
-        Args:
-            parquet_path: Path to the Parquet file/directory to load
-            config: Load configuration
-
-        Returns:
-            Number of rows loaded
-
-        Raises:
-            RuntimeError: If the CLI tool process exits with error
-            ImportError: If pyarrow is not available
-        """
-        try:
-            import pyarrow as pa
-            import pyarrow.csv as pa_csv
-            import pyarrow.parquet as pq
-        except ImportError:
-            raise ImportError("pyarrow required for pipe loading. Run 'dvt sync'.")
-
-        cmd = self._build_load_command(config)
-        env = self._build_load_env(config)
-        delimiter = self._get_csv_write_delimiter()
-
-        self._log(f"Loading {config.table_name} via pipe ({self.cli_tool})...")
-
-        proc = subprocess.Popen(
-            cmd,
-            stdin=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=env,
-        )
-
-        try:
-            # Handle both single Parquet files and Spark-style directories
-            parquet_path_obj = Path(parquet_path)
-            if parquet_path_obj.is_dir():
-                # Spark writes Parquet as a directory with part files.
-                # Use ParquetDataset to stream batches across all part files.
-                import pyarrow.dataset as ds
-
-                dataset = ds.dataset(parquet_path, format="parquet")
-                batches = dataset.to_batches(batch_size=65536)
-            else:
-                pf = pq.ParquetFile(parquet_path)
-                batches = pf.iter_batches(batch_size=65536)
-
-            first_batch = True
-            row_count = 0
-
-            for batch in batches:
-                sink = pa.BufferOutputStream()
-                write_options = pa_csv.WriteOptions(
-                    include_header=first_batch,
-                    delimiter=delimiter,
-                )
-                pa_csv.write_csv(
-                    pa.Table.from_batches([batch]),
-                    sink,
-                    write_options=write_options,
-                )
-                proc.stdin.write(sink.getvalue().to_pybytes())
-                row_count += len(batch)
-                first_batch = False
-
-            proc.stdin.close()
-
-        except Exception:
-            proc.kill()
-            proc.wait()
-            raise
-
-        proc.wait()
-        if proc.returncode != 0:
-            stderr_output = proc.stderr.read().decode("utf-8", errors="replace")
-            raise RuntimeError(
-                f"{self.cli_tool} load failed (exit {proc.returncode}): "
-                f"{stderr_output[:500]}"
-            )
-
-        return row_count
-
-    # =========================================================================
-    # Spark JDBC Load - Default Data Loading Method
+    # Spark JDBC Load
     # =========================================================================
 
     def _load_jdbc(
@@ -495,3 +332,7 @@ class BaseLoader(ABC):
                 error=str(e),
                 elapsed_seconds=elapsed,
             )
+
+
+# Backward compatibility alias
+BaseLoader = FederationLoader

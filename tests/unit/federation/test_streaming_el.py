@@ -2,137 +2,18 @@
 """Unit tests for streaming EL pipeline enhancements.
 
 Tests:
-1. _SparkRowPipe: TSV streaming from Spark DataFrame iterator
-2. fetchmany-based extract_hashes: batched hash extraction
-3. Streaming PostgresExtractor: tempfile + PyArrow CSV streaming
-4. Streaming DatabricksExtractor: fetchmany + PyArrow ParquetWriter
-5. Fallback chains: streaming -> buffered -> JDBC
+1. fetchmany-based extract_hashes: batched hash extraction
+2. Streaming PostgresExtractor: tempfile + PyArrow CSV streaming
+3. Streaming DatabricksExtractor: fetchmany + PyArrow ParquetWriter
+4. Fallback chains: streaming -> buffered -> JDBC
+5. LoadConfig field validation
+
+Note: _SparkRowPipe and TestStreamingPostgresLoader tests were removed
+in Phase 7 loader simplification. Those classes no longer exist — all
+loaders now use FederationLoader with JDBC + adapter pattern.
 """
 
 from unittest.mock import MagicMock, patch
-
-import pytest
-
-
-# =============================================================================
-# _SparkRowPipe Tests
-# =============================================================================
-
-
-class TestSparkRowPipe:
-    """Tests for _SparkRowPipe file-like object."""
-
-    def _make_pipe(self, rows, columns=None, batch_rows=10000):
-        """Create a _SparkRowPipe from a list of mock Row objects."""
-        from dvt.federation.loaders.postgres import _SparkRowPipe
-
-        mock_df = MagicMock()
-        mock_df.toLocalIterator.return_value = iter(rows)
-        mock_df.columns = columns or ["col1", "col2"]
-        return _SparkRowPipe(mock_df, mock_df.columns, batch_rows=batch_rows)
-
-    def test_basic_rows(self):
-        """Should produce tab-separated rows with newlines."""
-        from dvt.federation.loaders.postgres import _SparkRowPipe
-
-        rows = [
-            MagicMock(__iter__=lambda self: iter(["a", "b"])),
-            MagicMock(__iter__=lambda self: iter(["c", "d"])),
-        ]
-        # Use simple tuples instead of MagicMock for iteration
-        rows = [("a", "b"), ("c", "d")]
-        pipe = self._make_pipe(rows)
-
-        result = pipe.read(-1)
-        assert result == b"a\tb\nc\td\n"
-        assert pipe.rows_written == 2
-
-    def test_null_handling(self):
-        """Should represent None as \\N (PostgreSQL NULL)."""
-        rows = [("value", None), (None, "other")]
-        pipe = self._make_pipe(rows)
-
-        result = pipe.read(-1)
-        assert result == b"value\t\\N\n\\N\tother\n"
-
-    def test_escape_tab(self):
-        """Should escape tab characters in values."""
-        rows = [("has\ttab", "normal")]
-        pipe = self._make_pipe(rows)
-
-        result = pipe.read(-1)
-        assert result == b"has\\ttab\tnormal\n"
-
-    def test_escape_newline(self):
-        """Should escape newline characters in values."""
-        rows = [("has\nnewline", "normal")]
-        pipe = self._make_pipe(rows)
-
-        result = pipe.read(-1)
-        assert result == b"has\\nnewline\tnormal\n"
-
-    def test_escape_carriage_return(self):
-        """Should escape carriage return characters."""
-        rows = [("has\rreturn", "normal")]
-        pipe = self._make_pipe(rows)
-
-        result = pipe.read(-1)
-        assert result == b"has\\rreturn\tnormal\n"
-
-    def test_escape_backslash(self):
-        """Should escape backslash characters."""
-        rows = [("has\\slash", "normal")]
-        pipe = self._make_pipe(rows)
-
-        result = pipe.read(-1)
-        assert result == b"has\\\\slash\tnormal\n"
-
-    def test_chunked_reads(self):
-        """Should support multiple read() calls with size parameter."""
-        rows = [("hello", "world")]
-        pipe = self._make_pipe(rows)
-
-        # "hello\tworld\n" = 12 bytes
-        chunk1 = pipe.read(5)
-        chunk2 = pipe.read(5)
-        chunk3 = pipe.read(100)  # remainder
-
-        assert chunk1 + chunk2 + chunk3 == b"hello\tworld\n"
-
-    def test_empty_dataframe(self):
-        """Should return empty bytes for empty DataFrame."""
-        pipe = self._make_pipe([])
-
-        result = pipe.read(-1)
-        assert result == b""
-        assert pipe.rows_written == 0
-
-    def test_unicode_data(self):
-        """Should handle unicode characters correctly."""
-        rows = [("cafe\u0301", "\u00fc\u00e4\u00f6")]
-        pipe = self._make_pipe(rows)
-
-        result = pipe.read(-1)
-        assert "caf\u00e9" in result.decode("utf-8") or "cafe\u0301" in result.decode(
-            "utf-8"
-        )
-
-    def test_numeric_values(self):
-        """Should convert numeric values to strings."""
-        rows = [(42, 3.14, True)]
-        pipe = self._make_pipe(rows, columns=["int", "float", "bool"])
-
-        result = pipe.read(-1)
-        assert b"42\t3.14\tTrue\n" == result
-
-    def test_sequential_exhaustion(self):
-        """After reading all data, subsequent reads return empty bytes."""
-        rows = [("a", "b")]
-        pipe = self._make_pipe(rows)
-
-        _ = pipe.read(-1)
-        assert pipe.read(-1) == b""
-        assert pipe.read(100) == b""
 
 
 # =============================================================================
@@ -436,93 +317,59 @@ class TestStreamingDatabricksExtractor:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-class TestStreamingPostgresLoader:
-    """Tests for PostgresLoader._load_copy_streaming() and fallback chain."""
-
-    def test_fallback_chain_streaming_to_buffered(self):
-        """When streaming fails, should fall back to buffered COPY."""
-        from dvt.federation.loaders.postgres import PostgresLoader
-
-        loader = PostgresLoader.__new__(PostgresLoader)
-        loader._on_progress = None
-
-        df = MagicMock()
-        config = MagicMock()
-        config.table_name = "test_table"
-        adapter = MagicMock()
-
-        mock_result = MagicMock()
-        mock_result.load_method = "copy"
-
-        with (
-            patch.object(
-                loader,
-                "_load_copy_streaming",
-                side_effect=Exception("streaming failed"),
-            ),
-            patch.object(
-                loader, "_load_copy", return_value=mock_result
-            ) as mock_buffered,
-            patch.object(loader, "_log"),
-        ):
-            result = loader.load(df, config, adapter)
-
-        mock_buffered.assert_called_once_with(df, config, adapter)
-        assert result.load_method == "copy"
-
-    def test_fallback_chain_all_to_jdbc(self):
-        """When both COPY methods fail, should fall back to JDBC."""
-        from dvt.federation.loaders.postgres import PostgresLoader
-
-        loader = PostgresLoader.__new__(PostgresLoader)
-        loader._on_progress = None
-
-        df = MagicMock()
-        config = MagicMock()
-        config.table_name = "test_table"
-        adapter = MagicMock()
-
-        mock_result = MagicMock()
-        mock_result.load_method = "jdbc"
-
-        with (
-            patch.object(
-                loader,
-                "_load_copy_streaming",
-                side_effect=Exception("streaming failed"),
-            ),
-            patch.object(
-                loader,
-                "_load_copy",
-                side_effect=Exception("buffered failed"),
-            ),
-            patch.object(loader, "_load_jdbc", return_value=mock_result) as mock_jdbc,
-            patch.object(loader, "_log"),
-        ):
-            result = loader.load(df, config, adapter)
-
-        mock_jdbc.assert_called_once_with(df, config, adapter)
-        assert result.load_method == "jdbc"
-
-
 # =============================================================================
 # LoadConfig Tests
 # =============================================================================
 
 
 class TestLoadConfig:
-    """Tests for LoadConfig with streaming_batch_size field."""
+    """Tests for LoadConfig fields after Phase 7 loader simplification."""
 
-    def test_default_streaming_batch_size(self):
-        """streaming_batch_size should default to 10000."""
+    def test_default_mode(self):
+        """mode should default to 'overwrite'."""
         from dvt.federation.loaders.base import LoadConfig
 
         config = LoadConfig(table_name="test_table")
-        assert config.streaming_batch_size == 10000
+        assert config.mode == "overwrite"
 
-    def test_custom_streaming_batch_size(self):
-        """Should accept custom streaming_batch_size."""
+    def test_default_truncate(self):
+        """truncate should default to True."""
         from dvt.federation.loaders.base import LoadConfig
 
-        config = LoadConfig(table_name="test_table", streaming_batch_size=50000)
-        assert config.streaming_batch_size == 50000
+        config = LoadConfig(table_name="test_table")
+        assert config.truncate is True
+
+    def test_default_full_refresh(self):
+        """full_refresh should default to False."""
+        from dvt.federation.loaders.base import LoadConfig
+
+        config = LoadConfig(table_name="test_table")
+        assert config.full_refresh is False
+
+    def test_incremental_strategy_placeholder(self):
+        """incremental_strategy should default to None (Phase 4 placeholder)."""
+        from dvt.federation.loaders.base import LoadConfig
+
+        config = LoadConfig(table_name="test_table")
+        assert config.incremental_strategy is None
+
+    def test_unique_key_placeholder(self):
+        """unique_key should default to None (Phase 4 placeholder)."""
+        from dvt.federation.loaders.base import LoadConfig
+
+        config = LoadConfig(table_name="test_table")
+        assert config.unique_key is None
+
+    def test_no_streaming_batch_size(self):
+        """streaming_batch_size should no longer exist on LoadConfig."""
+        from dvt.federation.loaders.base import LoadConfig
+
+        config = LoadConfig(table_name="test_table")
+        assert not hasattr(config, "streaming_batch_size")
+
+    def test_no_bucket_config(self):
+        """bucket_config should no longer exist on LoadConfig."""
+        from dvt.federation.loaders.base import LoadConfig
+
+        config = LoadConfig(table_name="test_table")
+        assert not hasattr(config, "bucket_config")

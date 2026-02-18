@@ -403,10 +403,7 @@ class SparkSeedRunner(BaseRunner):
             connection: Target database connection config
             table_name: Fully qualified table name (schema.table)
         """
-        from dvt.config.user_config import (
-            load_buckets_for_profile,
-            load_jdbc_load_config,
-        )
+        from dvt.config.user_config import load_jdbc_load_config
         from dvt.federation.adapter_manager import AdapterManager
         from dvt.federation.loaders import get_loader
         from dvt.federation.loaders.base import LoadConfig
@@ -428,14 +425,6 @@ class SparkSeedRunner(BaseRunner):
         compute_name = self._compute_name
         jdbc_load_config = load_jdbc_load_config(profile_name, compute_name)
 
-        # Load bucket config for bulk load (if available)
-        bucket_config = None
-        profile_buckets = load_buckets_for_profile(profile_name)
-        if profile_buckets:
-            target_bucket = profile_buckets.get("target", "local")
-            buckets = profile_buckets.get("buckets", {})
-            bucket_config = buckets.get(target_bucket)
-
         # Check CLI --full-refresh flag
         full_refresh = getattr(self.config.args, "FULL_REFRESH", False)
         if not full_refresh:
@@ -449,7 +438,6 @@ class SparkSeedRunner(BaseRunner):
             full_refresh=full_refresh,  # Pass to loader for proper handling
             connection_config=connection,
             jdbc_config=jdbc_load_config,
-            bucket_config=bucket_config,
         )
 
         # Execute load with adapter for DDL

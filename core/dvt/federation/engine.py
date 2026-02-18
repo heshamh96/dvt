@@ -655,14 +655,6 @@ class FederationEngine:
 
         loader = get_loader(adapter_type, on_progress=self._log)
 
-        # Check if bucket load is possible
-        bucket_config = self._get_bucket_config(resolution.bucket)
-        can_bulk_load = (
-            bucket_config
-            and bucket_config.get("type") != "filesystem"
-            and loader.supports_bulk_load(bucket_config.get("type", ""))
-        )
-
         # Determine write mode based on materialization
         mat = resolution.coerced_materialization or resolution.original_materialization
         if mat == "incremental":
@@ -685,7 +677,6 @@ class FederationEngine:
             full_refresh=full_refresh,
             connection_config=target_config,
             jdbc_config=jdbc_config,
-            bucket_config=bucket_config if can_bulk_load else None,
         )
 
         return loader.load(df, load_config, adapter=adapter)
