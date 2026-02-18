@@ -476,8 +476,12 @@ class FederationEngine:
                 self._log(f"  Warning: No staging data for {dep_id}")
                 continue
 
-            # Read Parquet
-            df = spark.read.parquet(str(staging_path))
+            # Read staging data (auto-detect Delta vs legacy Parquet)
+            staging_path_obj = Path(str(staging_path))
+            if staging_path_obj.is_dir() and (staging_path_obj / "_delta_log").is_dir():
+                df = spark.read.format("delta").load(str(staging_path))
+            else:
+                df = spark.read.parquet(str(staging_path))
 
             # Create temp view with unique prefix
             alias = source_mappings.get(dep_id, source.name)

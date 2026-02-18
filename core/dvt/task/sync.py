@@ -305,6 +305,37 @@ def _get_active_pyspark_version(
     return active.get("version")
 
 
+def _get_delta_spark_version(spark_version: str) -> Optional[str]:
+    """Return the compatible delta-spark version for a given Spark/PySpark version.
+
+    Delta Lake versions are NOT 1:1 with PySpark versions.
+    Mapping from https://docs.delta.io/latest/releases.html:
+        Spark 4.x   -> delta-spark 4.0.x
+        Spark 3.5.x -> delta-spark 3.2.x
+        Spark 3.4.x -> delta-spark 2.4.x
+        Spark 3.3.x -> delta-spark 2.3.x
+        Spark 3.2.x -> delta-spark 2.0.x
+
+    Returns the latest compatible delta-spark version spec, or None if unknown.
+    """
+    parts = spark_version.split(".")
+    major = int(parts[0]) if parts[0].isdigit() else 0
+    minor = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
+
+    if major >= 4:
+        return "4.0.1"
+    elif major == 3:
+        if minor >= 5:
+            return "3.2.1"
+        elif minor == 4:
+            return "2.4.0"
+        elif minor == 3:
+            return "2.3.0"
+        elif minor == 2:
+            return "2.0.2"
+    return None
+
+
 def _get_required_java_versions(spark_version: str) -> List[str]:
     """
     Return list of required Java major versions for the given Spark version.
@@ -618,6 +649,32 @@ class SyncTask(BaseTask):
                 ok = _run_pip(env_python, ["install", pyspark_pkg])
             if not ok:
                 _sync_log(red(f"❌ Failed to install pyspark=={pyspark_version}"))
+            # Install delta-spark (always coupled with pyspark)
+            delta_version = _get_delta_spark_version(pyspark_version)
+            if delta_version:
+                delta_pkg = f"delta-spark=={delta_version}"
+                _sync_log(f"📥 Installing {delta_pkg} (for Delta Lake staging) ...")
+                if pkg_manager == "uv":
+                    ok = _run_uv_pip(env_path, [delta_pkg])
+                    if not ok:
+                        _sync_log(yellow("  ⚠️  uv failed, falling back to pip..."))
+                        ok = _run_pip(env_python, ["install", delta_pkg])
+                else:
+                    ok = _run_pip(env_python, ["install", delta_pkg])
+                if not ok:
+                    _sync_log(
+                        red(
+                            f"❌ Failed to install {delta_pkg}. "
+                            f"Delta Lake staging will not be available."
+                        )
+                    )
+            else:
+                _sync_log(
+                    yellow(
+                        f"  ⚠️  No known delta-spark version for pyspark {pyspark_version}. "
+                        f"Delta Lake staging will not be available."
+                    )
+                )
         else:
             _sync_log(
                 "No pyspark version in computes.yml for this profile; skipping pyspark install."

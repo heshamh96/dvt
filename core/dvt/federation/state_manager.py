@@ -281,37 +281,70 @@ class StateManager:
             self.state_path.mkdir(parents=True, exist_ok=True)
 
     def staging_exists(self, source_name: str) -> bool:
-        """Check if staging parquet file exists for a source.
+        """Check if staging data exists for a source.
+
+        Checks for Delta format first (directory with _delta_log/),
+        then falls back to legacy Parquet file for backward compatibility.
 
         Args:
             source_name: Identifier like 'postgres__orders'
 
         Returns:
-            True if staging file exists
+            True if staging data exists (Delta or legacy Parquet)
         """
-        staging_file = self.bucket_path / f"{source_name}.parquet"
-        return staging_file.exists()
+        # Delta format: directory with _delta_log/ subdirectory
+        delta_path = self.bucket_path / f"{source_name}.delta"
+        if delta_path.is_dir() and (delta_path / "_delta_log").is_dir():
+            return True
+        # Legacy Parquet file (backward compat)
+        parquet_path = self.bucket_path / f"{source_name}.parquet"
+        return parquet_path.exists() or (
+            parquet_path.is_dir() and any(parquet_path.iterdir())
+        )
 
     def get_staging_path(self, source_name: str) -> Path:
-        """Get the staging file path for a source.
+        """Get the staging path for a source.
+
+        Returns the Delta directory path for new extractions.
+        If a legacy Parquet file exists (and no Delta version), returns
+        the Parquet path for backward compatibility.
 
         Args:
             source_name: Identifier like 'postgres__orders'
 
         Returns:
-            Path to the parquet staging file
+            Path to the Delta staging directory (or legacy Parquet file)
         """
-        return self.bucket_path / f"{source_name}.parquet"
+        delta_path = self.bucket_path / f"{source_name}.delta"
+        if delta_path.is_dir() and (delta_path / "_delta_log").is_dir():
+            return delta_path
+        # Legacy Parquet — return it if it exists, otherwise return Delta path
+        # (new extractions will create Delta)
+        parquet_path = self.bucket_path / f"{source_name}.parquet"
+        if parquet_path.exists():
+            return parquet_path
+        return delta_path
 
     def clear_staging(self, source_name: str) -> None:
         """Clear staging data for a source.
 
+        Removes both Delta and legacy Parquet staging data.
+
         Args:
             source_name: Identifier like 'postgres__orders'
         """
-        staging_file = self.get_staging_path(source_name)
-        if staging_file.exists():
-            staging_file.unlink()
+        import shutil
+
+        # Clear Delta directory
+        delta_path = self.bucket_path / f"{source_name}.delta"
+        if delta_path.is_dir():
+            shutil.rmtree(delta_path)
+        # Clear legacy Parquet file or directory
+        parquet_path = self.bucket_path / f"{source_name}.parquet"
+        if parquet_path.is_dir():
+            shutil.rmtree(parquet_path)
+        elif parquet_path.exists():
+            parquet_path.unlink()
 
     def should_extract(
         self,

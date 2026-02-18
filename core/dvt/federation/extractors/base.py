@@ -353,17 +353,18 @@ class BaseExtractor(ABC):
         config: ExtractionConfig,
         output_path: Path,
     ) -> ExtractionResult:
-        """Extract data via CLI tool pipe + PyArrow streaming CSV-to-Parquet.
+        """Extract data via CLI tool pipe + PyArrow streaming CSV-to-Parquet,
+        then convert to Delta format using Spark.
 
         Spawns the database CLI tool as a subprocess, reads its CSV stdout
-        through PyArrow's streaming CSV reader in bounded batches, and writes
-        each batch to a Parquet file incrementally.
+        through PyArrow's streaming CSV reader in bounded batches, writes
+        to a temporary Parquet file, then converts to Delta format.
 
         Memory: ~64KB kernel pipe buffer + ~1-10MB PyArrow batch buffer.
 
         Args:
             config: Extraction configuration
-            output_path: Path to write Parquet file
+            output_path: Path to write Delta table directory
 
         Returns:
             ExtractionResult with success status and metadata
@@ -388,6 +389,10 @@ class BaseExtractor(ABC):
             env=env,
         )
 
+        # Write to a temporary Parquet file first (PyArrow streaming),
+        # then convert to Delta format using Spark.
+        tmp_parquet = output_path.parent / f".tmp_{output_path.name}.parquet"
+
         try:
             # Check for subclass-specific read options (e.g., bcp no-header fix)
             read_options = self._get_csv_read_options(config)
@@ -411,7 +416,7 @@ class BaseExtractor(ABC):
                 for batch in reader:
                     if writer is None:
                         writer = pq.ParquetWriter(
-                            str(output_path),
+                            str(tmp_parquet),
                             batch.schema,
                             compression="zstd",
                         )
@@ -424,16 +429,35 @@ class BaseExtractor(ABC):
         except Exception:
             proc.kill()
             proc.wait()
+            # Clean up temp file on failure
+            if tmp_parquet.exists():
+                tmp_parquet.unlink()
             raise
 
         # Capture stderr before wait to avoid potential deadlock
         stderr_output = proc.stderr.read().decode("utf-8", errors="replace")
         proc.wait()
         if proc.returncode != 0:
+            if tmp_parquet.exists():
+                tmp_parquet.unlink()
             raise RuntimeError(
                 f"{self.cli_tool} extraction failed (exit {proc.returncode}): "
                 f"{stderr_output[:500]}"
             )
+
+        # Convert temp Parquet to Delta format using Spark
+        try:
+            from dvt.federation.spark_manager import SparkManager
+
+            spark_manager = SparkManager.get_instance()
+            spark = spark_manager.get_or_create_session()
+
+            df = spark.read.parquet(str(tmp_parquet))
+            df.write.format("delta").mode("overwrite").save(str(output_path))
+        finally:
+            # Always clean up temp Parquet
+            if tmp_parquet.exists():
+                tmp_parquet.unlink()
 
         elapsed = time.time() - start_time
         self._log(
@@ -566,13 +590,11 @@ class BaseExtractor(ABC):
             # Ensure output directory exists
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
-            # Write to Parquet (directory with multiple part files)
-            df.write.mode("overwrite").option("compression", "zstd").parquet(
-                str(output_path)
-            )
+            # Write to Delta format (directory with _delta_log/)
+            df.write.format("delta").mode("overwrite").save(str(output_path))
 
             # Get row count from written data
-            row_count = spark.read.parquet(str(output_path)).count()
+            row_count = spark.read.format("delta").load(str(output_path)).count()
 
             elapsed = time.time() - start_time
             self._log(

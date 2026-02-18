@@ -194,6 +194,20 @@ class SparkManager:
             for key, value in cloud_config.items():
                 builder = builder.config(key, str(value))
 
+            # Configure Delta Lake extensions (if delta-spark is installed)
+            try:
+                import delta  # noqa: F401
+
+                builder = builder.config(
+                    "spark.sql.extensions",
+                    "io.delta.sql.DeltaSparkSessionExtension",
+                ).config(
+                    "spark.sql.catalog.spark_catalog",
+                    "org.apache.spark.sql.delta.catalog.DeltaCatalog",
+                )
+            except ImportError:
+                pass  # delta-spark not installed; Delta staging not available
+
             # Create session
             SparkManager._session = builder.getOrCreate()
 
