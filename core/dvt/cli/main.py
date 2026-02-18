@@ -233,6 +233,7 @@ def build(ctx, **kwargs):
 @p.clean_project_files_only
 @p.clean_bucket
 @p.clean_older_than
+@p.clean_optimize
 @p.profiles_dir
 @p.project_dir
 @p.target_path
@@ -248,6 +249,7 @@ def clean(ctx, **kwargs):
 
     Use --bucket to clean only a specific staging bucket (skips dbt clean).
     Use --older-than to clean only files older than a duration (e.g., '24h', '7d').
+    Use --optimize to run Delta OPTIMIZE + VACUUM on staging tables (skips dbt clean).
     """
     from dvt.task.clean import CleanTask
 

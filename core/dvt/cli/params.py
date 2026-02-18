@@ -94,6 +94,13 @@ clean_older_than = _create_option_and_track_env_var(
     type=click.STRING,
 )
 
+clean_optimize = _create_option_and_track_env_var(
+    "--optimize/--no-optimize",
+    envvar=None,
+    help="Run Delta Lake OPTIMIZE and VACUUM on staging tables to compact small files and remove old versions.",
+    default=False,
+)
+
 compile_docs = _create_option_and_track_env_var(
     "--compile/--no-compile",
     envvar=None,
