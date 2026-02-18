@@ -123,14 +123,18 @@ class FederationEngine:
                     f"Could not create EL layer for bucket '{resolution.bucket}'"
                 )
 
-            # 3. Build source mappings (source_id -> alias in SQL)
-            source_mappings = self._build_source_mappings(model, compiled_sql)
-
-            # 4. Extract pushable operations from compiled SQL
+            # 3. Determine the SQL dialect of the compiled SQL.
             # DVT: With target-aware compilation, the compiled SQL is in the
             # TARGET adapter's dialect (e.g., databricks backticks when the
-            # model targets databricks). We parse using the target's dialect.
+            # model targets databricks). We must parse using that dialect.
             source_dialect = self._get_dialect_for_target(resolution.target)
+
+            # 4. Build source mappings (source_id -> alias in SQL)
+            source_mappings = self._build_source_mappings(
+                model, compiled_sql, sql_dialect=source_dialect
+            )
+
+            # 5. Extract pushable operations from compiled SQL
             pushable_ops = self.query_optimizer.extract_all_pushable_operations(
                 compiled_sql=compiled_sql,
                 source_mappings=source_mappings,
@@ -259,6 +263,7 @@ class FederationEngine:
         self,
         model: Any,
         compiled_sql: str,
+        sql_dialect: Optional[str] = None,
     ) -> Dict[str, str]:
         """Build mapping from source_id to SQL alias.
 
@@ -268,6 +273,7 @@ class FederationEngine:
         Args:
             model: ModelNode
             compiled_sql: Compiled SQL to analyze
+            sql_dialect: SQLGlot dialect of the compiled SQL (e.g., "databricks")
 
         Returns:
             Dict mapping source_id to alias (e.g., "source.proj.orders" -> "o")
@@ -292,6 +298,7 @@ class FederationEngine:
                         compiled_sql,
                         schema_name,
                         table_name,
+                        sql_dialect=sql_dialect,
                     )
 
                     mappings[dep_id] = alias or table_name
@@ -303,6 +310,7 @@ class FederationEngine:
         sql: str,
         schema: str,
         table: str,
+        sql_dialect: Optional[str] = None,
     ) -> Optional[str]:
         """Find table alias in SQL using SQLGlot.
 
@@ -310,12 +318,13 @@ class FederationEngine:
             sql: SQL to analyze
             schema: Schema name
             table: Table name
+            sql_dialect: SQLGlot dialect for parsing (e.g., "databricks")
 
         Returns:
             Alias if found, None otherwise
         """
         try:
-            parsed = sqlglot.parse_one(sql)
+            parsed = sqlglot.parse_one(sql, read=sql_dialect)
 
             for tbl in parsed.find_all(exp.Table):
                 tbl_name = tbl.name
