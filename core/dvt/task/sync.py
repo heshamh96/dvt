@@ -323,7 +323,10 @@ def _get_delta_spark_version(spark_version: str) -> Optional[str]:
     minor = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
 
     if major >= 4:
-        return "4.0.1"
+        if minor == 0:
+            return "4.0.1"
+        # Spark 4.1+ not yet supported by delta-spark (4.0.1 targets Spark 4.0.x)
+        return None
     elif major == 3:
         if minor >= 5:
             return "3.2.1"

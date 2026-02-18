@@ -350,14 +350,22 @@ class ELLayer:
             jdbc_config=self.jdbc_config,
         )
 
-        # Get output path
-        output_path = self.state_manager.get_staging_path(source.source_name)
+        # Get final output path (Delta format for new extractions)
+        final_path = self.state_manager.get_staging_path(source.source_name)
 
-        # Perform extraction
+        # Extractors write Parquet natively; we convert to Delta after.
+        # Use a temporary Parquet path for extraction, then convert.
+        parquet_tmp = final_path.parent / f"tmp_{source.source_name}.parquet"
+
+        # Perform extraction (always writes Parquet)
         self._log(f"Extracting {source.source_name}...")
-        result = extractor.extract(config, output_path)
+        result = extractor.extract(config, parquet_tmp)
 
         if result.success:
+            # Convert Parquet staging to Delta format
+            result = self._convert_to_delta(
+                parquet_tmp, final_path, source.source_name, result
+            )
             # Save state
             state = SourceState(
                 source_name=source.source_name,
@@ -382,6 +390,91 @@ class ELLayer:
                     )
 
         return result
+
+    def _convert_to_delta(
+        self,
+        parquet_path: Path,
+        delta_path: Path,
+        source_name: str,
+        extraction_result: ExtractionResult,
+    ) -> ExtractionResult:
+        """Convert extracted Parquet staging data to Delta format.
+
+        All extractors write Parquet natively (PyArrow, Spark JDBC, COPY, etc.).
+        This method converts the output to Delta format using Spark, providing
+        a single conversion point for all extraction paths.
+
+        If conversion fails (e.g., delta-spark not installed), falls back to
+        keeping the Parquet file as-is and logs a warning.
+
+        Args:
+            parquet_path: Path to the temporary Parquet file/directory
+            delta_path: Path for the final Delta table directory
+            source_name: Source identifier for logging
+            extraction_result: The ExtractionResult from the extractor
+
+        Returns:
+            Updated ExtractionResult with the final output path
+        """
+        import shutil
+
+        try:
+            from dvt.federation.spark_manager import SparkManager
+
+            spark_manager = SparkManager.get_instance()
+            spark = spark_manager.get_or_create_session()
+
+            # Read the Parquet data.
+            # PyArrow pipe/COPY extraction writes a single file; Spark JDBC writes
+            # a directory. spark.read.parquet() can fail on single files in Spark 4.x
+            # (UNABLE_TO_INFER_SCHEMA), so wrap single files in a temp directory.
+            if parquet_path.is_file():
+                # Single file from PyArrow: wrap in a directory so Spark can read it.
+                # IMPORTANT: Don't use '.' or '_' prefix — Spark/Hadoop ignores hidden paths.
+                parquet_dir = parquet_path.parent / f"tmp_parquet_{source_name}"
+                parquet_dir.mkdir(parents=True, exist_ok=True)
+                moved_file = parquet_dir / "part-00000.parquet"
+                parquet_path.rename(moved_file)
+                parquet_path = parquet_dir  # Now it's a directory
+
+            df = spark.read.parquet(str(parquet_path))
+
+            # Write as Delta (overwrites any previous Delta staging)
+            # Enable column mapping to support column names with spaces/special chars
+            df.write.format("delta").mode("overwrite").option(
+                "delta.columnMapping.mode", "name"
+            ).option("delta.minReaderVersion", "2").option(
+                "delta.minWriterVersion", "5"
+            ).save(str(delta_path))
+
+            # Clean up temp Parquet
+            if parquet_path.is_dir():
+                shutil.rmtree(parquet_path)
+            elif parquet_path.exists():
+                parquet_path.unlink()
+
+            # Update result with final Delta path
+            extraction_result.output_path = delta_path
+            return extraction_result
+
+        except Exception as e:
+            # Delta conversion failed — fall back to keeping Parquet as-is.
+            # Move the temp Parquet to a permanent location so staging_exists()
+            # can find it (legacy Parquet backward compat).
+            self._log(
+                f"Warning: Delta conversion failed for {source_name} ({e}). "
+                f"Keeping Parquet staging."
+            )
+            permanent_parquet = delta_path.parent / f"{source_name}.parquet"
+            if parquet_path != permanent_parquet:
+                if permanent_parquet.exists():
+                    if permanent_parquet.is_dir():
+                        shutil.rmtree(permanent_parquet)
+                    else:
+                        permanent_parquet.unlink()
+                parquet_path.rename(permanent_parquet)
+            extraction_result.output_path = permanent_parquet
+            return extraction_result
 
     def clear_all_staging(self) -> None:
         """Clear all staging data and state."""

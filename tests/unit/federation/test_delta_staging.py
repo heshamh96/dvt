@@ -27,9 +27,9 @@ class TestGetDeltaSparkVersion:
         return _get_delta_spark_version
 
     def test_spark_4_1_0(self):
-        """Spark 4.1.0 -> delta-spark 4.0.1."""
+        """Spark 4.1.0 -> None (delta-spark 4.0.1 targets 4.0.x only)."""
         fn = self._get_fn()
-        assert fn("4.1.0") == "4.0.1"
+        assert fn("4.1.0") is None
 
     def test_spark_4_0_0(self):
         """Spark 4.0.0 -> delta-spark 4.0.1."""
@@ -37,9 +37,9 @@ class TestGetDeltaSparkVersion:
         assert fn("4.0.0") == "4.0.1"
 
     def test_spark_4_2_0(self):
-        """Spark 4.2.0 (future) -> delta-spark 4.0.1."""
+        """Spark 4.2.0 (future) -> None (no compatible delta-spark yet)."""
         fn = self._get_fn()
-        assert fn("4.2.0") == "4.0.1"
+        assert fn("4.2.0") is None
 
     def test_spark_3_5_3(self):
         """Spark 3.5.x -> delta-spark 3.2.1."""
@@ -93,81 +93,96 @@ class TestGetDeltaSparkVersion:
 
 
 class TestSparkManagerDeltaConfig:
-    """Tests for Delta Lake extensions in SparkManager."""
+    """Tests for Delta Lake configuration in SparkManager."""
 
-    def test_delta_extensions_in_session_builder_code(self):
-        """SparkManager.get_or_create_session should configure Delta extensions."""
+    def test_delta_configured_via_configure_spark_with_delta_pip(self):
+        """SparkManager should use configure_spark_with_delta_pip for Delta setup."""
         import inspect
 
         from dvt.federation.spark_manager import SparkManager
 
         source = inspect.getsource(SparkManager.get_or_create_session)
-        assert "DeltaSparkSessionExtension" in source, (
-            "Should configure spark.sql.extensions with DeltaSparkSessionExtension"
-        )
-        assert "DeltaCatalog" in source, (
-            "Should configure spark.sql.catalog.spark_catalog with DeltaCatalog"
+        assert "configure_spark_with_delta_pip" in source, (
+            "Should use configure_spark_with_delta_pip to set up Delta classpath"
         )
 
     def test_delta_import_is_guarded(self):
-        """Delta extension config should be guarded by try/except ImportError."""
+        """Delta config should be guarded by try/except ImportError."""
         import inspect
 
         from dvt.federation.spark_manager import SparkManager
 
         source = inspect.getsource(SparkManager.get_or_create_session)
-        assert "import delta" in source, (
-            "Should try to import delta to check availability"
-        )
         assert "ImportError" in source, (
             "Should catch ImportError when delta-spark is not installed"
         )
 
 
 # =============================================================================
-# C. Extractor Delta Format Write Tests
+# C. Centralized Delta Conversion Tests (EL Layer)
 # =============================================================================
 
 
-class TestExtractorDeltaWrite:
-    """Tests for Delta format output in extractors."""
+class TestELLayerDeltaConversion:
+    """Tests for centralized Parquet-to-Delta conversion in EL layer."""
 
-    def test_jdbc_extraction_writes_delta_format(self):
-        """_extract_jdbc should write Delta format instead of Parquet."""
+    def test_el_layer_has_convert_to_delta_method(self):
+        """ELLayer should have _convert_to_delta method."""
+        from dvt.federation.el_layer import ELLayer
+
+        assert hasattr(ELLayer, "_convert_to_delta"), (
+            "ELLayer should have _convert_to_delta method"
+        )
+
+    def test_convert_to_delta_code_structure(self):
+        """_convert_to_delta should read Parquet and write Delta."""
+        import inspect
+
+        from dvt.federation.el_layer import ELLayer
+
+        source = inspect.getsource(ELLayer._convert_to_delta)
+        assert "read.parquet" in source, "Should read the Parquet staging data"
+        assert 'format("delta")' in source, "Should write in Delta format"
+        assert 'mode("overwrite")' in source, "Should use overwrite mode"
+
+    def test_convert_to_delta_has_fallback(self):
+        """_convert_to_delta should fall back to Parquet on failure."""
+        import inspect
+
+        from dvt.federation.el_layer import ELLayer
+
+        source = inspect.getsource(ELLayer._convert_to_delta)
+        assert "except Exception" in source, (
+            "Should catch exceptions for graceful fallback"
+        )
+        assert ".parquet" in source, "Should fall back to keeping Parquet on failure"
+
+    def test_extract_source_calls_convert_to_delta(self):
+        """_extract_source should call _convert_to_delta after extraction."""
+        import inspect
+
+        from dvt.federation.el_layer import ELLayer
+
+        source = inspect.getsource(ELLayer._extract_source)
+        assert "_convert_to_delta" in source, (
+            "Should call _convert_to_delta after successful extraction"
+        )
+        assert "tmp_" in source, "Should use a temp Parquet path for extraction"
+
+    def test_extractors_still_write_parquet(self):
+        """Extractors should write Parquet natively (not Delta)."""
         import inspect
 
         from dvt.federation.extractors.base import BaseExtractor
 
-        source = inspect.getsource(BaseExtractor._extract_jdbc)
-        # Should use Delta format for writing
-        assert 'format("delta")' in source, (
-            "_extract_jdbc should use df.write.format('delta')"
-        )
-        assert 'mode("overwrite")' in source, "_extract_jdbc should use overwrite mode"
-        # Should NOT use parquet() directly for writing anymore
-        assert (
-            ".parquet(" not in source.split("# Write to Delta")[1]
-            if "# Write to Delta" in source
-            else True
-        ), "_extract_jdbc should not use .parquet() for writing"
-        # Should read back via Delta for row count
-        assert 'format("delta").load' in source.replace("\n", "").replace(" ", ""), (
-            "_extract_jdbc should read back via Delta format for row count"
-        )
+        # JDBC path should write Parquet
+        jdbc_source = inspect.getsource(BaseExtractor._extract_jdbc)
+        assert ".parquet(" in jdbc_source, "JDBC extraction should write Parquet"
 
-    def test_pipe_extraction_converts_to_delta(self):
-        """_extract_via_pipe should write temp Parquet then convert to Delta."""
-        import inspect
-
-        from dvt.federation.extractors.base import BaseExtractor
-
-        source = inspect.getsource(BaseExtractor._extract_via_pipe)
-        assert 'format("delta")' in source, (
-            "_extract_via_pipe should convert to Delta format"
-        )
-        assert ".tmp_" in source, "_extract_via_pipe should use a temp Parquet file"
-        assert "SparkManager" in source, (
-            "_extract_via_pipe should use SparkManager for conversion"
+        # Pipe path should write Parquet via PyArrow
+        pipe_source = inspect.getsource(BaseExtractor._extract_via_pipe)
+        assert "ParquetWriter" in pipe_source, (
+            "Pipe extraction should write Parquet via PyArrow"
         )
 
 

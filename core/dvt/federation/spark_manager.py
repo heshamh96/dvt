@@ -194,9 +194,12 @@ class SparkManager:
             for key, value in cloud_config.items():
                 builder = builder.config(key, str(value))
 
-            # Configure Delta Lake extensions (if delta-spark is installed)
+            # Configure Delta Lake (if delta-spark is installed).
+            # configure_spark_with_delta_pip() sets up the classpath for the
+            # Delta JARs bundled with the pip package. We also need the extension
+            # and catalog configs for Delta read/write operations.
             try:
-                import delta  # noqa: F401
+                from delta import configure_spark_with_delta_pip
 
                 builder = builder.config(
                     "spark.sql.extensions",
@@ -205,6 +208,7 @@ class SparkManager:
                     "spark.sql.catalog.spark_catalog",
                     "org.apache.spark.sql.delta.catalog.DeltaCatalog",
                 )
+                builder = configure_spark_with_delta_pip(builder)
             except ImportError:
                 pass  # delta-spark not installed; Delta staging not available
 
