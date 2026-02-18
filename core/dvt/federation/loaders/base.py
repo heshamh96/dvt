@@ -109,6 +109,12 @@ class FederationLoader:
     def _safe_commit(self, adapter: Any) -> None:
         """Commit the adapter connection, tolerating aborted transaction state.
 
+        dbt's adapter.execute() uses auto_begin=False by default, which means
+        the connection manager's transaction_open flag stays False even though
+        psycopg2 opens an implicit transaction. This causes commit() to fail
+        with "no transaction open". We fall back to committing the raw DB
+        handle directly, which works for all databases.
+
         On PostgreSQL, a failed SQL statement aborts the current transaction.
         Calling commit() on an aborted transaction raises an error or silently
         rolls back.  This helper catches that error and resets the connection
@@ -117,10 +123,20 @@ class FederationLoader:
         try:
             adapter.connections.commit()
         except Exception:
+            # Fallback: commit the raw DB handle directly.
+            # This handles the case where adapter.execute() was called with
+            # auto_begin=False (default), so dbt doesn't track the transaction,
+            # but psycopg2/DB driver has an implicit transaction open.
             try:
-                adapter.connections.rollback()
+                conn = adapter.connections.get_thread_connection()
+                if conn and conn.handle:
+                    conn.handle.commit()
             except Exception:
-                pass  # Connection may already be clean
+                try:
+                    if conn and conn.handle:
+                        conn.handle.rollback()
+                except Exception:
+                    pass  # Connection may already be clean
 
     def _execute_ddl(
         self,
@@ -372,6 +388,48 @@ class FederationLoader:
             return f"{schema}.{staging_id}"
         return staging_id
 
+    def _build_unique_index_sql(
+        self,
+        adapter: Any,
+        table_name: str,
+        unique_key: List[str],
+    ) -> str:
+        """Build CREATE UNIQUE INDEX SQL for PostgreSQL ON CONFLICT support.
+
+        PostgreSQL's INSERT ... ON CONFLICT requires an existing unique index
+        or constraint. This builds the DDL; the caller should execute it in
+        the same connection/transaction as the MERGE itself.
+
+        Args:
+            adapter: dbt adapter instance
+            table_name: Target table name (may be schema-qualified)
+            unique_key: List of column names forming the unique key
+
+        Returns:
+            CREATE UNIQUE INDEX IF NOT EXISTS SQL string
+        """
+        from dvt.federation.adapter_manager import (
+            get_quoted_table_name,
+            parse_table_name,
+        )
+        from dvt.utils.identifiers import quote_identifier
+
+        adapter_type = adapter.type()
+        parts = parse_table_name(table_name)
+        identifier = parts.get("identifier") or "model"
+        key_suffix = "_".join(unique_key)[:40]
+        index_name = f"_dvt_uq_{identifier}_{key_suffix}"
+
+        quoted_cols = ", ".join(
+            quote_identifier(col, adapter_type) for col in unique_key
+        )
+        quoted_table = get_quoted_table_name(adapter, table_name)
+
+        return (
+            f"CREATE UNIQUE INDEX IF NOT EXISTS {index_name} "
+            f"ON {quoted_table} ({quoted_cols})"
+        )
+
     def _write_to_staging_table(
         self,
         df: Any,
@@ -469,11 +527,12 @@ class FederationLoader:
             # 1. Ensure target table exists
             self._create_table_with_adapter(adapter, df, config)
 
+            adapter_type = config.connection_config.get("type", "")
+
             # 2. Write to staging table
             self._write_to_staging_table(df, staging_table, config)
 
-            # 3. Execute MERGE SQL
-            adapter_type = config.connection_config.get("type", "")
+            # 3. Execute MERGE SQL (with unique index creation in same transaction for PG)
             columns = [f.name for f in df.schema.fields]
             merge_sql = self._build_merge_sql(
                 adapter_type=adapter_type,
@@ -486,6 +545,17 @@ class FederationLoader:
 
             self._log(f"Executing MERGE into {config.table_name}...")
             with adapter.connection_named("dvt_loader"):
+                # Ensure unique index exists for Postgres ON CONFLICT
+                # Must be in the same connection as the MERGE to avoid
+                # the index being lost when a separate connection closes.
+                if adapter_type == "postgres" and config.unique_key:
+                    index_sql = self._build_unique_index_sql(
+                        adapter, config.table_name, config.unique_key
+                    )
+                    try:
+                        adapter.execute(index_sql)
+                    except Exception:
+                        pass  # Index may already exist
                 adapter.execute(merge_sql)
                 self._safe_commit(adapter)
 
