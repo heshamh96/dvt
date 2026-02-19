@@ -612,7 +612,7 @@ class TestLoadMergeStructure:
     def test_commits_after_merge(self):
         """_load_merge should commit after executing MERGE."""
         source = self._get_source()
-        assert "_safe_commit" in source
+        assert "_commit" in source
 
     def test_has_finally_cleanup(self):
         """_load_merge should have finally block for staging cleanup."""
@@ -686,7 +686,7 @@ class TestLoadDeleteInsertStructure:
     def test_commits_after_both_statements(self):
         """Should commit after both DELETE and INSERT."""
         source = self._get_source()
-        assert "_safe_commit" in source
+        assert "_commit" in source
 
     def test_has_finally_cleanup(self):
         """Should have finally block for staging table cleanup."""

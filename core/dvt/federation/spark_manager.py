@@ -24,7 +24,9 @@ Usage:
     SparkManager.reset()
 """
 
+import os
 import threading
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from dvt.config.user_config import get_spark_jars_dir
@@ -76,6 +78,83 @@ class SparkManager:
         """
         self.config = config or {}
         self.bucket_configs = bucket_configs or {}
+        # Delta Lake table properties (resolved from user-friendly names in computes.yml)
+        self._delta_config = self._resolve_delta_config()
+
+    # --- User-friendly name -> Delta property mapping ---
+    # These translate the simple names in computes.yml delta: section
+    # to the actual Delta Lake property names used internally.
+    _DELTA_CONFIG_MAP = {
+        "optimize_on_write": "delta.autoOptimize.optimizeWrite",
+        "cleanup_retention_hours": "delta.deletedFileRetentionDuration",
+        "parallel_cleanup": "spark.databricks.delta.vacuum.parallelDelete.enabled",
+    }
+
+    def _resolve_delta_config(self) -> Dict[str, Any]:
+        """Resolve user-friendly delta config names to Delta Lake properties.
+
+        Reads the 'delta' section from the compute config and maps simple names
+        (e.g., 'optimize_on_write') to actual Delta properties.
+
+        Returns:
+            Dict with two keys:
+                'table_properties': dict of Delta table properties to apply on writes
+                'session_properties': dict of Spark session-level properties
+        """
+        delta_section = self.config.get("delta", {})
+        if not delta_section or not isinstance(delta_section, dict):
+            return {"table_properties": {}, "session_properties": {}}
+
+        table_props: Dict[str, str] = {}
+        session_props: Dict[str, str] = {}
+
+        for user_key, value in delta_section.items():
+            if user_key not in self._DELTA_CONFIG_MAP:
+                continue  # Unknown key, skip silently
+
+            delta_key = self._DELTA_CONFIG_MAP[user_key]
+
+            if user_key == "cleanup_retention_hours":
+                # Convert hours to Delta interval format
+                hours = int(value)
+                table_props[delta_key] = f"interval {hours} hours"
+            elif user_key == "parallel_cleanup":
+                # Session-level property (not a table property)
+                session_props[delta_key] = str(value).lower()
+            else:
+                # Boolean table properties
+                table_props[delta_key] = str(value).lower()
+
+        return {"table_properties": table_props, "session_properties": session_props}
+
+    @property
+    def delta_table_properties(self) -> Dict[str, str]:
+        """Delta table properties to apply when writing Delta staging tables.
+
+        Returns dict like:
+            {"delta.autoOptimize.optimizeWrite": "true"}
+        """
+        return self._delta_config.get("table_properties", {})
+
+    @property
+    def delta_session_properties(self) -> Dict[str, str]:
+        """Delta session-level Spark properties.
+
+        Returns dict like:
+            {"spark.databricks.delta.vacuum.parallelDelete.enabled": "true"}
+        """
+        return self._delta_config.get("session_properties", {})
+
+    @property
+    def cleanup_retention_hours(self) -> int:
+        """Get cleanup retention in hours for VACUUM.
+
+        Returns the user-configured value, or 0 if not set (delete immediately).
+        """
+        delta_section = self.config.get("delta", {})
+        if isinstance(delta_section, dict):
+            return int(delta_section.get("cleanup_retention_hours", 0))
+        return 0
 
     @classmethod
     def initialize(
@@ -162,6 +241,20 @@ class SparkManager:
             if SparkManager._session is not None:
                 return SparkManager._session
 
+            # Set JAVA_HOME from compute config before JVM starts.
+            # Must happen before any PySpark import triggers JVM initialization.
+            java_home = self.config.get("java_home")
+            if java_home:
+                java_path = Path(java_home).expanduser().resolve()
+                if java_path.is_dir():
+                    os.environ["JAVA_HOME"] = str(java_path)
+                else:
+                    raise RuntimeError(
+                        f"java_home in computes.yml points to a directory that does not exist: "
+                        f"{java_path}\n"
+                        f"Please fix the path or comment it out to use the system default."
+                    )
+
             try:
                 from pyspark.sql import SparkSession
             except ImportError:
@@ -209,6 +302,11 @@ class SparkManager:
                     "org.apache.spark.sql.delta.catalog.DeltaCatalog",
                 )
                 builder = configure_spark_with_delta_pip(builder)
+
+                # Apply Delta session-level properties from computes.yml delta: section
+                # (e.g., spark.databricks.delta.vacuum.parallelDelete.enabled)
+                for key, value in self.delta_session_properties.items():
+                    builder = builder.config(key, value)
             except ImportError:
                 pass  # delta-spark not installed; Delta staging not available
 

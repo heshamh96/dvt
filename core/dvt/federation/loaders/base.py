@@ -106,37 +106,20 @@ class FederationLoader:
     # DDL Operations via Adapter
     # =========================================================================
 
-    def _safe_commit(self, adapter: Any) -> None:
-        """Commit the adapter connection, tolerating aborted transaction state.
+    def _commit(self, adapter: Any) -> None:
+        """Commit the adapter connection.
 
-        dbt's adapter.execute() uses auto_begin=False by default, which means
-        the connection manager's transaction_open flag stays False even though
-        psycopg2 opens an implicit transaction. This causes commit() to fail
-        with "no transaction open". We fall back to committing the raw DB
-        handle directly, which works for all databases.
+        All adapter.execute() calls in this loader use auto_begin=True, which
+        makes dbt properly track the transaction (transaction_open=True).
+        This means adapter.connections.commit() works correctly on all adapters:
 
-        On PostgreSQL, a failed SQL statement aborts the current transaction.
-        Calling commit() on an aborted transaction raises an error or silently
-        rolls back.  This helper catches that error and resets the connection
-        via rollback so subsequent operations can proceed.
+        - PostgreSQL: sends COMMIT, sets transaction_open=False
+        - Databricks/Spark: no-op (auto-commit at DB level)
+        - Snowflake/BigQuery: handled by adapter internals
+
+        No fallbacks, no raw handle access. One path, works right.
         """
-        try:
-            adapter.connections.commit()
-        except Exception:
-            # Fallback: commit the raw DB handle directly.
-            # This handles the case where adapter.execute() was called with
-            # auto_begin=False (default), so dbt doesn't track the transaction,
-            # but psycopg2/DB driver has an implicit transaction open.
-            try:
-                conn = adapter.connections.get_thread_connection()
-                if conn and conn.handle:
-                    conn.handle.commit()
-            except Exception:
-                try:
-                    if conn and conn.handle:
-                        conn.handle.rollback()
-                except Exception:
-                    pass  # Connection may already be clean
+        adapter.connections.commit()
 
     def _execute_ddl(
         self,
@@ -161,23 +144,29 @@ class FederationLoader:
                 # Full refresh: DROP + CREATE (Spark will create)
                 self._log(f"Dropping {config.table_name}...")
                 try:
-                    adapter.execute(f"DROP TABLE IF EXISTS {quoted_table} CASCADE")
+                    adapter.execute(
+                        f"DROP TABLE IF EXISTS {quoted_table} CASCADE",
+                        auto_begin=True,
+                    )
                 except Exception:
                     # Try without CASCADE (some DBs don't support it)
                     try:
-                        adapter.execute(f"DROP TABLE IF EXISTS {quoted_table}")
+                        adapter.execute(
+                            f"DROP TABLE IF EXISTS {quoted_table}",
+                            auto_begin=True,
+                        )
                     except Exception:
                         pass  # Table might not exist
             elif config.truncate:
                 # Truncate: faster than DROP+CREATE, preserves structure
                 self._log(f"Truncating {config.table_name}...")
                 try:
-                    adapter.execute(f"TRUNCATE TABLE {quoted_table}")
+                    adapter.execute(f"TRUNCATE TABLE {quoted_table}", auto_begin=True)
                 except Exception:
                     # Table might not exist - will be created by Spark
                     pass
             # Commit DDL so it's visible to other connections (JDBC)
-            self._safe_commit(adapter)
+            self._commit(adapter)
 
     def _ensure_schema_exists(
         self,
@@ -198,10 +187,12 @@ class FederationLoader:
         if schema:
             with adapter.connection_named("dvt_loader"):
                 try:
-                    adapter.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
+                    adapter.execute(
+                        f"CREATE SCHEMA IF NOT EXISTS {schema}", auto_begin=True
+                    )
                 except Exception:
                     pass  # Schema might already exist or we might not have permissions
-                self._safe_commit(adapter)
+                self._commit(adapter)
 
     def _create_table_with_adapter(
         self,
@@ -231,12 +222,12 @@ class FederationLoader:
         self._log(f"Creating table {config.table_name} via adapter DDL...")
         with adapter.connection_named("dvt_loader"):
             try:
-                adapter.execute(create_sql)
+                adapter.execute(create_sql, auto_begin=True)
             except Exception as e:
                 # Table might already exist (IF NOT EXISTS not supported everywhere)
                 self._log(f"Create table note: {e}")
             # Commit DDL so it's visible to other connections (JDBC)
-            self._safe_commit(adapter)
+            self._commit(adapter)
 
     # =========================================================================
     # Spark JDBC Load
@@ -491,10 +482,10 @@ class FederationLoader:
         quoted = get_quoted_table_name(adapter, staging_table)
         with adapter.connection_named("dvt_loader"):
             try:
-                adapter.execute(f"DROP TABLE IF EXISTS {quoted}")
+                adapter.execute(f"DROP TABLE IF EXISTS {quoted}", auto_begin=True)
             except Exception:
                 pass  # Best-effort cleanup
-            self._safe_commit(adapter)
+            self._commit(adapter)
 
     def _load_merge(
         self,
@@ -553,11 +544,11 @@ class FederationLoader:
                         adapter, config.table_name, config.unique_key
                     )
                     try:
-                        adapter.execute(index_sql)
+                        adapter.execute(index_sql, auto_begin=True)
                     except Exception:
                         pass  # Index may already exist
-                adapter.execute(merge_sql)
-                self._safe_commit(adapter)
+                adapter.execute(merge_sql, auto_begin=True)
+                self._commit(adapter)
 
             row_count = df.count()
             elapsed = time.time() - start_time
@@ -740,9 +731,9 @@ class FederationLoader:
 
             self._log(f"Executing DELETE+INSERT into {config.table_name}...")
             with adapter.connection_named("dvt_loader"):
-                adapter.execute(delete_sql)
-                adapter.execute(insert_sql)
-                self._safe_commit(adapter)
+                adapter.execute(delete_sql, auto_begin=True)
+                adapter.execute(insert_sql, auto_begin=True)
+                self._commit(adapter)
 
             row_count = df.count()
             elapsed = time.time() - start_time

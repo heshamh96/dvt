@@ -11,6 +11,7 @@ from dvt.config.user_config import (
     get_bucket_path,
     get_dvt_home,
     load_buckets_for_profile,
+    load_computes_for_profile,
 )
 from dvt.events.types import CheckCleanPath, ConfirmCleanPath, FinishedCleanPaths
 from dvt.task.base import BaseTask, move_to_nearest_project_dir
@@ -60,12 +61,34 @@ class CleanTask(BaseTask):
         self.older_than: Optional[str] = getattr(args, "OLDER_THAN", None) or getattr(
             args, "older_than", None
         )
-        self.profile_name: Optional[str] = getattr(args, "PROFILE", None) or getattr(
-            args, "profile", None
+        self.profile_name: Optional[str] = (
+            getattr(args, "PROFILE", None)
+            or getattr(args, "profile", None)
+            or getattr(config, "profile_name", None)
         )
         self.optimize: bool = getattr(args, "OPTIMIZE", False) or getattr(
             args, "optimize", False
         )
+
+    def _get_cleanup_retention_hours(self) -> int:
+        """Get cleanup_retention_hours from the active compute's delta config.
+
+        Reads computes.yml -> profile -> active compute -> delta -> cleanup_retention_hours.
+        Returns 0 (delete immediately) if not configured.
+        """
+        profile_name = self.profile_name or "default"
+        profiles_dir = getattr(self.args, "PROFILES_DIR", None)
+        profile_computes = load_computes_for_profile(profile_name, profiles_dir)
+        if not profile_computes:
+            return 0
+
+        target = profile_computes.get("target", "local_spark")
+        computes = profile_computes.get("computes", {})
+        compute_config = computes.get(target, {})
+        delta_config = compute_config.get("delta", {})
+        if isinstance(delta_config, dict):
+            return int(delta_config.get("cleanup_retention_hours", 0))
+        return 0
 
     def run(self) -> None:
         """Clean dbt artifacts and optionally DVT staging files.
@@ -312,8 +335,14 @@ class CleanTask(BaseTask):
                 )
                 return
 
+        # Read cleanup retention from computes.yml delta: section (default: 0 = delete immediately)
+        retention_hours = self._get_cleanup_retention_hours()
+
         # Disable retention check so VACUUM can use 0-hour retention
-        spark.conf.set("spark.databricks.delta.retentionDurationCheck.enabled", "false")
+        if retention_hours == 0:
+            spark.conf.set(
+                "spark.databricks.delta.retentionDurationCheck.enabled", "false"
+            )
 
         optimized_count = 0
         for delta_path in delta_tables:
@@ -324,8 +353,8 @@ class CleanTask(BaseTask):
                 # OPTIMIZE — compact small files
                 dt.optimize().executeCompaction()
 
-                # VACUUM — remove old unreferenced files (0 hour retention)
-                dt.vacuum(retentionHours=0)
+                # VACUUM — remove old unreferenced files
+                dt.vacuum(retentionHours=retention_hours)
 
                 optimized_count += 1
             except Exception as e:
@@ -371,8 +400,14 @@ class CleanTask(BaseTask):
             )
             return
 
-        # Disable retention check for VACUUM
-        spark.conf.set("spark.databricks.delta.retentionDurationCheck.enabled", "false")
+        # Read cleanup retention from computes.yml delta: section (default: 0 = delete immediately)
+        retention_hours = self._get_cleanup_retention_hours()
+
+        # Disable retention check so VACUUM can use 0-hour retention
+        if retention_hours == 0:
+            spark.conf.set(
+                "spark.databricks.delta.retentionDurationCheck.enabled", "false"
+            )
 
         # List directories in HDFS matching *.delta
         hadoop_conf = spark._jsc.hadoopConfiguration()
@@ -411,7 +446,7 @@ class CleanTask(BaseTask):
             try:
                 dt = DeltaTable.forPath(spark, delta_hdfs_path)
                 dt.optimize().executeCompaction()
-                dt.vacuum(retentionHours=0)
+                dt.vacuum(retentionHours=retention_hours)
                 optimized_count += 1
             except Exception as e:
                 fire_event(

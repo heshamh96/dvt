@@ -39,6 +39,9 @@ class ExtractionConfig:
     jdbc_config: Optional[Dict[str, Any]] = (
         None  # JDBC extraction settings from computes.yml
     )
+    extraction_sql: Optional[str] = (
+        None  # Pre-built extraction SQL from FederationOptimizer
+    )
 
 
 @dataclass
@@ -211,10 +214,12 @@ class BaseExtractor(ABC):
         self,
         config: ExtractionConfig,
     ) -> str:
-        """Build the SELECT query for extraction using SQLGlot.
+        """Build the SELECT query for extraction.
 
-        Uses QueryOptimizer.build_extraction_query() for dialect-aware SQL
-        generation with proper identifier quoting and LIMIT syntax.
+        If the FederationOptimizer provided a pre-built extraction_sql
+        (fully transpiled to the source dialect), use it directly.
+        Otherwise, fall back to building the query from parts using
+        QueryOptimizer (for backward compatibility and non-federation paths).
 
         Args:
             config: Extraction configuration
@@ -222,6 +227,11 @@ class BaseExtractor(ABC):
         Returns:
             SQL query string with columns, predicates, and LIMIT applied
         """
+        # Use pre-built extraction SQL from FederationOptimizer if available
+        if config.extraction_sql:
+            return config.extraction_sql
+
+        # Fallback: build from parts using QueryOptimizer
         from dvt.federation.query_optimizer import PushableOperations, QueryOptimizer
 
         ops = PushableOperations(

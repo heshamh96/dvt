@@ -68,6 +68,18 @@ def create_default_computes_yml(path: Optional[Path] = None) -> bool:
 # This file configures Spark compute engines for federated query execution
 # and JDBC-based data extraction.
 #
+# Java & Spark Compatibility
+# --------------------------
+# Each Spark version requires a specific Java version. If you have multiple
+# Java installations, set 'java_home' per compute to point to the right one.
+# If not set, DVT uses whatever 'java' is on your system PATH.
+#
+#   Spark 3.2.x  ->  Java 8 or 11
+#   Spark 3.3.x  ->  Java 8, 11, or 17
+#   Spark 3.4.x  ->  Java 8, 11, or 17
+#   Spark 3.5.x  ->  Java 8, 11, or 17
+#   Spark 4.0.x  ->  Java 17 or 21
+#
 # Structure:
 #   <profile_name>:           # Matches profile in profiles.yml
 #     target: <compute_name>  # Default compute to use
@@ -75,8 +87,10 @@ def create_default_computes_yml(path: Optional[Path] = None) -> bool:
 #       <compute_name>:
 #         type: spark
 #         version: "4.0.0"    # PySpark version (run 'dvt sync' after changing)
+#         # java_home: /path/to/java  # Java installation for this Spark version
 #         master: "local[*]"
 #         config: {...}
+#         delta: {...}          # Delta Lake staging settings
 #         jdbc_extraction: {...}
 #         jdbc_load: {...}
 #
@@ -523,7 +537,7 @@ def _compute_profile_template(profile_name: str) -> str:
     local_spark:
       type: spark
       # version: "4.0.0"  # Set PySpark version (3.x or 4.x), then run 'dvt sync'
-      # java_home: /path/to/java  # Optional: JAVA_HOME for this compute
+      # java_home: /path/to/java  # Java installation for this Spark version (see compat table above)
       master: "local[*]"
 
       # Spark configuration
@@ -532,6 +546,14 @@ def _compute_profile_template(profile_name: str) -> str:
         spark.executor.memory: "2g"
         spark.sql.adaptive.enabled: "true"
         spark.sql.parquet.compression.codec: "zstd"
+
+      # Delta Lake staging settings
+      # DVT stores extracted source data as Delta tables in local staging.
+      # These settings control how those staging files are managed.
+      # delta:
+      #   optimize_on_write: false          # Merge small files while writing (slower writes, faster reads next run)
+      #   cleanup_retention_hours: 0        # Hours to keep old replaced files before deleting (0 = delete immediately)
+      #   parallel_cleanup: false           # Delete old files in parallel during 'dvt clean --optimize'
 
       # JDBC extraction settings (reading from databases)
       # Higher num_partitions = more parallelism but more connections

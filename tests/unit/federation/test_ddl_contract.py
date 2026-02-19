@@ -53,7 +53,7 @@ class TestFederationLoaderDDL:
         mock_adapter = MagicMock()
         executed_sql = []
 
-        def capture_execute(sql):
+        def capture_execute(sql, auto_begin=False):
             executed_sql.append(sql)
 
         mock_adapter.execute.side_effect = capture_execute

@@ -279,14 +279,19 @@ class TestOptimizeDeltaTables:
         source = inspect.getsource(CleanTask._optimize_delta_tables)
         assert "vacuum(" in source, "Should call vacuum()"
 
-    def test_vacuum_uses_zero_retention(self):
-        """Should use 0 hour retention for VACUUM (staging is local)."""
+    def test_vacuum_uses_configurable_retention(self):
+        """Should use configurable retention hours from computes.yml delta: section."""
         import inspect
         from dvt.task.clean import CleanTask
 
         source = inspect.getsource(CleanTask._optimize_delta_tables)
-        assert "retentionHours=0" in source, (
-            "Should use retentionHours=0 for aggressive cleanup"
+        assert "retentionHours=retention_hours" in source, (
+            "Should use configurable retention_hours from _get_cleanup_retention_hours()"
+        )
+        # Verify the retention is read from config
+        source_getter = inspect.getsource(CleanTask._get_cleanup_retention_hours)
+        assert "cleanup_retention_hours" in source_getter, (
+            "Should read cleanup_retention_hours from computes.yml delta: section"
         )
 
     def test_disables_retention_check(self):

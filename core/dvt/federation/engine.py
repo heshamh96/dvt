@@ -2,11 +2,12 @@
 Federation execution engine for DVT.
 
 Executes cross-target queries using Spark:
-1. Extract sources to staging bucket (with predicate pushdown)
-2. Register staged data as Spark temp views
-3. Translate SQL using SQLGlot (model dialect -> Spark SQL)
-4. Execute in Spark
-5. Write results to target via Loader (bucket COPY or JDBC fallback)
+1. Build view mappings and translate SQL to Spark SQL
+2. Pre-fetch source schemas and run FederationOptimizer
+3. Extract sources to staging (with column + predicate + LIMIT pushdown)
+4. Register staged data as Spark temp views
+5. Execute in Spark
+6. Write results to target via Loader (bucket COPY or JDBC fallback)
 
 Usage:
     from dvt.federation.engine import FederationEngine
@@ -34,6 +35,12 @@ from dvt.config.user_config import (
 )
 from dvt.federation.dialect_fallbacks import get_dialect_for_adapter
 from dvt.federation.el_layer import ELLayer, SourceConfig, create_el_layer
+from dvt.federation.extractors import get_extractor
+from dvt.federation.federation_optimizer import (
+    ExtractionPlan,
+    FederationOptimizer,
+    SourceInfo,
+)
 from dvt.federation.loaders import get_loader
 from dvt.federation.loaders.base import LoadConfig, LoadResult
 from dvt.federation.query_optimizer import PushableOperations, QueryOptimizer
@@ -70,6 +77,7 @@ class FederationEngine:
         self.manifest = manifest
         self.on_progress = on_progress or (lambda msg: None)
         self.query_optimizer = QueryOptimizer()
+        self.federation_optimizer = FederationOptimizer()
 
         # Will be initialized on first execute
         self._profiles: Optional[Dict[str, Any]] = None
@@ -148,20 +156,67 @@ class FederationEngine:
                 model, compiled_sql, sql_dialect=source_dialect
             )
 
-            # 5. Extract pushable operations from compiled SQL
-            pushable_ops = self.query_optimizer.extract_all_pushable_operations(
-                compiled_sql=compiled_sql,
+            # 5. Build view mappings from manifest metadata (no data needed).
+            # This computes the {original_table_ref: temp_view_name} dict
+            # needed for Spark SQL translation, without reading staged data.
+            view_mappings = self._build_view_mappings(
+                model=model,
                 source_mappings=source_mappings,
-                source_dialect=source_dialect,
+                view_prefix=view_prefix,
             )
 
-            # 6. Extract sources to staging bucket (with pushdown)
+            # 5a. Register model's own Delta staging as {{ this }} temp view
+            # and add {{ this }} entries to view_mappings BEFORE Spark SQL
+            # translation, so self-references get rewritten to temp views.
+            self._register_model_self_view(
+                spark=spark,
+                model=model,
+                el_layer=el_layer,
+                view_prefix=view_prefix,
+                view_mappings=view_mappings,
+            )
+
+            # 6. Translate SQL: model dialect -> Spark SQL (BEFORE extraction).
+            # This only needs view_mappings — not extracted data.
+            spark_sql = self._translate_to_spark(
+                compiled_sql=compiled_sql,
+                source_dialect=source_dialect,
+                view_mappings=view_mappings,
+            )
+
+            # 7. Pre-fetch source schemas for the FederationOptimizer.
+            # Lightweight metadata queries (~100ms per source, no data transfer).
+            source_info = self._fetch_source_schemas(
+                model=model,
+                resolution=resolution,
+                source_mappings=source_mappings,
+                view_prefix=view_prefix,
+            )
+
+            # 8. FederationOptimizer: decompose Spark SQL into per-source
+            # extraction plans with column projection, predicate pushdown,
+            # and LIMIT — all transpiled to each source's native dialect.
+            extraction_plans = self.federation_optimizer.optimize(
+                spark_sql=spark_sql,
+                source_info=source_info,
+            )
+
+            if extraction_plans:
+                optimized_sources = [
+                    sid for sid, p in extraction_plans.items() if p.columns
+                ]
+                self._log(
+                    f"  Optimizer: column pushdown on {len(optimized_sources)}/{len(extraction_plans)} sources, "
+                    f"{sum(len(p.predicates) for p in extraction_plans.values())} predicates pushed"
+                )
+
+            # 9. Extract sources to staging bucket (with optimized pushdown)
             self._log(f"Extracting {len(source_mappings)} sources to staging...")
             extraction_result = self._extract_sources(
                 model=model,
                 resolution=resolution,
                 el_layer=el_layer,
-                pushable_ops=pushable_ops,
+                extraction_plans=extraction_plans,
             )
 
             if not extraction_result.get("success", False):
@@ -174,38 +229,22 @@ class FederationEngine:
                 f"from {extraction_result.get('sources_extracted', 0)} sources"
             )
 
-            # 7. Register staged data as temp views
-            view_mappings = self._register_temp_views(
+            # 10. Register staged data as Spark temp views
+            self._register_temp_views(
                 spark=spark,
                 model=model,
                 el_layer=el_layer,
                 view_prefix=view_prefix,
                 source_mappings=source_mappings,
-            )
-
-            # 7a. Register model's own Delta staging as {{ this }} temp view
-            # (for incremental models that reference their own target table)
-            self._register_model_self_view(
-                spark=spark,
-                model=model,
-                el_layer=el_layer,
-                view_prefix=view_prefix,
-                view_mappings=view_mappings,
-            )
-
-            # 8. Translate SQL: model dialect -> Spark SQL
-            spark_sql = self._translate_to_spark(
-                compiled_sql=compiled_sql,
-                source_dialect=source_dialect,
                 view_mappings=view_mappings,
             )
 
             self._log(f"Executing Spark SQL...")
 
-            # 9. Execute in Spark
+            # 11. Execute in Spark
             result_df = spark.sql(spark_sql)
 
-            # 10. Write to target
+            # 12. Write to target
             load_result = self._write_to_target(
                 df=result_df,
                 model=model,
@@ -215,7 +254,7 @@ class FederationEngine:
             if not load_result.success:
                 raise RuntimeError(f"Load failed: {load_result.error}")
 
-            # 11. Save model output to Delta staging for future {{ this }} resolution
+            # 13. Save model output to Delta staging for future {{ this }} resolution
             self._save_model_staging(
                 spark=spark,
                 el_layer=el_layer,
@@ -291,6 +330,149 @@ class FederationEngine:
             profiles_dir=profiles_dir,
             on_progress=self._log,
         )
+
+    def _build_view_mappings(
+        self,
+        model: Any,
+        source_mappings: Dict[str, str],
+        view_prefix: str,
+    ) -> Dict[str, str]:
+        """Build view mappings from manifest metadata (no data needed).
+
+        Computes the {original_table_ref: temp_view_name} dict that
+        _translate_to_spark() needs, using only manifest source definitions.
+        Does NOT read or register staged data — that happens later in
+        _register_temp_views().
+
+        Args:
+            model: ModelNode
+            source_mappings: source_id -> alias mapping
+            view_prefix: Unique prefix for temp view names
+
+        Returns:
+            Dict mapping original table reference to temp view name
+        """
+        view_mappings: Dict[str, str] = {}
+
+        if not hasattr(model, "depends_on") or not model.depends_on:
+            return view_mappings
+
+        nodes = getattr(model.depends_on, "nodes", []) or []
+
+        for dep_id in nodes:
+            if not dep_id.startswith("source."):
+                continue
+
+            source = self.manifest.sources.get(dep_id)
+            if not source:
+                continue
+
+            alias = source_mappings.get(dep_id, source.name)
+            view_name = f"{view_prefix}{alias}"
+
+            database = getattr(source, "database", None) or ""
+            schema = source.schema or ""
+            table = source.name
+
+            # 3-part: db.schema.table
+            if database and schema:
+                view_mappings[f"{database}.{schema}.{table}"] = view_name
+            # 2-part: schema.table
+            if schema:
+                view_mappings[f"{schema}.{table}"] = view_name
+            # 1-part: just table name
+            view_mappings[table] = view_name
+            # Also map the alias if different
+            if alias and alias != table:
+                view_mappings[alias] = view_name
+
+        return view_mappings
+
+    def _fetch_source_schemas(
+        self,
+        model: Any,
+        resolution: ResolvedExecution,
+        source_mappings: Dict[str, str],
+        view_prefix: str,
+    ) -> Dict[str, SourceInfo]:
+        """Pre-fetch source schemas for the FederationOptimizer.
+
+        Makes lightweight metadata-only queries (~100ms per source) to get
+        real column names from each source database. This information is
+        needed by the optimizer to:
+        - Determine which columns to extract per source
+        - Resolve column name casing (sqlglot may lowercase)
+        - Expand SELECT * into actual column names
+
+        Args:
+            model: ModelNode
+            resolution: Resolved execution details
+            source_mappings: source_id -> alias mapping
+            view_prefix: Unique prefix for temp view names
+
+        Returns:
+            Dict mapping source_id to SourceInfo
+        """
+        source_info: Dict[str, SourceInfo] = {}
+
+        if not hasattr(model, "depends_on") or not model.depends_on:
+            return source_info
+
+        nodes = getattr(model.depends_on, "nodes", []) or []
+
+        for dep_id in nodes:
+            if not dep_id.startswith("source."):
+                continue
+
+            source = self.manifest.sources.get(dep_id)
+            if not source:
+                continue
+
+            # Get source's connection config
+            connection_name = None
+            if hasattr(source, "config") and source.config:
+                connection_name = getattr(source.config, "connection", None)
+            if not connection_name:
+                connection_name = getattr(source, "connection", None)
+            if not connection_name:
+                connection_name = self._get_default_target()
+
+            connection_config = self._get_connection_config(connection_name)
+            if not connection_config:
+                continue
+
+            adapter_type = connection_config.get("type", "")
+            alias = source_mappings.get(dep_id, source.name)
+            view_name = f"{view_prefix}{alias}"
+
+            # Pre-fetch column metadata via extractor (lightweight metadata query)
+            try:
+                extractor = get_extractor(
+                    adapter_type=adapter_type,
+                    connection=None,  # Lazy connection creation
+                    dialect=adapter_type,
+                    on_progress=self._log,
+                    connection_config=connection_config,
+                )
+                columns_info = extractor.get_columns(source.schema or "", source.name)
+                column_names = [c["name"] for c in columns_info]
+            except Exception as e:
+                self._log(
+                    f"  Warning: Could not fetch schema for {dep_id}: {e}. "
+                    f"Using SELECT * for this source."
+                )
+                column_names = []
+
+            source_info[dep_id] = SourceInfo(
+                source_id=dep_id,
+                view_name=view_name,
+                schema=source.schema or "",
+                table=source.name,
+                columns=column_names,
+                dialect=adapter_type,
+            )
+
+        return source_info
 
     def _build_source_mappings(
         self,
@@ -386,15 +568,25 @@ class FederationEngine:
         model: Any,
         resolution: ResolvedExecution,
         el_layer: ELLayer,
-        pushable_ops: Dict[str, PushableOperations],
+        extraction_plans: Dict[str, ExtractionPlan],
     ) -> Dict[str, Any]:
-        """Extract sources to staging bucket with predicate pushdown.
+        """Extract sources to staging bucket with optimized pushdown.
+
+        Uses ExtractionPlans from the FederationOptimizer, which provide:
+        - Column projection (only columns the query needs)
+        - Predicate pushdown (transpiled to source dialect)
+        - LIMIT pushdown (transpiled to source syntax)
+        - Complete extraction SQL (ready to execute on source)
+
+        For parallel safety, the EL layer handles union-of-columns logic:
+        if staging already exists but is missing columns needed by this model,
+        it re-extracts with the union of existing + new columns.
 
         Args:
             model: ModelNode
             resolution: Resolved execution details
             el_layer: EL layer for extraction
-            pushable_ops: Pushable operations per source
+            extraction_plans: Per-source extraction plans from optimizer
 
         Returns:
             Dict with extraction results
@@ -430,12 +622,9 @@ class FederationEngine:
                 self._log(f"  Warning: No connection config for {connection_name}")
                 continue
 
-            # Get pushable operations for this source
-            ops = pushable_ops.get(dep_id, PushableOperations(dep_id, source.name))
+            # Get extraction plan from the FederationOptimizer
+            plan = extraction_plans.get(dep_id)
 
-            # Column pushdown: pass optimizer columns through to EL layer.
-            # Case resolution (SQLGlot lowercases) is handled downstream
-            # in el_layer._resolve_column_names() against real DB metadata.
             sources.append(
                 SourceConfig(
                     source_name=dep_id,
@@ -444,9 +633,10 @@ class FederationEngine:
                     table=source.name,
                     connection=None,  # Will be created by extractor
                     connection_config=connection_config,
-                    columns=ops.columns or None,
-                    predicates=ops.predicates or None,
-                    limit=ops.limit,
+                    columns=plan.columns if plan else None,
+                    predicates=plan.predicates if plan else None,
+                    limit=plan.limit if plan else None,
+                    extraction_sql=plan.extraction_sql if plan else None,
                 )
             )
 
@@ -475,8 +665,14 @@ class FederationEngine:
         el_layer: ELLayer,
         view_prefix: str,
         source_mappings: Dict[str, str],
+        view_mappings: Optional[Dict[str, str]] = None,
     ) -> Dict[str, str]:
-        """Register staged Parquet files as Spark temp views.
+        """Register staged data as Spark temp views.
+
+        Reads extracted Delta/Parquet staging and registers each as a Spark
+        temp view. The view_mappings dict (original_ref -> view_name) was
+        already computed by _build_view_mappings() — this method only does
+        the Spark read + createOrReplaceTempView part.
 
         Args:
             spark: SparkSession
@@ -484,11 +680,13 @@ class FederationEngine:
             el_layer: EL layer with staging paths
             view_prefix: Unique prefix for view names
             source_mappings: source_id -> SQL alias mappings
+            view_mappings: Pre-computed view mappings (optional, for backward compat)
 
         Returns:
             Dict mapping original table reference to temp view name
         """
-        view_mappings = {}
+        if view_mappings is None:
+            view_mappings = {}
 
         if not hasattr(model, "depends_on") or not model.depends_on:
             return view_mappings
@@ -520,30 +718,6 @@ class FederationEngine:
             alias = source_mappings.get(dep_id, source.name)
             view_name = f"{view_prefix}{alias}"
             df.createOrReplaceTempView(view_name)
-
-            # Map original reference to temp view
-            # Handle "db.schema.table", "schema.table", and just "alias" references
-            # The compiled SQL may have 3-part identifiers from the source() macro
-            database = getattr(source, "database", None) or ""
-            schema = source.schema or ""
-            table = source.name
-
-            # 3-part: db.schema.table
-            if database and schema:
-                full_ref_3 = f"{database}.{schema}.{table}"
-                view_mappings[full_ref_3] = view_name
-
-            # 2-part: schema.table
-            if schema:
-                full_ref_2 = f"{schema}.{table}"
-                view_mappings[full_ref_2] = view_name
-
-            # 1-part: just table name
-            view_mappings[table] = view_name
-
-            # Also map the alias if different from table name
-            if alias and alias != table:
-                view_mappings[alias] = view_name
 
             self._log(f"  Registered temp view: {view_name}")
 
@@ -669,11 +843,24 @@ class FederationEngine:
         delta_mode = "append" if mat == "incremental" else "overwrite"
 
         try:
-            result_df.write.format("delta").mode(delta_mode).option(
-                "delta.columnMapping.mode", "name"
-            ).option("delta.minReaderVersion", "2").option(
-                "delta.minWriterVersion", "5"
-            ).option("mergeSchema", "true").save(str(staging_path))
+            writer = (
+                result_df.write.format("delta")
+                .mode(delta_mode)
+                .option("delta.columnMapping.mode", "name")
+                .option("delta.minReaderVersion", "2")
+                .option("delta.minWriterVersion", "5")
+                .option("mergeSchema", "true")
+            )
+
+            # Apply user Delta table properties from computes.yml delta: section
+            if SparkManager.is_initialized():
+                for (
+                    key,
+                    value,
+                ) in SparkManager.get_instance().delta_table_properties.items():
+                    writer = writer.option(key, value)
+
+            writer.save(str(staging_path))
         except Exception as e:
             # Non-fatal: model staging is an optimization for future incremental runs.
             # The current run already loaded to the target successfully.

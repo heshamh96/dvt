@@ -169,7 +169,9 @@ class TestELLayerDeltaConversion:
 
         from dvt.federation.el_layer import ELLayer
 
-        source = inspect.getsource(ELLayer._extract_source)
+        # The actual extraction logic is in _extract_source_locked (called
+        # by _extract_source under a per-source lock for thread safety).
+        source = inspect.getsource(ELLayer._extract_source_locked)
         assert "_convert_to_delta" in source, (
             "Should call _convert_to_delta after successful extraction"
         )

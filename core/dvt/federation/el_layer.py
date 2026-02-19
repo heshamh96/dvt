@@ -11,6 +11,8 @@ The EL layer optimizes data extraction from source systems:
 """
 
 import concurrent.futures
+import dataclasses
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -46,6 +48,9 @@ class SourceConfig:
     limit: Optional[int] = None
     pk_columns: Optional[List[str]] = None
     batch_size: int = 100000
+    extraction_sql: Optional[str] = (
+        None  # Pre-built extraction SQL from FederationOptimizer
+    )
 
 
 @dataclass
@@ -106,6 +111,21 @@ class ELLayer:
     2. Database-specific bulk export (e.g., PostgreSQL COPY)
     3. Spark JDBC with parallel reads (default fallback)
     """
+
+    # Class-level per-source locks for thread-safe concurrent extraction.
+    # When multiple models run in parallel and reference the same source,
+    # these locks serialize extraction of each source so only one thread
+    # does the should_extract() check + extract + convert-to-Delta sequence.
+    # Must be class-level because each model creates its own ELLayer instance.
+    _source_locks: Dict[str, threading.Lock] = {}
+    _source_locks_guard: threading.Lock = threading.Lock()
+
+    # Track sources already extracted in this run (for full_refresh dedup).
+    # When --full-refresh is used, the first thread clears and re-extracts.
+    # Subsequent threads see the source is already refreshed and skip the
+    # clear+extract, avoiding deletion of staging that other models need.
+    _refreshed_sources: set = set()
+    _refreshed_sources_guard: threading.Lock = threading.Lock()
 
     def __init__(
         self,
@@ -276,12 +296,34 @@ class ELLayer:
             errors=errors,
         )
 
+    @classmethod
+    def _get_source_lock(cls, source_name: str) -> threading.Lock:
+        """Get or create a per-source lock for thread-safe extraction.
+
+        Uses double-checked locking: fast path (no guard) for existing locks,
+        guard only for creating new ones.
+        """
+        lock = cls._source_locks.get(source_name)
+        if lock is not None:
+            return lock
+        with cls._source_locks_guard:
+            # Re-check under guard (another thread may have created it)
+            if source_name not in cls._source_locks:
+                cls._source_locks[source_name] = threading.Lock()
+            return cls._source_locks[source_name]
+
     def _extract_source(
         self,
         source: SourceConfig,
         full_refresh: bool,
     ) -> ExtractionResult:
-        """Extract a single source.
+        """Extract a single source (thread-safe via per-source lock).
+
+        Acquires a per-source lock before doing anything, so concurrent
+        threads extracting the same source are serialized. This prevents:
+        - TOCTOU races on should_extract() check
+        - Multiple threads writing to the same tmp Parquet path
+        - FileNotFoundError on _convert_to_delta() rename
 
         Args:
             source: Source configuration
@@ -290,10 +332,35 @@ class ELLayer:
         Returns:
             ExtractionResult
         """
-        # Handle full refresh - clear staging and state
+        source_lock = self._get_source_lock(source.source_name)
+        with source_lock:
+            return self._extract_source_locked(source, full_refresh)
+
+    def _extract_source_locked(
+        self,
+        source: SourceConfig,
+        full_refresh: bool,
+    ) -> ExtractionResult:
+        """Extract a single source (caller holds the per-source lock).
+
+        Args:
+            source: Source configuration
+            full_refresh: If True, clear staging and do full extraction
+
+        Returns:
+            ExtractionResult
+        """
+        # Handle full refresh - clear staging and state.
+        # Only clear once per source per run to avoid deleting staging
+        # that another thread's model is about to read.
         if full_refresh:
-            self.state_manager.clear_source_state(source.source_name)
-            self.state_manager.clear_staging(source.source_name)
+            already_refreshed = source.source_name in self._refreshed_sources
+            if not already_refreshed:
+                self.state_manager.clear_source_state(source.source_name)
+                self.state_manager.clear_staging(source.source_name)
+                # Mark as refreshed AFTER clear so only one thread clears
+                with self._refreshed_sources_guard:
+                    self._refreshed_sources.add(source.source_name)
 
         # Get extractor for this adapter type
         # Pass connection_config for lazy connection creation if connection is None
@@ -319,12 +386,43 @@ class ELLayer:
         )
 
         if not should_extract and reason == "skip":
-            # Staging exists and schema unchanged - skip extraction
-            return ExtractionResult(
-                success=True,
-                source_name=source.source_name,
-                extraction_method="skip",
-            )
+            # Staging exists and schema unchanged.
+            # Check if column pushdown requires re-extraction (union-of-columns).
+            if source.columns is not None:
+                existing_state = self.state_manager.get_source_state(source.source_name)
+                existing_cols = set(existing_state.columns) if existing_state else set()
+                requested_cols = set(source.columns)
+
+                if not requested_cols.issubset(existing_cols):
+                    # Staging is missing columns this model needs.
+                    # Re-extract with the union of existing + requested columns.
+                    union_cols = sorted(existing_cols | requested_cols)
+                    self._log(
+                        f"  Union-of-columns: {source.source_name} needs "
+                        f"{len(requested_cols - existing_cols)} additional columns, "
+                        f"re-extracting with {len(union_cols)} total"
+                    )
+                    # Update source columns and rebuild extraction_sql with union
+                    source = dataclasses.replace(
+                        source,
+                        columns=union_cols,
+                        extraction_sql=None,  # Force rebuild from parts
+                    )
+                    # Fall through to extraction below
+                else:
+                    # Staging has all columns we need
+                    return ExtractionResult(
+                        success=True,
+                        source_name=source.source_name,
+                        extraction_method="skip",
+                    )
+            else:
+                # SELECT * — staging has everything
+                return ExtractionResult(
+                    success=True,
+                    source_name=source.source_name,
+                    extraction_method="skip",
+                )
 
         # Auto-detect primary key if not provided
         pk_columns = source.pk_columns
@@ -348,6 +446,7 @@ class ELLayer:
             bucket_config=self.bucket_config,
             connection_config=source.connection_config,
             jdbc_config=self.jdbc_config,
+            extraction_sql=source.extraction_sql,
         )
 
         # Get final output path (Delta format for new extractions)
@@ -440,12 +539,32 @@ class ELLayer:
             df = spark.read.parquet(str(parquet_path))
 
             # Write as Delta (overwrites any previous Delta staging)
-            # Enable column mapping to support column names with spaces/special chars
-            df.write.format("delta").mode("overwrite").option(
-                "delta.columnMapping.mode", "name"
-            ).option("delta.minReaderVersion", "2").option(
-                "delta.minWriterVersion", "5"
-            ).save(str(delta_path))
+            # Enable column mapping to support column names with spaces/special chars.
+            # overwriteSchema=true ensures schema changes (e.g., different column
+            # sets from re-extraction) are accepted rather than rejected.
+            writer = (
+                df.write.format("delta")
+                .mode("overwrite")
+                .option("overwriteSchema", "true")
+                .option("delta.columnMapping.mode", "name")
+                .option("delta.minReaderVersion", "2")
+                .option("delta.minWriterVersion", "5")
+            )
+
+            # Apply user Delta table properties from computes.yml delta: section
+            try:
+                from dvt.federation.spark_manager import SparkManager
+
+                if SparkManager.is_initialized():
+                    for (
+                        key,
+                        value,
+                    ) in SparkManager.get_instance().delta_table_properties.items():
+                        writer = writer.option(key, value)
+            except Exception:
+                pass  # SparkManager not available; skip user config
+
+            writer.save(str(delta_path))
 
             # Clean up temp Parquet
             if parquet_path.is_dir():
