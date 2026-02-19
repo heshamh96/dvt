@@ -42,6 +42,7 @@ Usage:
 """
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set
 
@@ -123,6 +124,24 @@ class FederationOptimizer:
     gracefully degrades to columns=None + no predicates — the same behavior
     as today's extraction.
     """
+
+    # Simple identifier pattern: letters, digits, underscores (no spaces/special chars)
+    _SIMPLE_IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
+    @staticmethod
+    def _needs_quoting(identifier: str) -> bool:
+        """Check if a schema or table identifier needs quoting.
+
+        Simple identifiers (letters, digits, underscores) do NOT need quoting.
+        Databases like Snowflake and Oracle auto-uppercase unquoted identifiers,
+        so quoting a lowercase name like "ods" forces case-sensitive matching
+        and causes errors. Only quote when the name contains spaces, special
+        characters, or starts with a digit.
+
+        Column identifiers are NOT affected by this — they always use
+        quoted=True because column names can contain spaces.
+        """
+        return not FederationOptimizer._SIMPLE_IDENTIFIER_RE.match(identifier)
 
     def optimize(
         self,
@@ -527,11 +546,13 @@ class FederationOptimizer:
         else:
             select = sqlglot.select("*")
 
-        # FROM clause
+        # FROM clause — only quote schema/table if they contain spaces or special
+        # characters. Simple names stay unquoted so databases like Snowflake and
+        # Oracle can apply their default case folding (uppercase).
         select = select.from_(
             exp.Table(
-                this=exp.Identifier(this=table, quoted=True),
-                db=exp.Identifier(this=schema, quoted=True),
+                this=exp.Identifier(this=table, quoted=self._needs_quoting(table)),
+                db=exp.Identifier(this=schema, quoted=self._needs_quoting(schema)),
             )
         )
 
@@ -644,8 +665,12 @@ class FederationOptimizer:
 
             fallback_ast = sqlglot.select("*").from_(
                 exp.Table(
-                    this=exp.Identifier(this=info.table, quoted=True),
-                    db=exp.Identifier(this=info.schema, quoted=True),
+                    this=exp.Identifier(
+                        this=info.table, quoted=self._needs_quoting(info.table)
+                    ),
+                    db=exp.Identifier(
+                        this=info.schema, quoted=self._needs_quoting(info.schema)
+                    ),
                 )
             )
 

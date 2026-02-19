@@ -116,7 +116,7 @@ class CleanTask(BaseTask):
 
     def _run_dbt_clean(self) -> None:
         """Run dbt's standard clean logic."""
-        project_dir = move_to_nearest_project_dir(self.args.project_dir)
+        project_dir = move_to_nearest_project_dir(self.args.project_dir).resolve()
 
         potential_clean_paths = set(
             Path(p).resolve() for p in self.project.clean_targets

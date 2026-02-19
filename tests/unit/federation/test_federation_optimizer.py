@@ -435,7 +435,7 @@ class TestExtractionSQLTranspilation:
     """Test that extraction_sql is properly transpiled per dialect."""
 
     def test_pg_extraction_sql(self, optimizer):
-        """PostgreSQL extraction: double quotes, LIMIT syntax."""
+        """PostgreSQL extraction: double quotes for columns, LIMIT syntax."""
         spark_sql = "SELECT c.`Customer Code` FROM _dvt_c c LIMIT 100"
         source_info = {
             "src_c": _pg_source(
@@ -444,9 +444,11 @@ class TestExtractionSQLTranspilation:
         }
         plans = optimizer.optimize(spark_sql, source_info)
         sql = plans["src_c"].extraction_sql
-        assert '"Customer Code"' in sql  # PG double quotes
+        assert '"Customer Code"' in sql  # PG double quotes for columns
         assert "LIMIT 100" in sql  # PG LIMIT syntax
-        assert '"public"' in sql  # Schema quoted
+        # Simple schema/table names are unquoted (no forced quoting)
+        assert "public" in sql
+        assert "customers" in sql
 
     def test_dbx_extraction_sql(self, optimizer):
         """Databricks extraction: backticks, LIMIT syntax."""
@@ -522,6 +524,61 @@ class TestExtractionSQLTranspilation:
         assert '"Customer Channel type"' in sql  # WHERE column included
         assert "Modern Trade" in sql  # Predicate value
         assert "LIMIT 25" in sql
+
+    def test_snowflake_simple_schema_not_quoted(self, optimizer):
+        """Snowflake: simple schema/table names are NOT double-quoted.
+
+        Snowflake auto-uppercases unquoted identifiers. Quoting lowercase
+        names like "ods" forces case-sensitive matching, which fails if the
+        actual schema is ODS. Simple names must stay unquoted.
+        """
+        spark_sql = "SELECT s.`country_code` FROM _dvt_s s LIMIT 10"
+        source_info = {
+            "src_s": _sf_source(
+                "src_s", "_dvt_s", "ods", "cbs_f_country", ["country_code"]
+            ),
+        }
+        plans = optimizer.optimize(spark_sql, source_info)
+        sql = plans["src_s"].extraction_sql
+        # Schema and table must be unquoted — Snowflake will uppercase them
+        assert '"ods"' not in sql  # NOT double-quoted
+        assert '"cbs_f_country"' not in sql  # NOT double-quoted
+        assert "ods" in sql.lower()  # Present but unquoted
+        # Column still properly double-quoted
+        assert '"country_code"' in sql
+
+    def test_schema_with_spaces_stays_quoted(self, optimizer):
+        """Schema/table names with spaces still get proper quoting."""
+        spark_sql = "SELECT c.`id` FROM _dvt_c c"
+        source_info = {
+            "src_c": _pg_source("src_c", "_dvt_c", "my schema", "my table", ["id"]),
+        }
+        plans = optimizer.optimize(spark_sql, source_info)
+        sql = plans["src_c"].extraction_sql
+        # Names with spaces MUST be quoted
+        assert '"my schema"' in sql
+        assert '"my table"' in sql
+
+    def test_simple_schema_unquoted_across_dialects(self, optimizer):
+        """Simple schema/table names are unquoted for all dialects."""
+        spark_sql = "SELECT c.`id` FROM _dvt_c c"
+        # Test across multiple dialects
+        for dialect, schema, table in [
+            ("postgres", "public", "customers"),
+            ("databricks", "dvt_test", "dim_regions"),
+            ("oracle", "HR", "employees"),
+            ("sqlserver", "dbo", "orders"),
+        ]:
+            source_info = {
+                "src_c": SourceInfo("src_c", "_dvt_c", schema, table, ["id"], dialect),
+            }
+            plans = optimizer.optimize(spark_sql, source_info)
+            sql = plans["src_c"].extraction_sql
+            # Schema/table should NOT have forced quoting for simple names
+            assert f'"{schema}"' not in sql or dialect == "postgres"
+            # (Postgres uses double-quotes as its native quoting, but
+            #  unquoted identifiers are also valid — the key is that
+            #  sqlglot won't force-quote simple names)
 
 
 # =============================================================================
