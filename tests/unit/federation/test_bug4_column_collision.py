@@ -453,3 +453,147 @@ class TestBug4EndToEnd:
         assert "country_name" in state_cols_lower
         assert "geographical_block" in state_cols_lower
         assert len(state_after_b.columns) == 3
+
+    @patch("dvt.federation.el_layer.get_extractor")
+    def test_full_refresh_already_refreshed_unions_columns(
+        self, mock_get_extractor, tmp_path
+    ):
+        """Bug 4 Dimension 2: full-refresh + already-refreshed must union columns.
+
+        On --full-refresh, when Model A extracts first, it clears staging and
+        re-extracts with its column subset.  When Model B then runs (same
+        full-refresh run), _refreshed_sources prevents re-clearing but
+        should_extract() still says (True, "full_refresh").  Without the fix,
+        Model B would blindly overwrite staging with its own smaller subset,
+        losing Model A's columns.
+
+        The fix detects already_refreshed_this_run and applies the
+        union-of-columns check, so Model B re-extracts with the union of both
+        models' columns.
+        """
+        all_source_cols = [
+            "Country_ID",
+            "Country_Name",
+            "Geographical_Block",
+            "Population",
+            "GDP",
+        ]
+        mock_get_extractor.return_value = self._mock_extractor(all_source_cols)
+
+        el = ELLayer(bucket_path=tmp_path / "staging", profile_name="test")
+
+        def fake_convert(parquet_path, delta_path, source_name, extraction_result):
+            (delta_path / "_delta_log").mkdir(parents=True, exist_ok=True)
+            return ExtractionResult(
+                success=True,
+                source_name=source_name,
+                row_count=100,
+                extraction_method="jdbc",
+            )
+
+        # --- Model A: full-refresh, needs [Country_ID, Country_Name] ---
+        source_a = SourceConfig(
+            source_name="sf__cbs_f_country",
+            adapter_type="snowflake",
+            schema="CBS",
+            table="F_COUNTRY",
+            connection=None,
+            connection_config={"type": "snowflake"},
+            columns=["country_id", "country_name"],
+        )
+
+        with patch.object(el, "_convert_to_delta", side_effect=fake_convert):
+            result_a = el._extract_source_locked(source_a, full_refresh=True)
+
+        assert result_a.success
+        assert result_a.extraction_method == "jdbc"
+
+        # Source should be marked as refreshed
+        assert "sf__cbs_f_country" in el._refreshed_sources
+
+        # State after Model A: only 2 columns
+        state_a = el.state_manager.get_source_state("sf__cbs_f_country")
+        assert state_a is not None
+        assert len(state_a.columns) == 2
+
+        # --- Model B: full-refresh (same run), needs [Country_Name, Geographical_Block] ---
+        source_b = SourceConfig(
+            source_name="sf__cbs_f_country",
+            adapter_type="snowflake",
+            schema="CBS",
+            table="F_COUNTRY",
+            connection=None,
+            connection_config={"type": "snowflake"},
+            columns=["country_name", "geographical_block"],
+        )
+
+        with patch.object(el, "_convert_to_delta", side_effect=fake_convert):
+            result_b = el._extract_source_locked(source_b, full_refresh=True)
+
+        # Model B should NOT skip — Geographical_Block is missing from staging
+        assert result_b.extraction_method == "jdbc"
+
+        # State should now have the union: Country_ID + Country_Name + Geographical_Block
+        state_b = el.state_manager.get_source_state("sf__cbs_f_country")
+        assert state_b is not None
+        state_cols_lower = {c.lower() for c in state_b.columns}
+        assert state_cols_lower == {"country_id", "country_name", "geographical_block"}
+        assert len(state_b.columns) == 3
+
+    @patch("dvt.federation.el_layer.get_extractor")
+    def test_full_refresh_already_refreshed_subset_skips(
+        self, mock_get_extractor, tmp_path
+    ):
+        """Full-refresh + already-refreshed with subset columns should skip.
+
+        If Model B's columns are already a subset of what Model A extracted,
+        no re-extraction is needed even on full-refresh.
+        """
+        all_source_cols = [
+            "Country_ID",
+            "Country_Name",
+            "Geographical_Block",
+        ]
+        mock_get_extractor.return_value = self._mock_extractor(all_source_cols)
+
+        el = ELLayer(bucket_path=tmp_path / "staging", profile_name="test")
+
+        def fake_convert(parquet_path, delta_path, source_name, extraction_result):
+            (delta_path / "_delta_log").mkdir(parents=True, exist_ok=True)
+            return ExtractionResult(
+                success=True,
+                source_name=source_name,
+                row_count=100,
+                extraction_method="jdbc",
+            )
+
+        # --- Model A: full-refresh, extracts ALL 3 columns ---
+        source_a = SourceConfig(
+            source_name="sf__cbs_f_country",
+            adapter_type="snowflake",
+            schema="CBS",
+            table="F_COUNTRY",
+            connection=None,
+            connection_config={"type": "snowflake"},
+            columns=["country_id", "country_name", "geographical_block"],
+        )
+
+        with patch.object(el, "_convert_to_delta", side_effect=fake_convert):
+            el._extract_source_locked(source_a, full_refresh=True)
+
+        # --- Model B: full-refresh (same run), needs only [Country_ID] ---
+        source_b = SourceConfig(
+            source_name="sf__cbs_f_country",
+            adapter_type="snowflake",
+            schema="CBS",
+            table="F_COUNTRY",
+            connection=None,
+            connection_config={"type": "snowflake"},
+            columns=["country_id"],
+        )
+
+        with patch.object(el, "_convert_to_delta", side_effect=fake_convert):
+            result_b = el._extract_source_locked(source_b, full_refresh=True)
+
+        # Model B's columns are a subset — should skip
+        assert result_b.extraction_method == "skip"

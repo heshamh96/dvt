@@ -385,9 +385,24 @@ class ELLayer:
             full_refresh,
         )
 
-        if not should_extract and reason == "skip":
-            # Staging exists and schema unchanged.
-            # Check if column pushdown requires re-extraction (union-of-columns).
+        # Determine if another model already extracted this source in the
+        # current run (relevant for --full-refresh dedup).
+        already_refreshed_this_run = (
+            full_refresh and source.source_name in self._refreshed_sources
+        )
+
+        # Union-of-columns check applies in two scenarios:
+        # 1. Normal skip (staging exists, schema unchanged)
+        # 2. Full-refresh when source was already extracted by another model
+        #    in this run — we must NOT blindly overwrite with a smaller
+        #    column set; instead, union the columns and re-extract.
+        needs_union_check = (not should_extract and reason == "skip") or (
+            already_refreshed_this_run
+            and self.state_manager.staging_exists(source.source_name)
+        )
+
+        if needs_union_check:
+            # Staging exists — check if column pushdown requires re-extraction.
             if source.columns is not None:
                 existing_state = self.state_manager.get_source_state(source.source_name)
                 existing_cols = list(existing_state.columns) if existing_state else []
