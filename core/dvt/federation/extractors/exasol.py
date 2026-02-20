@@ -62,14 +62,15 @@ class ExasolExtractor(BaseExtractor):
         pk_expr = (
             config.pk_columns[0]
             if len(config.pk_columns) == 1
-            else f"CONCAT({', '.join(config.pk_columns)})"
+            else "CONCAT(" + ", '|', ".join(config.pk_columns) + ")"
         )
 
         cols = config.columns or [
             c["name"] for c in self.get_columns(config.schema, config.table)
         ]
         col_exprs = [f"COALESCE(TO_CHAR({c}), '')" for c in cols]
-        hash_expr = f"HASH_MD5(CONCAT({', '.join(col_exprs)}))"
+        concat_hash = ", '|', ".join(col_exprs)
+        hash_expr = f"HASH_MD5(CONCAT({concat_hash}))"
 
         query = f"""
             SELECT TO_CHAR({pk_expr}) as _pk, {hash_expr} as _hash
@@ -80,7 +81,12 @@ class ExasolExtractor(BaseExtractor):
 
         cursor = self._get_connection(config).cursor()
         cursor.execute(query)
-        hashes = {row[0]: row[1] for row in cursor.fetchall()}
+        hashes = {}
+        while True:
+            batch = cursor.fetchmany(config.batch_size)
+            if not batch:
+                break
+            hashes.update({row[0]: row[1] for row in batch})
         cursor.close()
         return hashes
 

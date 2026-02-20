@@ -110,63 +110,53 @@ class RedshiftExtractor(BaseExtractor):
         """Extract using Redshift UNLOAD."""
         start_time = time.time()
 
-        try:
-            from dvt.federation.cloud_storage import CloudStorageHelper
+        from dvt.federation.cloud_storage import CloudStorageHelper
 
-            helper = CloudStorageHelper(bucket_config)
-            query = self.build_export_query(config)
+        helper = CloudStorageHelper(bucket_config)
+        query = self.build_export_query(config)
 
-            # Generate unique staging path
-            staging_suffix = helper.generate_staging_path(config.source_name)
-            native_path = helper.get_native_path(staging_suffix, dialect="redshift")
+        # Generate unique staging path
+        staging_suffix = helper.generate_staging_path(config.source_name)
+        native_path = helper.get_native_path(staging_suffix, dialect="redshift")
 
-            # Get credentials clause (IAM role or access keys)
-            creds_clause = helper.get_copy_credentials_clause("redshift")
-            if not creds_clause:
-                creds_clause = "IAM_ROLE DEFAULT"
+        # Get credentials clause (IAM role or access keys)
+        creds_clause = helper.get_copy_credentials_clause("redshift")
+        if not creds_clause:
+            creds_clause = "IAM_ROLE DEFAULT"
 
-            unload_sql = f"""
-                UNLOAD ('{query.replace("'", "''")}')
-                TO '{native_path}'
-                {creds_clause}
-                FORMAT PARQUET
-                ALLOWOVERWRITE
-                PARALLEL ON
-            """
+        unload_sql = f"""
+            UNLOAD ('{query.replace("'", "''")}')
+            TO '{native_path}'
+            {creds_clause}
+            FORMAT PARQUET
+            ALLOWOVERWRITE
+            PARALLEL ON
+        """
 
-            cursor = self._get_connection(config).cursor()
-            cursor.execute(unload_sql)
-            cursor.close()
+        cursor = self._get_connection(config).cursor()
+        cursor.execute(unload_sql)
+        cursor.close()
 
-            # Get row count
-            count_cursor = self._get_connection(config).cursor()
-            count_cursor.execute(f"SELECT COUNT(*) FROM ({query})")
-            row_count = count_cursor.fetchone()[0]
-            count_cursor.close()
+        # Get row count
+        count_cursor = self._get_connection(config).cursor()
+        count_cursor.execute(f"SELECT COUNT(*) FROM ({query})")
+        row_count = count_cursor.fetchone()[0]
+        count_cursor.close()
 
-            elapsed = time.time() - start_time
-            self._log(
-                f"Exported {row_count:,} rows from {config.source_name} "
-                f"to S3 in {elapsed:.1f}s (parallel)"
-            )
+        elapsed = time.time() - start_time
+        self._log(
+            f"Exported {row_count:,} rows from {config.source_name} "
+            f"to S3 in {elapsed:.1f}s (parallel)"
+        )
 
-            return ExtractionResult(
-                success=True,
-                source_name=config.source_name,
-                row_count=row_count,
-                output_path=output_path,
-                extraction_method="native_parallel",
-                elapsed_seconds=elapsed,
-            )
-
-        except Exception as e:
-            elapsed = time.time() - start_time
-            return ExtractionResult(
-                success=False,
-                source_name=config.source_name,
-                error=str(e),
-                elapsed_seconds=elapsed,
-            )
+        return ExtractionResult(
+            success=True,
+            source_name=config.source_name,
+            row_count=row_count,
+            output_path=output_path,
+            extraction_method="native_parallel",
+            elapsed_seconds=elapsed,
+        )
 
     def extract_hashes(self, config: ExtractionConfig) -> Dict[str, str]:
         """Extract row hashes using Redshift MD5 function."""
@@ -176,14 +166,15 @@ class RedshiftExtractor(BaseExtractor):
         pk_expr = (
             config.pk_columns[0]
             if len(config.pk_columns) == 1
-            else f"CONCAT({', '.join(config.pk_columns)})"
+            else " || '|' || ".join(config.pk_columns)
         )
 
         cols = config.columns or [
             c["name"] for c in self.get_columns(config.schema, config.table, config)
         ]
         col_exprs = [f"NVL(CAST({c} AS VARCHAR), '')" for c in cols]
-        hash_expr = f"MD5(CONCAT({', '.join(col_exprs)}))"
+        concat_hash = " || '|' || ".join(col_exprs)
+        hash_expr = f"MD5({concat_hash})"
 
         query = f"""
             SELECT CAST({pk_expr} AS VARCHAR) as _pk, {hash_expr} as _hash
@@ -194,7 +185,12 @@ class RedshiftExtractor(BaseExtractor):
 
         cursor = self._get_connection(config).cursor()
         cursor.execute(query)
-        hashes = {row[0]: row[1] for row in cursor.fetchall()}
+        hashes = {}
+        while True:
+            batch = cursor.fetchmany(config.batch_size)
+            if not batch:
+                break
+            hashes.update({row[0]: row[1] for row in batch})
         cursor.close()
         return hashes
 
@@ -233,10 +229,15 @@ class RedshiftExtractor(BaseExtractor):
         self, schema: str, table: str, config: ExtractionConfig = None
     ) -> List[str]:
         query = """
-            SELECT column_name FROM svv_table_info ti
-            JOIN information_schema.columns c
-                ON ti.schema = c.table_schema AND ti.table = c.table_name
-            WHERE ti.schema = %s AND ti.table = %s AND c.ordinal_position = 1
+            SELECT kcu.column_name
+            FROM information_schema.table_constraints tc
+            JOIN information_schema.key_column_usage kcu
+                ON tc.constraint_name = kcu.constraint_name
+                AND tc.table_schema = kcu.table_schema
+            WHERE tc.table_schema = %s
+            AND tc.table_name = %s
+            AND tc.constraint_type = 'PRIMARY KEY'
+            ORDER BY kcu.ordinal_position
         """
         cursor = self._get_connection(config).cursor()
         try:

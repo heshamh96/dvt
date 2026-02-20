@@ -81,14 +81,15 @@ class TrinoExtractor(BaseExtractor):
         pk_expr = (
             config.pk_columns[0]
             if len(config.pk_columns) == 1
-            else f"CONCAT({', '.join(config.pk_columns)})"
+            else "CONCAT(" + ", '|', ".join(config.pk_columns) + ")"
         )
 
         cols = config.columns or [
             c["name"] for c in self.get_columns(config.schema, config.table)
         ]
         col_exprs = [f"COALESCE(CAST({c} AS VARCHAR), '')" for c in cols]
-        hash_expr = f"TO_HEX(MD5(TO_UTF8(CONCAT({', '.join(col_exprs)}))))"
+        concat_hash = ", '|', ".join(col_exprs)
+        hash_expr = f"TO_HEX(MD5(TO_UTF8(CONCAT({concat_hash}))))"
 
         query = f"""
             SELECT CAST({pk_expr} AS VARCHAR) as _pk, {hash_expr} as _hash
@@ -99,7 +100,12 @@ class TrinoExtractor(BaseExtractor):
 
         cursor = self._get_connection(config).cursor()
         cursor.execute(query)
-        hashes = {row[0]: row[1] for row in cursor.fetchall()}
+        hashes = {}
+        while True:
+            batch = cursor.fetchmany(config.batch_size)
+            if not batch:
+                break
+            hashes.update({row[0]: row[1] for row in batch})
         cursor.close()
         return hashes
 
@@ -129,6 +135,8 @@ class TrinoExtractor(BaseExtractor):
         cursor.close()
         return columns
 
-    def detect_primary_key(self, schema: str, table: str) -> List[str]:
+    def detect_primary_key(
+        self, schema: str, table: str, config: ExtractionConfig = None
+    ) -> List[str]:
         # Trino doesn't enforce PKs
         return []

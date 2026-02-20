@@ -12,6 +12,7 @@ from dvt.utils.identifiers import (
     build_create_table_column_types,
     build_create_table_sql,
     get_sqlglot_dialect,
+    needs_column_mapping,
     quote_identifier,
     spark_type_to_sql_type,
 )
@@ -327,5 +328,206 @@ class TestBuildCreateTableSql:
             result = build_create_table_sql(df, "postgres", '"public"."test"')
 
             assert "IF NOT EXISTS" in result
+        finally:
+            spark.stop()
+
+    def test_databricks_includes_tblproperties(self):
+        """Databricks CREATE TABLE should include Delta Column Mapping TBLPROPERTIES."""
+        from pyspark.sql import SparkSession
+
+        spark = SparkSession.builder.appName("test").master("local[1]").getOrCreate()
+        try:
+            df = spark.createDataFrame(
+                [("CUST001", 100)], ["Customer Code", "Total Amount"]
+            )
+            result = build_create_table_sql(
+                df, "databricks", "`catalog`.`schema`.`table`"
+            )
+
+            assert "TBLPROPERTIES" in result
+            assert "'delta.columnMapping.mode' = 'name'" in result
+            assert "'delta.minReaderVersion' = '2'" in result
+            assert "'delta.minWriterVersion' = '5'" in result
+        finally:
+            spark.stop()
+
+    def test_spark_includes_tblproperties_with_special_columns(self):
+        """Spark CREATE TABLE should include TBLPROPERTIES when columns have spaces."""
+        from pyspark.sql import SparkSession
+
+        spark = SparkSession.builder.appName("test").master("local[1]").getOrCreate()
+        try:
+            df = spark.createDataFrame([("Alice", 30)], ["First Name", "User Age"])
+            result = build_create_table_sql(df, "spark", "`schema`.`table`")
+
+            assert "TBLPROPERTIES" in result
+            assert "'delta.columnMapping.mode' = 'name'" in result
+        finally:
+            spark.stop()
+
+    def test_spark_no_tblproperties_with_simple_columns(self):
+        """Spark CREATE TABLE should NOT include TBLPROPERTIES for simple column names.
+
+        Delta Column Mapping TBLPROPERTIES cause an incompatibility with Spark's
+        JDBC writer: the JDBC driver cannot resolve column-mapped physical names.
+        For tables with simple names (no spaces/special chars), column mapping
+        is unnecessary and skipped.
+        """
+        from pyspark.sql import SparkSession
+
+        spark = SparkSession.builder.appName("test").master("local[1]").getOrCreate()
+        try:
+            df = spark.createDataFrame([("Alice", 30)], ["name", "age"])
+            result = build_create_table_sql(df, "spark", "`schema`.`table`")
+
+            assert "TBLPROPERTIES" not in result
+        finally:
+            spark.stop()
+
+    def test_databricks_no_tblproperties_simple_columns(self):
+        """Databricks CREATE TABLE should NOT include TBLPROPERTIES for simple names."""
+        from pyspark.sql import SparkSession
+
+        spark = SparkSession.builder.appName("test").master("local[1]").getOrCreate()
+        try:
+            df = spark.createDataFrame(
+                [("Alice", 30)], ["customer_name", "customer_age"]
+            )
+            result = build_create_table_sql(
+                df, "databricks", "`catalog`.`schema`.`table`"
+            )
+
+            assert "TBLPROPERTIES" not in result
+            assert "CREATE TABLE IF NOT EXISTS" in result
+            assert "`customer_name`" in result
+        finally:
+            spark.stop()
+
+    def test_postgres_no_tblproperties(self):
+        """Postgres CREATE TABLE should NOT include TBLPROPERTIES."""
+        from pyspark.sql import SparkSession
+
+        spark = SparkSession.builder.appName("test").master("local[1]").getOrCreate()
+        try:
+            df = spark.createDataFrame([("Alice", 30)], ["name", "age"])
+            result = build_create_table_sql(df, "postgres", '"public"."test"')
+
+            assert "TBLPROPERTIES" not in result
+        finally:
+            spark.stop()
+
+    def test_snowflake_no_tblproperties(self):
+        """Snowflake CREATE TABLE should NOT include TBLPROPERTIES."""
+        from pyspark.sql import SparkSession
+
+        spark = SparkSession.builder.appName("test").master("local[1]").getOrCreate()
+        try:
+            df = spark.createDataFrame([("Alice", 30)], ["name", "age"])
+            result = build_create_table_sql(df, "snowflake", '"schema"."test"')
+
+            assert "TBLPROPERTIES" not in result
+        finally:
+            spark.stop()
+
+    def test_databricks_mixed_columns_gets_tblproperties(self):
+        """Databricks: if ANY column has special chars, ALL get TBLPROPERTIES."""
+        from pyspark.sql import SparkSession
+
+        spark = SparkSession.builder.appName("test").master("local[1]").getOrCreate()
+        try:
+            # One column with space, one without
+            df = spark.createDataFrame(
+                [("CUST001", 100)], ["Customer Code", "quantity"]
+            )
+            result = build_create_table_sql(
+                df, "databricks", "`catalog`.`schema`.`table`"
+            )
+
+            # One column has a space -> TBLPROPERTIES should be added
+            assert "TBLPROPERTIES" in result
+            assert "'delta.columnMapping.mode' = 'name'" in result
+        finally:
+            spark.stop()
+
+
+class TestNeedsColumnMapping:
+    """Tests for needs_column_mapping function."""
+
+    def test_simple_names_no_mapping(self):
+        """Simple alphanumeric+underscore names don't need column mapping."""
+        from pyspark.sql import SparkSession
+
+        spark = SparkSession.builder.appName("test").master("local[1]").getOrCreate()
+        try:
+            df = spark.createDataFrame([(1, "a")], ["id", "name"])
+            assert needs_column_mapping(df) is False
+        finally:
+            spark.stop()
+
+    def test_leading_underscore_no_mapping(self):
+        """Leading underscore is valid — no mapping needed."""
+        from pyspark.sql import SparkSession
+
+        spark = SparkSession.builder.appName("test").master("local[1]").getOrCreate()
+        try:
+            df = spark.createDataFrame([(1,)], ["_internal_id"])
+            assert needs_column_mapping(df) is False
+        finally:
+            spark.stop()
+
+    def test_spaces_need_mapping(self):
+        """Columns with spaces need column mapping."""
+        from pyspark.sql import SparkSession
+
+        spark = SparkSession.builder.appName("test").master("local[1]").getOrCreate()
+        try:
+            df = spark.createDataFrame([("a",)], ["Customer Code"])
+            assert needs_column_mapping(df) is True
+        finally:
+            spark.stop()
+
+    def test_hyphens_need_mapping(self):
+        """Columns with hyphens need column mapping."""
+        from pyspark.sql import SparkSession
+
+        spark = SparkSession.builder.appName("test").master("local[1]").getOrCreate()
+        try:
+            df = spark.createDataFrame([("a",)], ["customer-code"])
+            assert needs_column_mapping(df) is True
+        finally:
+            spark.stop()
+
+    def test_dots_need_mapping(self):
+        """Columns with dots need column mapping."""
+        from pyspark.sql import SparkSession
+
+        spark = SparkSession.builder.appName("test").master("local[1]").getOrCreate()
+        try:
+            df = spark.createDataFrame([("a",)], ["first.name"])
+            assert needs_column_mapping(df) is True
+        finally:
+            spark.stop()
+
+    def test_leading_digit_needs_mapping(self):
+        """Columns starting with a digit need column mapping."""
+        from pyspark.sql import SparkSession
+
+        spark = SparkSession.builder.appName("test").master("local[1]").getOrCreate()
+        try:
+            df = spark.createDataFrame([("a",)], ["1st_column"])
+            assert needs_column_mapping(df) is True
+        finally:
+            spark.stop()
+
+    def test_mixed_one_bad_triggers(self):
+        """If ANY column needs mapping, function returns True."""
+        from pyspark.sql import SparkSession
+
+        spark = SparkSession.builder.appName("test").master("local[1]").getOrCreate()
+        try:
+            df = spark.createDataFrame(
+                [("a", 1, 2)], ["normal_col", "Customer Code", "quantity"]
+            )
+            assert needs_column_mapping(df) is True
         finally:
             spark.stop()

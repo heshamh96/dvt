@@ -11,6 +11,7 @@ from dvt.config.user_config import (
     get_bucket_path,
     get_dvt_home,
     load_buckets_for_profile,
+    load_computes_for_profile,
 )
 from dvt.events.types import CheckCleanPath, ConfirmCleanPath, FinishedCleanPaths
 from dvt.task.base import BaseTask, move_to_nearest_project_dir
@@ -60,9 +61,34 @@ class CleanTask(BaseTask):
         self.older_than: Optional[str] = getattr(args, "OLDER_THAN", None) or getattr(
             args, "older_than", None
         )
-        self.profile_name: Optional[str] = getattr(args, "PROFILE", None) or getattr(
-            args, "profile", None
+        self.profile_name: Optional[str] = (
+            getattr(args, "PROFILE", None)
+            or getattr(args, "profile", None)
+            or getattr(config, "profile_name", None)
         )
+        self.optimize: bool = getattr(args, "OPTIMIZE", False) or getattr(
+            args, "optimize", False
+        )
+
+    def _get_cleanup_retention_hours(self) -> int:
+        """Get cleanup_retention_hours from the active compute's delta config.
+
+        Reads computes.yml -> profile -> active compute -> delta -> cleanup_retention_hours.
+        Returns 0 (delete immediately) if not configured.
+        """
+        profile_name = self.profile_name or "default"
+        profiles_dir = getattr(self.args, "PROFILES_DIR", None)
+        profile_computes = load_computes_for_profile(profile_name, profiles_dir)
+        if not profile_computes:
+            return 0
+
+        target = profile_computes.get("target", "local_spark")
+        computes = profile_computes.get("computes", {})
+        compute_config = computes.get(target, {})
+        delta_config = compute_config.get("delta", {})
+        if isinstance(delta_config, dict):
+            return int(delta_config.get("cleanup_retention_hours", 0))
+        return 0
 
     def run(self) -> None:
         """Clean dbt artifacts and optionally DVT staging files.
@@ -71,7 +97,13 @@ class CleanTask(BaseTask):
         - `dvt clean`: Run dbt clean + clean all DVT staging buckets
         - `dvt clean --bucket local`: Clean only the specified bucket (skip dbt clean)
         - `dvt clean --older-than 24h`: Only clean files older than duration (skip dbt clean)
+        - `dvt clean --optimize`: Run Delta OPTIMIZE + VACUUM on staging (skip dbt clean)
         """
+        # --optimize: only run Delta optimization, skip everything else
+        if self.optimize:
+            self._optimize_staging()
+            return None
+
         # If specific bucket or older_than is specified, only clean staging
         if self.bucket_name or self.older_than:
             self._clean_staging()
@@ -84,7 +116,7 @@ class CleanTask(BaseTask):
 
     def _run_dbt_clean(self) -> None:
         """Run dbt's standard clean logic."""
-        project_dir = move_to_nearest_project_dir(self.args.project_dir)
+        project_dir = move_to_nearest_project_dir(self.args.project_dir).resolve()
 
         potential_clean_paths = set(
             Path(p).resolve() for p in self.project.clean_targets
@@ -163,6 +195,271 @@ class CleanTask(BaseTask):
                 self._clean_gcs_bucket(bucket_name, bucket_config, cutoff_time)
             elif bucket_type == "azure":
                 self._clean_azure_bucket(bucket_name, bucket_config, cutoff_time)
+
+    def _optimize_staging(self) -> None:
+        """Run Delta OPTIMIZE + VACUUM on all Delta staging tables.
+
+        Discovers all .delta directories in the staging bucket and runs:
+        1. OPTIMIZE — compacts small Parquet files into fewer, larger files
+        2. VACUUM — removes old file versions no longer referenced by the Delta log
+
+        This reduces disk usage and improves read performance for incremental
+        models that accumulate many small appends over time.
+
+        Only works with filesystem buckets (Delta tables are local).
+        """
+        profiles_dir = getattr(self.args, "PROFILES_DIR", None)
+        profile_name = self.profile_name or "default"
+
+        profile_buckets = load_buckets_for_profile(profile_name, profiles_dir)
+
+        if not profile_buckets:
+            # No buckets.yml — fall back to project's .dvt/staging/ directory
+            # (same path the federation engine uses via StateManager)
+            from dvt.config.user_config import get_project_root
+
+            project_root = get_project_root()
+            if project_root:
+                default_staging = project_root / ".dvt" / "staging"
+            else:
+                default_staging = get_dvt_home(profiles_dir) / "staging"
+
+            if default_staging.exists():
+                self._optimize_delta_tables(default_staging, "local")
+            else:
+                fire_event(
+                    ConfirmCleanPath(
+                        path="staging optimize: no staging directory found"
+                    )
+                )
+            return
+
+        buckets = profile_buckets.get("buckets", {})
+        if not isinstance(buckets, dict):
+            return
+
+        for bucket_name, bucket_config in buckets.items():
+            if not isinstance(bucket_config, dict):
+                continue
+
+            # Skip if specific bucket requested and this isn't it
+            if self.bucket_name and bucket_name != self.bucket_name:
+                continue
+
+            bucket_type = bucket_config.get("type", "filesystem")
+
+            if bucket_type == "filesystem":
+                path = get_bucket_path(bucket_config, profiles_dir=profiles_dir)
+                if path and path.exists():
+                    self._optimize_delta_tables(path, bucket_name)
+            elif bucket_type == "hdfs":
+                # HDFS Delta optimization would require Spark SQL on HDFS paths
+                # (same SparkSession used for federation can handle this)
+                hdfs_path = bucket_config.get("path")
+                if hdfs_path:
+                    self._optimize_delta_tables_hdfs(hdfs_path, bucket_name)
+            else:
+                fire_event(
+                    ConfirmCleanPath(
+                        path=f"staging optimize: {bucket_name} ({bucket_type} not supported for Delta optimize)"
+                    )
+                )
+
+    def _optimize_delta_tables(self, staging_path: Path, bucket_name: str) -> None:
+        """Run Delta OPTIMIZE + VACUUM on all Delta tables in a filesystem staging path.
+
+        Scans for directories matching *.delta/ with a _delta_log/ subdirectory.
+        For each Delta table found:
+        1. OPTIMIZE — compacts small files (reduces file count)
+        2. VACUUM with 0 hour retention — removes unreferenced old files
+
+        Args:
+            staging_path: Path to the staging directory (e.g., .dvt/staging/)
+            bucket_name: Name of the bucket (for logging)
+        """
+        # Find all Delta table directories
+        delta_tables = []
+        for entry in staging_path.iterdir():
+            if entry.is_dir() and entry.name.endswith(".delta"):
+                delta_log = entry / "_delta_log"
+                if delta_log.is_dir():
+                    delta_tables.append(entry)
+
+        if not delta_tables:
+            fire_event(
+                ConfirmCleanPath(
+                    path=f"staging optimize: {bucket_name} (no Delta tables found)"
+                )
+            )
+            return
+
+        try:
+            from delta import DeltaTable
+            from pyspark.sql import SparkSession
+        except ImportError:
+            fire_event(
+                ConfirmCleanPath(
+                    path=f"staging optimize: {bucket_name} (skipped — delta-spark not installed, run 'dvt sync')"
+                )
+            )
+            return
+
+        # Get or create a minimal Spark session for Delta operations
+        try:
+            from dvt.federation.spark_manager import SparkManager
+
+            spark = SparkManager.get_or_create_session()
+        except Exception:
+            # Fallback: create a basic Spark session with Delta extensions
+            try:
+                from delta import configure_spark_with_delta_pip
+
+                builder = (
+                    SparkSession.builder.appName("dvt-clean-optimize")
+                    .master("local[*]")
+                    .config(
+                        "spark.sql.extensions",
+                        "io.delta.sql.DeltaSparkSessionExtension",
+                    )
+                    .config(
+                        "spark.sql.catalog.spark_catalog",
+                        "org.apache.spark.sql.delta.catalog.DeltaCatalog",
+                    )
+                )
+                spark = configure_spark_with_delta_pip(builder).getOrCreate()
+            except Exception as e:
+                fire_event(
+                    ConfirmCleanPath(
+                        path=f"staging optimize: {bucket_name} (failed to create Spark session: {e})"
+                    )
+                )
+                return
+
+        # Read cleanup retention from computes.yml delta: section (default: 0 = delete immediately)
+        retention_hours = self._get_cleanup_retention_hours()
+
+        # Disable retention check so VACUUM can use 0-hour retention
+        if retention_hours == 0:
+            spark.conf.set(
+                "spark.databricks.delta.retentionDurationCheck.enabled", "false"
+            )
+
+        optimized_count = 0
+        for delta_path in delta_tables:
+            table_name = delta_path.name.removesuffix(".delta")
+            try:
+                dt = DeltaTable.forPath(spark, str(delta_path))
+
+                # OPTIMIZE — compact small files
+                dt.optimize().executeCompaction()
+
+                # VACUUM — remove old unreferenced files
+                dt.vacuum(retentionHours=retention_hours)
+
+                optimized_count += 1
+            except Exception as e:
+                fire_event(
+                    ConfirmCleanPath(
+                        path=f"staging optimize: {bucket_name}/{table_name} (error: {e})"
+                    )
+                )
+
+        fire_event(
+            ConfirmCleanPath(
+                path=f"staging optimize: {bucket_name} ({optimized_count}/{len(delta_tables)} Delta tables optimized)"
+            )
+        )
+
+    def _optimize_delta_tables_hdfs(self, hdfs_path: str, bucket_name: str) -> None:
+        """Run Delta OPTIMIZE + VACUUM on Delta tables in HDFS.
+
+        Args:
+            hdfs_path: HDFS path to the staging directory
+            bucket_name: Name of the bucket (for logging)
+        """
+        try:
+            from delta import DeltaTable
+            from pyspark.sql import SparkSession
+        except ImportError:
+            fire_event(
+                ConfirmCleanPath(
+                    path=f"staging optimize: {bucket_name} (skipped — delta-spark not installed, run 'dvt sync')"
+                )
+            )
+            return
+
+        try:
+            from dvt.federation.spark_manager import SparkManager
+
+            spark = SparkManager.get_or_create_session()
+        except Exception:
+            fire_event(
+                ConfirmCleanPath(
+                    path=f"staging optimize: {bucket_name} (failed to create Spark session)"
+                )
+            )
+            return
+
+        # Read cleanup retention from computes.yml delta: section (default: 0 = delete immediately)
+        retention_hours = self._get_cleanup_retention_hours()
+
+        # Disable retention check so VACUUM can use 0-hour retention
+        if retention_hours == 0:
+            spark.conf.set(
+                "spark.databricks.delta.retentionDurationCheck.enabled", "false"
+            )
+
+        # List directories in HDFS matching *.delta
+        hadoop_conf = spark._jsc.hadoopConfiguration()
+        fs = spark._jvm.org.apache.hadoop.fs.FileSystem.get(
+            spark._jvm.java.net.URI(hdfs_path), hadoop_conf
+        )
+        hadoop_path = spark._jvm.org.apache.hadoop.fs.Path(hdfs_path)
+
+        if not fs.exists(hadoop_path):
+            fire_event(
+                ConfirmCleanPath(
+                    path=f"staging optimize: {bucket_name} (HDFS path not found)"
+                )
+            )
+            return
+
+        optimized_count = 0
+        total_count = 0
+
+        for status in fs.listStatus(hadoop_path):
+            if not status.isDirectory():
+                continue
+            dir_name = status.getPath().getName()
+            if not dir_name.endswith(".delta"):
+                continue
+
+            delta_hdfs_path = f"{hdfs_path.rstrip('/')}/{dir_name}"
+            delta_log_path = spark._jvm.org.apache.hadoop.fs.Path(
+                delta_hdfs_path + "/_delta_log"
+            )
+            if not fs.exists(delta_log_path):
+                continue
+
+            total_count += 1
+            table_name = dir_name.removesuffix(".delta")
+            try:
+                dt = DeltaTable.forPath(spark, delta_hdfs_path)
+                dt.optimize().executeCompaction()
+                dt.vacuum(retentionHours=retention_hours)
+                optimized_count += 1
+            except Exception as e:
+                fire_event(
+                    ConfirmCleanPath(
+                        path=f"staging optimize: {bucket_name}/{table_name} (error: {e})"
+                    )
+                )
+
+        fire_event(
+            ConfirmCleanPath(
+                path=f"staging optimize: {bucket_name} ({optimized_count}/{total_count} HDFS Delta tables optimized)"
+            )
+        )
 
     def _clean_filesystem_bucket(
         self,

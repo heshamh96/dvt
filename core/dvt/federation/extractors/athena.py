@@ -107,53 +107,43 @@ class AthenaExtractor(BaseExtractor):
         """Extract using Athena UNLOAD."""
         start_time = time.time()
 
-        try:
-            query = self.build_export_query(config)
-            export_id = str(uuid.uuid4())[:8]
+        query = self.build_export_query(config)
+        export_id = str(uuid.uuid4())[:8]
 
-            bucket_name = bucket_config.get("bucket")
-            prefix = bucket_config.get("prefix", "").rstrip("/")
-            s3_path = f"s3://{bucket_name}/{prefix}/{config.source_name}_{export_id}/"
+        bucket_name = bucket_config.get("bucket")
+        prefix = bucket_config.get("prefix", "").rstrip("/")
+        s3_path = f"s3://{bucket_name}/{prefix}/{config.source_name}_{export_id}/"
 
-            unload_sql = f"""
-                UNLOAD ({query})
-                TO '{s3_path}'
-                WITH (format = 'PARQUET', compression = 'ZSTD')
-            """
+        unload_sql = f"""
+            UNLOAD ({query})
+            TO '{s3_path}'
+            WITH (format = 'PARQUET', compression = 'ZSTD')
+        """
 
-            cursor = self._get_connection(config).cursor()
-            cursor.execute(unload_sql)
-            cursor.close()
+        cursor = self._get_connection(config).cursor()
+        cursor.execute(unload_sql)
+        cursor.close()
 
-            # Get row count
-            count_cursor = self._get_connection(config).cursor()
-            count_cursor.execute(f"SELECT COUNT(*) FROM ({query})")
-            row_count = count_cursor.fetchone()[0]
-            count_cursor.close()
+        # Get row count
+        count_cursor = self._get_connection(config).cursor()
+        count_cursor.execute(f"SELECT COUNT(*) FROM ({query})")
+        row_count = count_cursor.fetchone()[0]
+        count_cursor.close()
 
-            elapsed = time.time() - start_time
-            self._log(
-                f"Exported {row_count:,} rows from {config.source_name} "
-                f"to S3 in {elapsed:.1f}s (parallel)"
-            )
+        elapsed = time.time() - start_time
+        self._log(
+            f"Exported {row_count:,} rows from {config.source_name} "
+            f"to S3 in {elapsed:.1f}s (parallel)"
+        )
 
-            return ExtractionResult(
-                success=True,
-                source_name=config.source_name,
-                row_count=row_count,
-                output_path=output_path,
-                extraction_method="native_parallel",
-                elapsed_seconds=elapsed,
-            )
-
-        except Exception as e:
-            elapsed = time.time() - start_time
-            return ExtractionResult(
-                success=False,
-                source_name=config.source_name,
-                error=str(e),
-                elapsed_seconds=elapsed,
-            )
+        return ExtractionResult(
+            success=True,
+            source_name=config.source_name,
+            row_count=row_count,
+            output_path=output_path,
+            extraction_method="native_parallel",
+            elapsed_seconds=elapsed,
+        )
 
     def extract_hashes(self, config: ExtractionConfig) -> Dict[str, str]:
         """Extract row hashes using Presto/Trino MD5 function."""
@@ -163,14 +153,15 @@ class AthenaExtractor(BaseExtractor):
         pk_expr = (
             config.pk_columns[0]
             if len(config.pk_columns) == 1
-            else f"CONCAT({', '.join(config.pk_columns)})"
+            else "CONCAT(" + ", '|', ".join(config.pk_columns) + ")"
         )
 
         cols = config.columns or [
             c["name"] for c in self.get_columns(config.schema, config.table)
         ]
         col_exprs = [f"COALESCE(CAST({c} AS VARCHAR), '')" for c in cols]
-        hash_expr = f"TO_HEX(MD5(TO_UTF8(CONCAT({', '.join(col_exprs)}))))"
+        concat_hash = ", '|', ".join(col_exprs)
+        hash_expr = f"TO_HEX(MD5(TO_UTF8(CONCAT({concat_hash}))))"
 
         query = f"""
             SELECT CAST({pk_expr} AS VARCHAR) as _pk, {hash_expr} as _hash
@@ -181,7 +172,12 @@ class AthenaExtractor(BaseExtractor):
 
         cursor = self._get_connection(config).cursor()
         cursor.execute(query)
-        hashes = {row[0]: row[1] for row in cursor.fetchall()}
+        hashes = {}
+        while True:
+            batch = cursor.fetchmany(config.batch_size)
+            if not batch:
+                break
+            hashes.update({row[0]: row[1] for row in batch})
         cursor.close()
         return hashes
 
@@ -204,10 +200,14 @@ class AthenaExtractor(BaseExtractor):
     def get_columns(
         self, schema: str, table: str, config: ExtractionConfig = None
     ) -> List[Dict[str, str]]:
+        # Athena doesn't support parameterized queries for metadata,
+        # so sanitize inputs by stripping quotes
+        safe_schema = schema.replace("'", "")
+        safe_table = table.replace("'", "")
         query = f"""
             SELECT column_name, data_type
             FROM information_schema.columns
-            WHERE table_schema = '{schema}' AND table_name = '{table}'
+            WHERE table_schema = '{safe_schema}' AND table_name = '{safe_table}'
             ORDER BY ordinal_position
         """
         cursor = self._get_connection(config).cursor()
@@ -216,6 +216,8 @@ class AthenaExtractor(BaseExtractor):
         cursor.close()
         return columns
 
-    def detect_primary_key(self, schema: str, table: str) -> List[str]:
+    def detect_primary_key(
+        self, schema: str, table: str, config: ExtractionConfig = None
+    ) -> List[str]:
         # Athena doesn't support primary keys
         return []

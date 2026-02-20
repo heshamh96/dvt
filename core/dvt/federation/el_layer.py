@@ -11,6 +11,8 @@ The EL layer optimizes data extraction from source systems:
 """
 
 import concurrent.futures
+import dataclasses
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -43,8 +45,12 @@ class SourceConfig:
     )
     columns: Optional[List[str]] = None
     predicates: Optional[List[str]] = None
+    limit: Optional[int] = None
     pk_columns: Optional[List[str]] = None
     batch_size: int = 100000
+    extraction_sql: Optional[str] = (
+        None  # Pre-built extraction SQL from FederationOptimizer
+    )
 
 
 @dataclass
@@ -61,6 +67,39 @@ class ELResult:
     errors: Dict[str, str]
 
 
+def _resolve_column_names(
+    optimizer_columns: Optional[List[str]],
+    real_columns: List[Dict[str, str]],
+) -> Optional[List[str]]:
+    """Match optimizer's potentially-lowercased column names to actual DB column names.
+
+    SQLGlot normalizes unquoted identifiers to lowercase. This function
+    resolves them against the real column metadata from the source database
+    using case-insensitive matching.
+
+    Args:
+        optimizer_columns: Column names extracted by QueryOptimizer (may be lowercased)
+        real_columns: Column metadata from extractor.get_columns() with 'name' key
+
+    Returns:
+        List of real column names with correct casing, or None for SELECT *
+    """
+    if not optimizer_columns:
+        return None  # SELECT * — extract all columns
+
+    # Build case-insensitive lookup: lowercased_name -> real_name
+    real_name_map = {c["name"].lower(): c["name"] for c in real_columns}
+
+    resolved = []
+    for col in optimizer_columns:
+        real_name = real_name_map.get(col.lower())
+        if real_name:
+            resolved.append(real_name)
+        # else: column not found in source — skip (defensive, e.g. computed column)
+
+    return resolved if resolved else None
+
+
 class ELLayer:
     """Extract-Load layer for DVT federation.
 
@@ -72,6 +111,21 @@ class ELLayer:
     2. Database-specific bulk export (e.g., PostgreSQL COPY)
     3. Spark JDBC with parallel reads (default fallback)
     """
+
+    # Class-level per-source locks for thread-safe concurrent extraction.
+    # When multiple models run in parallel and reference the same source,
+    # these locks serialize extraction of each source so only one thread
+    # does the should_extract() check + extract + convert-to-Delta sequence.
+    # Must be class-level because each model creates its own ELLayer instance.
+    _source_locks: Dict[str, threading.Lock] = {}
+    _source_locks_guard: threading.Lock = threading.Lock()
+
+    # Track sources already extracted in this run (for full_refresh dedup).
+    # When --full-refresh is used, the first thread clears and re-extracts.
+    # Subsequent threads see the source is already refreshed and skip the
+    # clear+extract, avoiding deletion of staging that other models need.
+    _refreshed_sources: set = set()
+    _refreshed_sources_guard: threading.Lock = threading.Lock()
 
     def __init__(
         self,
@@ -242,12 +296,34 @@ class ELLayer:
             errors=errors,
         )
 
+    @classmethod
+    def _get_source_lock(cls, source_name: str) -> threading.Lock:
+        """Get or create a per-source lock for thread-safe extraction.
+
+        Uses double-checked locking: fast path (no guard) for existing locks,
+        guard only for creating new ones.
+        """
+        lock = cls._source_locks.get(source_name)
+        if lock is not None:
+            return lock
+        with cls._source_locks_guard:
+            # Re-check under guard (another thread may have created it)
+            if source_name not in cls._source_locks:
+                cls._source_locks[source_name] = threading.Lock()
+            return cls._source_locks[source_name]
+
     def _extract_source(
         self,
         source: SourceConfig,
         full_refresh: bool,
     ) -> ExtractionResult:
-        """Extract a single source.
+        """Extract a single source (thread-safe via per-source lock).
+
+        Acquires a per-source lock before doing anything, so concurrent
+        threads extracting the same source are serialized. This prevents:
+        - TOCTOU races on should_extract() check
+        - Multiple threads writing to the same tmp Parquet path
+        - FileNotFoundError on _convert_to_delta() rename
 
         Args:
             source: Source configuration
@@ -256,10 +332,35 @@ class ELLayer:
         Returns:
             ExtractionResult
         """
-        # Handle full refresh - clear staging and state
+        source_lock = self._get_source_lock(source.source_name)
+        with source_lock:
+            return self._extract_source_locked(source, full_refresh)
+
+    def _extract_source_locked(
+        self,
+        source: SourceConfig,
+        full_refresh: bool,
+    ) -> ExtractionResult:
+        """Extract a single source (caller holds the per-source lock).
+
+        Args:
+            source: Source configuration
+            full_refresh: If True, clear staging and do full extraction
+
+        Returns:
+            ExtractionResult
+        """
+        # Handle full refresh - clear staging and state.
+        # Only clear once per source per run to avoid deleting staging
+        # that another thread's model is about to read.
         if full_refresh:
-            self.state_manager.clear_source_state(source.source_name)
-            self.state_manager.clear_staging(source.source_name)
+            already_refreshed = source.source_name in self._refreshed_sources
+            if not already_refreshed:
+                self.state_manager.clear_source_state(source.source_name)
+                self.state_manager.clear_staging(source.source_name)
+                # Mark as refreshed AFTER clear so only one thread clears
+                with self._refreshed_sources_guard:
+                    self._refreshed_sources.add(source.source_name)
 
         # Get extractor for this adapter type
         # Pass connection_config for lazy connection creation if connection is None
@@ -284,42 +385,134 @@ class ELLayer:
             full_refresh,
         )
 
-        if not should_extract and reason == "skip":
-            # Staging exists and schema unchanged - skip extraction
-            return ExtractionResult(
-                success=True,
-                source_name=source.source_name,
-                extraction_method="skip",
-            )
+        # Determine if another model already extracted this source in the
+        # current run (relevant for --full-refresh dedup).
+        already_refreshed_this_run = (
+            full_refresh and source.source_name in self._refreshed_sources
+        )
+
+        # Union-of-columns check applies in two scenarios:
+        # 1. Normal skip (staging exists, schema unchanged)
+        # 2. Full-refresh when source was already extracted by another model
+        #    in this run — we must NOT blindly overwrite with a smaller
+        #    column set; instead, union the columns and re-extract.
+        needs_union_check = (not should_extract and reason == "skip") or (
+            already_refreshed_this_run
+            and self.state_manager.staging_exists(source.source_name)
+        )
+
+        if needs_union_check:
+            # Staging exists — check if column pushdown requires re-extraction.
+            if source.columns is not None:
+                existing_state = self.state_manager.get_source_state(source.source_name)
+                existing_cols = list(existing_state.columns) if existing_state else []
+                requested_cols = list(source.columns)
+
+                # Case-insensitive comparison: optimizer may lowercase names
+                # while state stores real DB-cased names.
+                existing_lower = {c.lower() for c in existing_cols}
+                requested_lower = {c.lower() for c in requested_cols}
+
+                if not requested_lower.issubset(existing_lower):
+                    # Staging is missing columns this model needs.
+                    # Re-extract with the union of existing + requested columns.
+                    # Use existing (real-cased) names as the base, then add any
+                    # genuinely new columns from the requested set.
+                    union_cols = list(existing_cols)  # Start with real-cased existing
+                    for col in requested_cols:
+                        if col.lower() not in existing_lower:
+                            union_cols.append(col)
+                    union_cols.sort(key=lambda c: c.lower())
+                    self._log(
+                        f"  Union-of-columns: {source.source_name} needs "
+                        f"{len(requested_lower - existing_lower)} additional columns, "
+                        f"re-extracting with {len(union_cols)} total"
+                    )
+                    # Update source columns and rebuild extraction_sql with union
+                    source = dataclasses.replace(
+                        source,
+                        columns=union_cols,
+                        extraction_sql=None,  # Force rebuild from parts
+                    )
+                    # Fall through to extraction below
+                else:
+                    # Staging has all columns we need
+                    return ExtractionResult(
+                        success=True,
+                        source_name=source.source_name,
+                        extraction_method="skip",
+                    )
+            else:
+                # SELECT * — check whether staging actually has all source columns.
+                # A previous model may have extracted only a subset (column pushdown),
+                # so we cannot assume staging covers everything.
+                existing_state = self.state_manager.get_source_state(source.source_name)
+                existing_cols = list(existing_state.columns) if existing_state else []
+                all_source_cols_lower = {c.lower() for c in columns}
+                existing_lower = {c.lower() for c in existing_cols}
+
+                if not all_source_cols_lower.issubset(existing_lower):
+                    # Staging is missing columns — re-extract with all source columns
+                    self._log(
+                        f"  Union-of-columns: {source.source_name} SELECT * needs "
+                        f"{len(all_source_cols_lower - existing_lower)} additional columns, "
+                        f"re-extracting with all {len(columns)} columns"
+                    )
+                    # Fall through to extraction below (columns=None → SELECT *)
+                else:
+                    return ExtractionResult(
+                        success=True,
+                        source_name=source.source_name,
+                        extraction_method="skip",
+                    )
 
         # Auto-detect primary key if not provided
         pk_columns = source.pk_columns
         if not pk_columns:
             pk_columns = extractor.detect_primary_key(source.schema, source.table)
 
+        # Resolve optimizer column names to real DB column names (case-insensitive).
+        # SQLGlot may have lowercased the names; we match against real metadata.
+        resolved_columns = _resolve_column_names(source.columns, columns_info)
+
         # Build extraction config with connection info for JDBC fallback
         config = ExtractionConfig(
             source_name=source.source_name,
             schema=source.schema,
             table=source.table,
-            columns=source.columns,
+            columns=resolved_columns,
             predicates=source.predicates,
+            limit=source.limit,
             pk_columns=pk_columns,
             batch_size=source.batch_size,
             bucket_config=self.bucket_config,
             connection_config=source.connection_config,
             jdbc_config=self.jdbc_config,
+            extraction_sql=source.extraction_sql,
         )
 
-        # Get output path
-        output_path = self.state_manager.get_staging_path(source.source_name)
+        # Get final output path (Delta format for new extractions)
+        final_path = self.state_manager.get_staging_path(source.source_name)
 
-        # Perform extraction
+        # Extractors write Parquet natively; we convert to Delta after.
+        # Use a temporary Parquet path for extraction, then convert.
+        parquet_tmp = final_path.parent / f"tmp_{source.source_name}.parquet"
+
+        # Perform extraction (always writes Parquet)
         self._log(f"Extracting {source.source_name}...")
-        result = extractor.extract(config, output_path)
+        result = extractor.extract(config, parquet_tmp)
 
         if result.success:
-            # Save state
+            # Convert Parquet staging to Delta format
+            result = self._convert_to_delta(
+                parquet_tmp, final_path, source.source_name, result
+            )
+            # Save state — record the columns that were ACTUALLY extracted,
+            # not the full source table schema. This is critical for the
+            # union-of-columns check: when a second model needs different
+            # columns from the same source, we must know what's already in
+            # the Delta staging to decide whether re-extraction is needed.
+            actually_extracted = resolved_columns if resolved_columns else columns
             state = SourceState(
                 source_name=source.source_name,
                 table_name=source.table,
@@ -328,7 +521,7 @@ class ELLayer:
                 last_extracted_at=datetime.now().isoformat(),
                 extraction_method=result.extraction_method,
                 pk_columns=pk_columns or [],
-                columns=columns,
+                columns=actually_extracted,
             )
             self.state_manager.save_source_state(state)
 
@@ -343,6 +536,111 @@ class ELLayer:
                     )
 
         return result
+
+    def _convert_to_delta(
+        self,
+        parquet_path: Path,
+        delta_path: Path,
+        source_name: str,
+        extraction_result: ExtractionResult,
+    ) -> ExtractionResult:
+        """Convert extracted Parquet staging data to Delta format.
+
+        All extractors write Parquet natively (PyArrow, Spark JDBC, COPY, etc.).
+        This method converts the output to Delta format using Spark, providing
+        a single conversion point for all extraction paths.
+
+        If conversion fails (e.g., delta-spark not installed), falls back to
+        keeping the Parquet file as-is and logs a warning.
+
+        Args:
+            parquet_path: Path to the temporary Parquet file/directory
+            delta_path: Path for the final Delta table directory
+            source_name: Source identifier for logging
+            extraction_result: The ExtractionResult from the extractor
+
+        Returns:
+            Updated ExtractionResult with the final output path
+        """
+        import shutil
+
+        try:
+            from dvt.federation.spark_manager import SparkManager
+
+            spark_manager = SparkManager.get_instance()
+            spark = spark_manager.get_or_create_session()
+
+            # Read the Parquet data.
+            # PyArrow pipe/COPY extraction writes a single file; Spark JDBC writes
+            # a directory. spark.read.parquet() can fail on single files in Spark 4.x
+            # (UNABLE_TO_INFER_SCHEMA), so wrap single files in a temp directory.
+            if parquet_path.is_file():
+                # Single file from PyArrow: wrap in a directory so Spark can read it.
+                # IMPORTANT: Don't use '.' or '_' prefix — Spark/Hadoop ignores hidden paths.
+                parquet_dir = parquet_path.parent / f"tmp_parquet_{source_name}"
+                parquet_dir.mkdir(parents=True, exist_ok=True)
+                moved_file = parquet_dir / "part-00000.parquet"
+                parquet_path.rename(moved_file)
+                parquet_path = parquet_dir  # Now it's a directory
+
+            df = spark.read.parquet(str(parquet_path))
+
+            # Write as Delta (overwrites any previous Delta staging)
+            # Enable column mapping to support column names with spaces/special chars.
+            # overwriteSchema=true ensures schema changes (e.g., different column
+            # sets from re-extraction) are accepted rather than rejected.
+            writer = (
+                df.write.format("delta")
+                .mode("overwrite")
+                .option("overwriteSchema", "true")
+                .option("delta.columnMapping.mode", "name")
+                .option("delta.minReaderVersion", "2")
+                .option("delta.minWriterVersion", "5")
+            )
+
+            # Apply user Delta table properties from computes.yml delta: section
+            try:
+                from dvt.federation.spark_manager import SparkManager
+
+                if SparkManager.is_initialized():
+                    for (
+                        key,
+                        value,
+                    ) in SparkManager.get_instance().delta_table_properties.items():
+                        writer = writer.option(key, value)
+            except Exception:
+                pass  # SparkManager not available; skip user config
+
+            writer.save(str(delta_path))
+
+            # Clean up temp Parquet
+            if parquet_path.is_dir():
+                shutil.rmtree(parquet_path)
+            elif parquet_path.exists():
+                parquet_path.unlink()
+
+            # Update result with final Delta path
+            extraction_result.output_path = delta_path
+            return extraction_result
+
+        except Exception as e:
+            # Delta conversion failed — fall back to keeping Parquet as-is.
+            # Move the temp Parquet to a permanent location so staging_exists()
+            # can find it (legacy Parquet backward compat).
+            self._log(
+                f"Warning: Delta conversion failed for {source_name} ({e}). "
+                f"Keeping Parquet staging."
+            )
+            permanent_parquet = delta_path.parent / f"{source_name}.parquet"
+            if parquet_path != permanent_parquet:
+                if permanent_parquet.exists():
+                    if permanent_parquet.is_dir():
+                        shutil.rmtree(permanent_parquet)
+                    else:
+                        permanent_parquet.unlink()
+                parquet_path.rename(permanent_parquet)
+            extraction_result.output_path = permanent_parquet
+            return extraction_result
 
     def clear_all_staging(self) -> None:
         """Clear all staging data and state."""

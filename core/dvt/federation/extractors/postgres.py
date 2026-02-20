@@ -1,10 +1,15 @@
 """
 PostgreSQL extractor for EL layer.
 
-Uses COPY TO STDOUT for efficient bulk export when available.
-Falls back to Spark JDBC for parallel reads.
+Extraction priority:
+1. Pipe-based: psql COPY TO STDOUT | PyArrow streaming (if psql on PATH)
+2. In-process streaming COPY: psycopg2 copy_expert + PyArrow batch reader
+3. In-process buffered COPY: psycopg2 copy_expert + in-memory buffer
+4. Spark JDBC: parallel reads (default fallback)
 """
 
+import os
+import tempfile
 import time
 from io import BytesIO, StringIO
 from pathlib import Path
@@ -47,6 +52,8 @@ class PostgresExtractor(BaseExtractor):
         "timescaledb",
         # Note: redshift has its own extractor with native S3 UNLOAD
     ]
+
+    cli_tool = "psql"
 
     def _get_connection(self, config: ExtractionConfig = None) -> Any:
         """Get or create a database connection.
@@ -99,6 +106,35 @@ class PostgresExtractor(BaseExtractor):
         )
         return self._lazy_connection
 
+    def _build_extraction_command(self, config: ExtractionConfig) -> List[str]:
+        """Build psql COPY TO STDOUT command."""
+        conn_config = config.connection_config or self.connection_config or {}
+        query = self.build_export_query(config)
+        return [
+            "psql",
+            "-h",
+            conn_config.get("host", "localhost"),
+            "-p",
+            str(conn_config.get("port", 5432)),
+            "-U",
+            conn_config.get("user", "postgres"),
+            "-d",
+            conn_config.get("database", "postgres"),
+            "-c",
+            f"COPY ({query}) TO STDOUT WITH (FORMAT csv, HEADER)",
+            "--no-psqlrc",
+            "--quiet",
+        ]
+
+    def _build_extraction_env(self, config: ExtractionConfig) -> Dict[str, str]:
+        """Build env with PGPASSWORD for psql subprocess."""
+        conn_config = config.connection_config or self.connection_config or {}
+        env = os.environ.copy()
+        password = conn_config.get("password", "")
+        if password:
+            env["PGPASSWORD"] = str(password)
+        return env
+
     def extract(
         self,
         config: ExtractionConfig,
@@ -106,9 +142,23 @@ class PostgresExtractor(BaseExtractor):
     ) -> ExtractionResult:
         """Extract data from PostgreSQL to Parquet.
 
-        Tries COPY first, falls back to Spark JDBC.
+        Tries pipe (psql) first, then streaming COPY, buffered COPY,
+        then falls back to Spark JDBC.
         """
-        # Try PostgreSQL COPY first (fast for small-medium tables)
+        # Try pipe extraction first (psql + PyArrow streaming, ~64KB memory)
+        if self._has_cli_tool():
+            try:
+                return self._extract_via_pipe(config, output_path)
+            except Exception as e:
+                self._log(f"Pipe extraction failed ({e}), trying streaming COPY...")
+
+        # Try streaming COPY (constant memory via OS page cache)
+        try:
+            return self._extract_copy_streaming(config, output_path)
+        except Exception as e:
+            self._log(f"Streaming COPY failed ({e}), trying buffered COPY...")
+
+        # Try buffered COPY (legacy, full dataset in memory)
         try:
             return self._extract_copy(config, output_path)
         except Exception as e:
@@ -117,14 +167,87 @@ class PostgresExtractor(BaseExtractor):
         # Fallback to Spark JDBC (parallel reads)
         return self._extract_jdbc(config, output_path)
 
+    def _extract_copy_streaming(
+        self,
+        config: ExtractionConfig,
+        output_path: Path,
+    ) -> ExtractionResult:
+        """Extract using PostgreSQL COPY TO STDOUT with streaming PyArrow.
+
+        Writes COPY output to a temp file (OS page cache handles buffering),
+        then streams through PyArrow CSV reader in batches to Parquet.
+        Memory: O(batch_size) instead of O(dataset).
+        """
+        start_time = time.time()
+
+        if not PYARROW_AVAILABLE:
+            raise ImportError("pyarrow required for Parquet. Run 'dvt sync'.")
+
+        import pyarrow.csv as pa_csv
+        import pyarrow.parquet as pq
+
+        conn = self._get_connection(config)
+        query = self.build_export_query(config)
+        copy_query = f"COPY ({query}) TO STDOUT WITH (FORMAT CSV, HEADER)"
+
+        with tempfile.NamedTemporaryFile(mode="w+b", suffix=".csv") as tmp:
+            # Phase A: PostgreSQL COPY -> temp file (OS page cache handles this)
+            cursor = conn.cursor()
+            cursor.copy_expert(copy_query, tmp)
+            tmp.flush()
+            tmp.seek(0)
+
+            # Phase B: Stream-read CSV in batches -> write Parquet incrementally
+            read_options = pa_csv.ReadOptions(
+                block_size=config.batch_size * 512  # ~512 bytes/row estimate
+            )
+            streaming_reader = pa_csv.open_csv(tmp, read_options=read_options)
+
+            # Ensure output directory exists
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+
+            writer = None
+            row_count = 0
+            try:
+                for batch in streaming_reader:
+                    if writer is None:
+                        writer = pq.ParquetWriter(
+                            str(output_path),
+                            batch.schema,
+                            compression="zstd",
+                        )
+                    writer.write_batch(batch)
+                    row_count += batch.num_rows
+            finally:
+                if writer:
+                    writer.close()
+
+            cursor.close()
+
+        elapsed = time.time() - start_time
+        self._log(
+            f"Extracted {row_count:,} rows from {config.source_name} "
+            f"via streaming COPY in {elapsed:.1f}s"
+        )
+
+        return ExtractionResult(
+            success=True,
+            source_name=config.source_name,
+            row_count=row_count,
+            output_path=output_path,
+            extraction_method="copy_streaming",
+            elapsed_seconds=elapsed,
+        )
+
     def _extract_copy(
         self,
         config: ExtractionConfig,
         output_path: Path,
     ) -> ExtractionResult:
-        """Extract using PostgreSQL COPY TO STDOUT.
+        """Extract using PostgreSQL COPY TO STDOUT (buffered).
 
-        Uses psycopg2's copy_expert for efficient streaming.
+        Uses psycopg2's copy_expert with in-memory StringIO buffer.
+        Legacy path — kept as fallback for streaming COPY.
         """
         start_time = time.time()
 
@@ -216,8 +339,12 @@ class PostgresExtractor(BaseExtractor):
         cursor.execute(query)
 
         hashes = {}
-        for row in cursor.fetchall():
-            hashes[row[0]] = row[1]
+        while True:
+            batch = cursor.fetchmany(config.batch_size)
+            if not batch:
+                break
+            for row in batch:
+                hashes[row[0]] = row[1]
 
         cursor.close()
         return hashes
@@ -227,13 +354,14 @@ class PostgresExtractor(BaseExtractor):
         schema: str,
         table: str,
         predicates: Optional[List[str]] = None,
+        config: ExtractionConfig = None,
     ) -> int:
         """Get row count using COUNT(*)."""
         query = f"SELECT COUNT(*) FROM {schema}.{table}"
         if predicates:
             query += f" WHERE {' AND '.join(predicates)}"
 
-        conn = self._get_connection()
+        conn = self._get_connection(config)
         cursor = conn.cursor()
         cursor.execute(query)
         count = cursor.fetchone()[0]
@@ -244,6 +372,7 @@ class PostgresExtractor(BaseExtractor):
         self,
         schema: str,
         table: str,
+        config: ExtractionConfig = None,
     ) -> List[Dict[str, str]]:
         """Get column metadata from information_schema."""
         query = """
@@ -252,7 +381,7 @@ class PostgresExtractor(BaseExtractor):
             WHERE table_schema = %s AND table_name = %s
             ORDER BY ordinal_position
         """
-        conn = self._get_connection()
+        conn = self._get_connection(config)
         cursor = conn.cursor()
         cursor.execute(query, (schema, table))
 
@@ -267,6 +396,7 @@ class PostgresExtractor(BaseExtractor):
         self,
         schema: str,
         table: str,
+        config: ExtractionConfig = None,
     ) -> List[str]:
         """Detect primary key from pg_index."""
         query = """
@@ -277,7 +407,7 @@ class PostgresExtractor(BaseExtractor):
             AND i.indisprimary
             ORDER BY array_position(i.indkey, a.attnum)
         """
-        conn = self._get_connection()
+        conn = self._get_connection(config)
         cursor = conn.cursor()
         try:
             cursor.execute(query, (f"{schema}.{table}",))
@@ -289,7 +419,7 @@ class PostgresExtractor(BaseExtractor):
 
         # If no primary key found, try to find a unique index
         if not pk_cols:
-            pk_cols = self._detect_unique_index(schema, table)
+            pk_cols = self._detect_unique_index(schema, table, config)
 
         return pk_cols
 
@@ -297,22 +427,37 @@ class PostgresExtractor(BaseExtractor):
         self,
         schema: str,
         table: str,
+        config: ExtractionConfig = None,
     ) -> List[str]:
-        """Fallback: detect unique index columns."""
-        query = """
-            SELECT a.attname
+        """Fallback: detect columns from the first unique index found."""
+        # Get the first unique (non-primary) index OID
+        idx_query = """
+            SELECT i.indexrelid
             FROM pg_index i
-            JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
             WHERE i.indrelid = %s::regclass
             AND i.indisunique
             AND NOT i.indisprimary
-            ORDER BY array_position(i.indkey, a.attnum)
-            LIMIT 10
+            LIMIT 1
         """
-        conn = self._get_connection()
+        conn = self._get_connection(config)
         cursor = conn.cursor()
         try:
-            cursor.execute(query, (f"{schema}.{table}",))
+            cursor.execute(idx_query, (f"{schema}.{table}",))
+            idx_row = cursor.fetchone()
+            if not idx_row:
+                return []
+            index_oid = idx_row[0]
+
+            # Get columns for that specific index
+            col_query = """
+                SELECT a.attname
+                FROM pg_index i
+                JOIN pg_attribute a ON a.attrelid = i.indrelid
+                    AND a.attnum = ANY(i.indkey)
+                WHERE i.indexrelid = %s
+                ORDER BY array_position(i.indkey, a.attnum)
+            """
+            cursor.execute(col_query, (index_oid,))
             return [row[0] for row in cursor.fetchall()]
         except Exception:
             return []

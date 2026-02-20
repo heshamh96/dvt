@@ -21,6 +21,7 @@ Usage:
     sql = build_create_table_sql(df, "postgres", '"public"."my_table"')
 """
 
+import re
 from typing import Any, Dict
 
 # SQLGlot is used for dialect-aware identifier quoting when needed
@@ -169,12 +170,39 @@ def spark_type_to_sql_type(spark_type: Any, adapter_type: str) -> str:
     return data_type.sql(dialect=sqlglot_dialect)
 
 
+def needs_column_mapping(df: Any) -> bool:
+    """Check if any column in a DataFrame has names requiring Delta Column Mapping.
+
+    Delta Lake Column Mapping (mode='name') is needed when column names contain
+    characters that are not valid unquoted identifiers — spaces, hyphens, dots,
+    or other special characters. Simple alphanumeric + underscore names do NOT
+    need column mapping and work better with Spark's JDBC writer.
+
+    Args:
+        df: PySpark DataFrame (or any object with .schema.fields[].name)
+
+    Returns:
+        True if any column name has special characters requiring column mapping
+    """
+    _SIMPLE_NAME = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+    for field in df.schema.fields:
+        if not _SIMPLE_NAME.match(field.name):
+            return True
+    return False
+
+
 def build_create_table_sql(df: Any, adapter_type: str, quoted_table_name: str) -> str:
     """Build a CREATE TABLE IF NOT EXISTS statement from a DataFrame schema.
 
     Uses dialect-aware quoting for column names and dialect-specific SQL types
     to generate a CREATE TABLE statement that preserves original column names
     (including those with spaces, special characters, etc.) by quoting them.
+
+    For Databricks/Spark targets, Delta Column Mapping TBLPROPERTIES are added
+    ONLY when the DataFrame has columns with special characters (spaces, etc.).
+    Tables with simple column names skip TBLPROPERTIES to avoid a known
+    incompatibility between Delta Column Mapping and Spark's JDBC writer
+    (the JDBC driver cannot resolve column-mapped physical names during INSERT).
 
     Args:
         df: PySpark DataFrame whose schema defines the table structure
@@ -196,7 +224,23 @@ def build_create_table_sql(df: Any, adapter_type: str, quoted_table_name: str) -
         col_defs.append(f"{col_name} {sql_type}")
 
     columns_sql = ",\n  ".join(col_defs)
-    return f"CREATE TABLE IF NOT EXISTS {quoted_table_name} (\n  {columns_sql}\n)"
+    create_sql = f"CREATE TABLE IF NOT EXISTS {quoted_table_name} (\n  {columns_sql}\n)"
+
+    # Delta Lake rejects column names with spaces unless Column Mapping is enabled.
+    # Add TBLPROPERTIES for Databricks/Spark ONLY when columns have special chars.
+    # Tables with simple names skip this to avoid JDBC writer incompatibility:
+    # the Databricks JDBC driver cannot resolve column-mapped physical names
+    # during INSERT operations, causing COLUMN_NOT_DEFINED_IN_TABLE errors.
+    if adapter_type.lower() in ("databricks", "spark") and needs_column_mapping(df):
+        create_sql += (
+            "\nTBLPROPERTIES (\n"
+            "  'delta.columnMapping.mode' = 'name',\n"
+            "  'delta.minReaderVersion' = '2',\n"
+            "  'delta.minWriterVersion' = '5'\n"
+            ")"
+        )
+
+    return create_sql
 
 
 def spark_type_to_jdbc_type(spark_type: Any) -> str:

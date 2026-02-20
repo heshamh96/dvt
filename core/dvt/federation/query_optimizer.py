@@ -479,8 +479,16 @@ class QueryOptimizer:
             SQL query string
         """
         # Build SELECT clause
+        # Use exp.Column with quoted identifiers to handle column names with
+        # spaces and special characters.  sqlglot.select("Customer Code") is
+        # interpreted as raw SQL (two tokens → alias), so we must build proper
+        # Identifier nodes.
         if operations.columns:
-            select = sqlglot.select(*operations.columns)
+            col_exprs = [
+                exp.Column(this=exp.Identifier(this=c, quoted=True))
+                for c in operations.columns
+            ]
+            select = sqlglot.select(*col_exprs)
         else:
             select = sqlglot.select("*")
 

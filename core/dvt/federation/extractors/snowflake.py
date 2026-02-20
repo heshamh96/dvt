@@ -117,61 +117,51 @@ class SnowflakeExtractor(BaseExtractor):
         """Extract using Snowflake COPY INTO with parallel files."""
         start_time = time.time()
 
-        try:
-            from dvt.federation.cloud_storage import CloudStorageHelper
+        from dvt.federation.cloud_storage import CloudStorageHelper
 
-            helper = CloudStorageHelper(bucket_config)
-            bucket_type = bucket_config.get("type")
-            query = self.build_export_query(config)
+        helper = CloudStorageHelper(bucket_config)
+        bucket_type = bucket_config.get("type")
+        query = self.build_export_query(config)
 
-            # Generate unique staging path
-            staging_suffix = helper.generate_staging_path(config.source_name)
-            native_path = helper.get_native_path(staging_suffix, dialect="snowflake")
-            creds_clause = helper.get_copy_credentials_clause("snowflake")
+        # Generate unique staging path
+        staging_suffix = helper.generate_staging_path(config.source_name)
+        native_path = helper.get_native_path(staging_suffix, dialect="snowflake")
+        creds_clause = helper.get_copy_credentials_clause("snowflake")
 
-            # Build COPY INTO command for export
-            copy_sql = f"""
-                COPY INTO '{native_path}'
-                FROM ({query})
-                FILE_FORMAT = (TYPE = PARQUET)
-                {creds_clause}
-                HEADER = TRUE
-                OVERWRITE = TRUE
-                MAX_FILE_SIZE = 268435456
-            """
+        # Build COPY INTO command for export
+        copy_sql = f"""
+            COPY INTO '{native_path}'
+            FROM ({query})
+            FILE_FORMAT = (TYPE = PARQUET)
+            {creds_clause}
+            HEADER = TRUE
+            OVERWRITE = TRUE
+            MAX_FILE_SIZE = 268435456
+        """
 
-            cursor = self._get_connection(config).cursor()
-            cursor.execute(copy_sql)
+        cursor = self._get_connection(config).cursor()
+        cursor.execute(copy_sql)
 
-            # Get row count from COPY result
-            result = cursor.fetchone()
-            row_count = result[0] if result else 0
+        # Get row count from COPY result
+        result = cursor.fetchone()
+        row_count = result[0] if result else 0
 
-            cursor.close()
-            elapsed = time.time() - start_time
+        cursor.close()
+        elapsed = time.time() - start_time
 
-            self._log(
-                f"Exported {row_count:,} rows from {config.source_name} "
-                f"to {bucket_type.upper()} in {elapsed:.1f}s (parallel)"
-            )
+        self._log(
+            f"Exported {row_count:,} rows from {config.source_name} "
+            f"to {bucket_type.upper()} in {elapsed:.1f}s (parallel)"
+        )
 
-            return ExtractionResult(
-                success=True,
-                source_name=config.source_name,
-                row_count=row_count,
-                output_path=output_path,
-                extraction_method="native_parallel",
-                elapsed_seconds=elapsed,
-            )
-
-        except Exception as e:
-            elapsed = time.time() - start_time
-            return ExtractionResult(
-                success=False,
-                source_name=config.source_name,
-                error=str(e),
-                elapsed_seconds=elapsed,
-            )
+        return ExtractionResult(
+            success=True,
+            source_name=config.source_name,
+            row_count=row_count,
+            output_path=output_path,
+            extraction_method="native_parallel",
+            elapsed_seconds=elapsed,
+        )
 
     def extract_hashes(
         self,
@@ -213,8 +203,12 @@ class SnowflakeExtractor(BaseExtractor):
         cursor.execute(query)
 
         hashes = {}
-        for row in cursor.fetchall():
-            hashes[row[0]] = row[1]
+        while True:
+            batch = cursor.fetchmany(config.batch_size)
+            if not batch:
+                break
+            for row in batch:
+                hashes[row[0]] = row[1]
 
         cursor.close()
         return hashes

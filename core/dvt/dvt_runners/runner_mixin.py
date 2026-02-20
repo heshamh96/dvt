@@ -115,6 +115,14 @@ class DvtRunnerMixin:
 
         Used by both federation and pushdown runners when the model
         targets a non-default adapter.
+
+        For incremental models on the federation path, is_incremental()
+        normally calls adapter.get_relation() which requires adapter-specific
+        macros (e.g., Databricks's 'get_uc_tables'). These macros aren't in
+        the manifest when the default adapter is different. Instead of trying
+        to make the remote adapter work for relation checks, we determine
+        is_incremental() locally: the model's Delta staging exists in .dvt/
+        AND materialization is 'incremental' AND no --full-refresh flag.
         """
         from dvt.federation.adapter_manager import AdapterManager
 
@@ -123,6 +131,64 @@ class DvtRunnerMixin:
             target_name=self.resolution.target,
             profiles_dir=self._get_profiles_dir(),
         )
+
+        # Determine is_incremental() locally using Delta staging presence.
+        # This avoids calling adapter.get_relation() on the remote target,
+        # which would fail for non-default adapters (missing macros in manifest).
+        extra_context = self._resolve_is_incremental_for_federation(manifest)
+
         return self.compiler.compile_node(
-            self.node, manifest, {}, adapter=target_adapter
+            self.node, manifest, extra_context, adapter=target_adapter
         )
+
+    def _resolve_is_incremental_for_federation(self, manifest) -> dict:
+        """Determine is_incremental() for federation models using local Delta staging.
+
+        Instead of querying the remote target database to check if the relation
+        exists (which requires adapter-specific macros), we check if the model's
+        Delta staging directory exists locally. This mirrors the target table
+        state because _save_model_staging() writes a Delta copy after every
+        successful load.
+
+        Returns an extra_context dict with an 'is_incremental' override function.
+        """
+        node = self.node
+        mat = getattr(getattr(node, "config", None), "materialized", None)
+        if mat != "incremental":
+            return {}
+
+        full_refresh = getattr(
+            getattr(self.config, "args", None), "FULL_REFRESH", False
+        )
+        if full_refresh:
+            # --full-refresh: is_incremental() should return False
+            return {"is_incremental": lambda: False}
+
+        # Check if model's Delta staging exists locally
+        try:
+            from dvt.config.user_config import get_bucket_path, load_buckets_for_profile
+            from dvt.federation.state_manager import StateManager
+
+            profile_name = self._get_profile_name()
+            profiles_dir = self._get_profiles_dir()
+            profile_buckets = load_buckets_for_profile(profile_name, profiles_dir)
+
+            if profile_buckets:
+                target_bucket = profile_buckets.get("target", "local")
+                buckets = profile_buckets.get("buckets", {})
+                bucket_config = buckets.get(target_bucket)
+                if bucket_config:
+                    bucket_path = get_bucket_path(
+                        bucket_config, profile_name, profiles_dir
+                    )
+                    if bucket_path:
+                        state_mgr = StateManager(bucket_path)
+                        # Check for model's own Delta staging
+                        model_staging_id = node.unique_id
+                        if state_mgr.staging_exists(model_staging_id):
+                            return {"is_incremental": lambda: True}
+        except Exception:
+            pass
+
+        # No staging exists (first run) — is_incremental() = False
+        return {"is_incremental": lambda: False}

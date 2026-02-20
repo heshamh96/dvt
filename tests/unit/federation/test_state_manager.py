@@ -347,27 +347,94 @@ class TestStateManager:
         result = state_manager.staging_exists("postgres__orders")
         assert result is False
 
-    def test_staging_exists_true(self, state_manager, temp_bucket):
-        """Should return True when staging exists."""
+    def test_staging_exists_true_legacy_parquet(self, state_manager, temp_bucket):
+        """Should return True when legacy Parquet staging exists."""
         staging_file = temp_bucket / "postgres__orders.parquet"
         staging_file.touch()
 
         result = state_manager.staging_exists("postgres__orders")
         assert result is True
 
-    def test_get_staging_path(self, state_manager, temp_bucket):
-        """Should return correct staging path."""
+    def test_staging_exists_true_delta(self, state_manager, temp_bucket):
+        """Should return True when Delta staging directory exists."""
+        delta_dir = temp_bucket / "postgres__orders.delta"
+        delta_log = delta_dir / "_delta_log"
+        delta_log.mkdir(parents=True)
+
+        result = state_manager.staging_exists("postgres__orders")
+        assert result is True
+
+    def test_staging_exists_false_empty_delta_dir(self, state_manager, temp_bucket):
+        """Should return False when Delta directory exists but has no _delta_log."""
+        delta_dir = temp_bucket / "postgres__orders.delta"
+        delta_dir.mkdir()
+
+        result = state_manager.staging_exists("postgres__orders")
+        assert result is False
+
+    def test_staging_exists_true_parquet_directory(self, state_manager, temp_bucket):
+        """Should return True for legacy Parquet directory (JDBC extraction)."""
+        parquet_dir = temp_bucket / "postgres__orders.parquet"
+        parquet_dir.mkdir()
+        # Simulate part files
+        (parquet_dir / "part-00000.parquet").touch()
+
+        result = state_manager.staging_exists("postgres__orders")
+        assert result is True
+
+    def test_get_staging_path_no_existing(self, state_manager, temp_bucket):
+        """Should return Delta path when nothing exists (new extraction)."""
+        path = state_manager.get_staging_path("postgres__orders")
+        assert path == temp_bucket / "postgres__orders.delta"
+
+    def test_get_staging_path_legacy_parquet(self, state_manager, temp_bucket):
+        """Should return Parquet path when legacy Parquet exists."""
+        staging_file = temp_bucket / "postgres__orders.parquet"
+        staging_file.touch()
+
         path = state_manager.get_staging_path("postgres__orders")
         assert path == temp_bucket / "postgres__orders.parquet"
 
-    def test_clear_staging(self, state_manager, temp_bucket):
-        """Should clear staging file."""
+    def test_get_staging_path_delta_preferred(self, state_manager, temp_bucket):
+        """Should return Delta path when Delta staging exists (even if Parquet also exists)."""
+        # Create both legacy Parquet and Delta
+        (temp_bucket / "postgres__orders.parquet").touch()
+        delta_dir = temp_bucket / "postgres__orders.delta"
+        (delta_dir / "_delta_log").mkdir(parents=True)
+
+        path = state_manager.get_staging_path("postgres__orders")
+        assert path == temp_bucket / "postgres__orders.delta"
+
+    def test_clear_staging_legacy_parquet(self, state_manager, temp_bucket):
+        """Should clear legacy Parquet staging file."""
         staging_file = temp_bucket / "postgres__orders.parquet"
         staging_file.touch()
 
         state_manager.clear_staging("postgres__orders")
 
         assert not staging_file.exists()
+
+    def test_clear_staging_delta(self, state_manager, temp_bucket):
+        """Should clear Delta staging directory."""
+        delta_dir = temp_bucket / "postgres__orders.delta"
+        delta_log = delta_dir / "_delta_log"
+        delta_log.mkdir(parents=True)
+        (delta_dir / "part-00000.parquet").touch()
+
+        state_manager.clear_staging("postgres__orders")
+
+        assert not delta_dir.exists()
+
+    def test_clear_staging_both(self, state_manager, temp_bucket):
+        """Should clear both Delta and legacy Parquet staging."""
+        (temp_bucket / "postgres__orders.parquet").touch()
+        delta_dir = temp_bucket / "postgres__orders.delta"
+        (delta_dir / "_delta_log").mkdir(parents=True)
+
+        state_manager.clear_staging("postgres__orders")
+
+        assert not (temp_bucket / "postgres__orders.parquet").exists()
+        assert not delta_dir.exists()
 
     # -------------------------------------------------------------------------
     # Should Extract Tests

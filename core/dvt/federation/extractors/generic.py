@@ -53,22 +53,6 @@ class GenericExtractor(BaseExtractor):
                 "SnowflakeExtractor)."
             )
 
-        # Try to use auth handler if adapter type is known
-        adapter_type = conn_config.get("type", "")
-        if adapter_type:
-            try:
-                from dvt.federation.auth import get_auth_handler
-
-                handler = get_auth_handler(adapter_type)
-                kwargs = handler.get_native_connection_kwargs(conn_config)
-                # This would require knowing which driver to use
-                raise ValueError(
-                    f"GenericExtractor cannot create lazy connections for adapter "
-                    f"type '{adapter_type}'. Use the database-specific extractor instead."
-                )
-            except Exception:
-                pass
-
         raise ValueError(
             "No connection provided to GenericExtractor. "
             "Please provide a connection when initializing the extractor."
@@ -101,23 +85,28 @@ class GenericExtractor(BaseExtractor):
         columns = [desc[0] for desc in cursor.description]
         hashes = {}
 
-        for row in cursor.fetchall():
-            row_dict = dict(zip(columns, row))
+        while True:
+            batch = cursor.fetchmany(config.batch_size)
+            if not batch:
+                break
+            for row in batch:
+                row_dict = dict(zip(columns, row))
 
-            # Build PK value
-            if len(config.pk_columns) == 1:
-                pk_value = str(row_dict.get(config.pk_columns[0], ""))
-            else:
-                pk_value = "|".join(
-                    str(row_dict.get(col, "")) for col in config.pk_columns
-                )
+                # Build PK value
+                if len(config.pk_columns) == 1:
+                    pk_value = str(row_dict.get(config.pk_columns[0], ""))
+                else:
+                    pk_value = "|".join(
+                        str(row_dict.get(col, "")) for col in config.pk_columns
+                    )
 
-            # Compute hash of all values
-            values = [str(row_dict.get(col, "")) for col in sorted(columns)]
-            row_str = "|".join(values)
-            row_hash = hashlib.md5(row_str.encode()).hexdigest()
+                # Compute hash of all values (use natural column order, not sorted,
+                # to stay consistent with DB-specific extractors)
+                values = [str(row_dict.get(col, "")) for col in columns]
+                row_str = "|".join(values)
+                row_hash = hashlib.md5(row_str.encode()).hexdigest()
 
-            hashes[pk_value] = row_hash
+                hashes[pk_value] = row_hash
 
         cursor.close()
         return hashes
@@ -152,7 +141,8 @@ class GenericExtractor(BaseExtractor):
         Database-specific extractors should override with proper metadata queries.
         """
         # Query one row to get column names
-        query = f"SELECT * FROM {schema}.{table} LIMIT 1"
+        # Use ANSI SQL FETCH FIRST — more portable than LIMIT (fails on SQL Server, Oracle, DB2)
+        query = f"SELECT * FROM {schema}.{table} FETCH FIRST 1 ROWS ONLY"
 
         cursor = self._get_connection(config).cursor()
         try:
