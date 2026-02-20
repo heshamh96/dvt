@@ -675,3 +675,117 @@ class TestTranslateToSparkNotIn:
         assert "_dvt_abc_c" in result
         assert "_dvt_abc__this" in result
         assert "IN" in result.upper()
+
+
+# =============================================================================
+# Test: Predicate pushdown must skip subqueries referencing non-source tables
+# (Bug 6 — {{ this }} temp view pushed to remote DB)
+# =============================================================================
+
+
+class TestPredicatePushdownSubquerySkip:
+    """Verify that _extract_predicates() does NOT push predicates containing
+    subqueries that reference Spark-local temp views (e.g. {{ this }}).
+
+    Bug: A WHERE predicate like `c."Customer Code" NOT IN (SELECT customer_code
+    FROM _dvt_abc__this)` was pushed to PostgreSQL extraction because the
+    optimizer only checked column alias membership, not subquery table refs.
+    The Spark temp view `_dvt_abc__this` doesn't exist in PostgreSQL.
+    """
+
+    def _make_optimizer(self):
+        from dvt.federation.federation_optimizer import FederationOptimizer
+
+        return FederationOptimizer()
+
+    def test_not_in_this_subquery_not_pushed(self):
+        """NOT IN (SELECT ... FROM {{ this }}) must NOT be pushed to source."""
+        optimizer = self._make_optimizer()
+
+        sql = (
+            "SELECT c.customer_code, r.region_name "
+            "FROM _dvt_abc_c c "
+            "LEFT JOIN _dvt_abc_r r ON c.region = r.code "
+            "WHERE c.customer_code NOT IN "
+            "(SELECT customer_code FROM _dvt_abc__this) "
+            "ORDER BY c.customer_code LIMIT 10"
+        )
+        parsed = sqlglot.parse_one(sql, read="spark")
+        alias_to_source = {
+            "c": "source.proj.customers",
+            "r": "source.proj.regions",
+        }
+        result = optimizer._extract_predicates(parsed, alias_to_source)
+        # The NOT IN predicate references _dvt_abc__this which is NOT a source
+        # alias — it must NOT be pushed down to any source
+        assert result["c"] == [], (
+            f"Predicate with {{ this }} subquery should not be pushed: {result['c']}"
+        )
+        assert result["r"] == []
+
+    def test_simple_predicate_still_pushed(self):
+        """Simple single-source predicates without subqueries are still pushed."""
+        optimizer = self._make_optimizer()
+
+        sql = (
+            "SELECT c.customer_code, r.region_name "
+            "FROM _dvt_abc_c c "
+            "LEFT JOIN _dvt_abc_r r ON c.region = r.code "
+            "WHERE r.code = 'MEA' "
+            "ORDER BY c.customer_code LIMIT 10"
+        )
+        parsed = sqlglot.parse_one(sql, read="spark")
+        alias_to_source = {
+            "c": "source.proj.customers",
+            "r": "source.proj.regions",
+        }
+        result = optimizer._extract_predicates(parsed, alias_to_source)
+        # r.code = 'MEA' references only alias 'r' and has no subquery
+        assert len(result["r"]) == 1, f"Expected 1 pushed predicate for 'r': {result}"
+        assert result["c"] == []
+
+    def test_not_in_with_known_source_subquery_pushed(self):
+        """NOT IN (SELECT ... FROM known_source_alias) CAN be pushed."""
+        optimizer = self._make_optimizer()
+
+        # Subquery references alias 'r' which IS a known source — this is safe
+        # to push (hypothetical: filter c by values in r, both from same DB)
+        sql = (
+            "SELECT c.customer_code "
+            "FROM _dvt_abc_c c "
+            "WHERE c.region NOT IN "
+            "(SELECT code FROM r) "
+            "LIMIT 10"
+        )
+        parsed = sqlglot.parse_one(sql, read="spark")
+        alias_to_source = {
+            "c": "source.proj.customers",
+            "r": "source.proj.regions",
+        }
+        result = optimizer._extract_predicates(parsed, alias_to_source)
+        # The subquery references 'r' which is a known source alias — pushable
+        assert len(result["c"]) == 1, f"Expected pushable predicate for 'c': {result}"
+
+    def test_mixed_predicates_partial_push(self):
+        """When WHERE has both pushable and non-pushable predicates, only safe ones push."""
+        optimizer = self._make_optimizer()
+
+        sql = (
+            "SELECT c.customer_code, r.region_name "
+            "FROM _dvt_abc_c c "
+            "LEFT JOIN _dvt_abc_r r ON c.region = r.code "
+            "WHERE r.code = 'MEA' "
+            "AND c.customer_code NOT IN "
+            "(SELECT customer_code FROM _dvt_abc__this) "
+            "ORDER BY c.customer_code LIMIT 10"
+        )
+        parsed = sqlglot.parse_one(sql, read="spark")
+        alias_to_source = {
+            "c": "source.proj.customers",
+            "r": "source.proj.regions",
+        }
+        result = optimizer._extract_predicates(parsed, alias_to_source)
+        # r.code = 'MEA' should be pushed (simple, single-source)
+        assert len(result["r"]) == 1, f"Expected r.code='MEA' pushed: {result}"
+        # NOT IN ({{ this }}) should NOT be pushed
+        assert result["c"] == [], f"NOT IN subquery should not be pushed: {result['c']}"

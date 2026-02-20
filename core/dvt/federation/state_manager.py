@@ -280,6 +280,39 @@ class StateManager:
             shutil.rmtree(self.state_path)
             self.state_path.mkdir(parents=True, exist_ok=True)
 
+    def clear_all_source_staging(self) -> None:
+        """Clear all source staging data and state, preserving model staging.
+
+        Source staging (e.g., source.project.schema.table.delta) must be
+        re-extracted every run because the model SQL may have changed
+        (different columns, predicates, LIMIT).  Model staging
+        (e.g., model.project.name.delta) is preserved so that incremental
+        models can resolve {{ this }} against the previous run's output.
+
+        Called once at the start of each dvt run invocation.
+        """
+        import shutil
+
+        if not self.bucket_path.exists():
+            return
+
+        # Clear source staging files (Delta directories and legacy Parquet)
+        for entry in self.bucket_path.iterdir():
+            if entry.name.startswith("source."):
+                if entry.is_dir():
+                    shutil.rmtree(entry)
+                else:
+                    entry.unlink()
+
+        # Clear source state files (source.*.state.json, source.*.hashes.parquet)
+        if self.state_path.exists():
+            for entry in self.state_path.iterdir():
+                if entry.name.startswith("source."):
+                    if entry.is_dir():
+                        shutil.rmtree(entry)
+                    else:
+                        entry.unlink()
+
     def staging_exists(self, source_name: str) -> bool:
         """Check if staging data exists for a source.
 

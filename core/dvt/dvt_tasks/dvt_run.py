@@ -20,6 +20,7 @@ from dvt.contracts.graph.manifest import Manifest
 from dvt.dvt_compilation.dvt_compiler import DvtCompiler
 from dvt.dvt_runners.federation_runner import FederationModelRunner
 from dvt.dvt_runners.pushdown_runner import NonDefaultPushdownRunner
+from dvt.federation.el_layer import create_el_layer
 from dvt.federation.resolver import ExecutionPath, FederationResolver, ResolvedExecution
 from dvt.federation.spark_manager import SparkManager
 from dvt.task.base import BaseRunner
@@ -69,6 +70,11 @@ class DvtRunTask(RunTask):
         # DVT: Initialize Spark if federation is needed
         if self._federation_count > 0:
             self._initialize_spark_for_federation()
+            # Clear all source staging so every run re-extracts fresh data.
+            # Model staging is preserved for incremental {{ this }} resolution.
+            # Without this, stale staging from a previous run (with different
+            # LIMIT, columns, or predicates) would silently produce wrong results.
+            self._clear_source_staging()
 
         # Delegate to base RunTask.before_run (schema creation, cache, hooks)
         return super().before_run(adapter, selected_uids)
@@ -257,3 +263,27 @@ class DvtRunTask(RunTask):
                 self._spark_initialized = False
             except Exception:
                 pass  # Ignore cleanup errors
+
+    def _clear_source_staging(self) -> None:
+        """Clear all source staging at the start of each dvt run.
+
+        Source data must always be re-extracted because model SQL may have
+        changed since the last run (different LIMIT, columns, predicates).
+        Model staging is preserved for incremental {{ this }} resolution.
+
+        Within a single run, the EL layer's skip logic still deduplicates
+        when multiple models share the same source — because those sources
+        get re-extracted on the first model that needs them, and subsequent
+        models see the fresh staging.
+        """
+        try:
+            profile_name = self.config.profile_name
+            profiles_dir = getattr(self.args, "profiles_dir", None)
+            el_layer = create_el_layer(
+                profile_name=profile_name,
+                profiles_dir=profiles_dir,
+            )
+            if el_layer:
+                el_layer.clear_source_staging()
+        except Exception:
+            pass  # Non-fatal: extraction will proceed normally

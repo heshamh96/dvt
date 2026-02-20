@@ -825,9 +825,12 @@ class FederationEngine:
         registered as the {{ this }} temp view so Spark can resolve self-references
         without querying the remote target.
 
-        For incremental models (mode=append), we APPEND to the existing Delta
-        staging — mirroring what happens on the target. For table models
-        (mode=overwrite), we OVERWRITE the Delta staging.
+        Delta write mode mirrors the target behavior:
+        - table/view: overwrite (target rebuilt every run)
+        - incremental + append (default): append (rows accumulate on target)
+        - incremental + merge: overwrite (target upserts; staging must not
+          accumulate duplicate keys)
+        - incremental + delete+insert: overwrite (target replaces matched rows)
 
         Args:
             spark: SparkSession
@@ -840,7 +843,24 @@ class FederationEngine:
         staging_path = el_layer.state_manager.bucket_path / f"{model_staging_id}.delta"
 
         mat = resolution.coerced_materialization or resolution.original_materialization
-        delta_mode = "append" if mat == "incremental" else "overwrite"
+
+        # Delta write mode must mirror what happens on the target:
+        #   - table/view: overwrite (target is rebuilt every run)
+        #   - incremental + append (default): append (rows accumulate)
+        #   - incremental + merge: overwrite (target upserts matched rows;
+        #     staging must reflect the result, not accumulate duplicates)
+        #   - incremental + delete+insert: overwrite (same reasoning as merge)
+        if mat == "incremental":
+            strategy = getattr(
+                getattr(model, "config", None), "incremental_strategy", None
+            )
+            if strategy in ("merge", "delete+insert"):
+                delta_mode = "overwrite"
+            else:
+                # Default append strategy — staging accumulates like the target
+                delta_mode = "append"
+        else:
+            delta_mode = "overwrite"
 
         try:
             writer = (

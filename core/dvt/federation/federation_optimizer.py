@@ -392,6 +392,23 @@ class FederationOptimizer:
             if not columns:
                 continue
 
+            # Skip predicates that contain subqueries referencing
+            # non-source tables (e.g. {{ this }} resolves to a Spark
+            # temp view that doesn't exist in the source database).
+            subqueries = list(condition.find_all(exp.Subquery, exp.Select))
+            if subqueries:
+                has_non_source_ref = False
+                for sq in subqueries:
+                    for tbl in sq.find_all(exp.Table):
+                        tbl_name = tbl.name
+                        if tbl_name and tbl_name not in alias_to_source:
+                            has_non_source_ref = True
+                            break
+                    if has_non_source_ref:
+                        break
+                if has_non_source_ref:
+                    continue
+
             # Check if ALL columns reference a single alias
             tables: Set[str] = set()
             for col in columns:

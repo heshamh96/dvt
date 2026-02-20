@@ -759,3 +759,89 @@ class TestStateManager:
         state_path = temp_bucket / "_state"
         assert state_path.exists()
         assert list(state_path.iterdir()) == []
+
+    # -------------------------------------------------------------------------
+    # clear_all_source_staging — clears source.* but keeps model.*
+    # -------------------------------------------------------------------------
+
+    def test_clear_all_source_staging_removes_source_deltas(
+        self, state_manager, temp_bucket
+    ):
+        """Source staging directories should be removed."""
+        src = temp_bucket / "source.project.schema.table.delta"
+        src.mkdir(parents=True)
+        (src / "_delta_log").mkdir()
+        (src / "part-00000.parquet").touch()
+
+        state_manager.clear_all_source_staging()
+
+        assert not src.exists()
+
+    def test_clear_all_source_staging_preserves_model_deltas(
+        self, state_manager, temp_bucket
+    ):
+        """Model staging directories must survive source clearing."""
+        mdl = temp_bucket / "model.project.my_model.delta"
+        mdl.mkdir(parents=True)
+        (mdl / "_delta_log").mkdir()
+        (mdl / "part-00000.parquet").touch()
+
+        state_manager.clear_all_source_staging()
+
+        assert mdl.exists()
+        assert (mdl / "part-00000.parquet").exists()
+
+    def test_clear_all_source_staging_removes_source_state_files(
+        self, state_manager, temp_bucket
+    ):
+        """Source state JSON files should be removed."""
+        state_dir = temp_bucket / "_state"
+        state_dir.mkdir(parents=True, exist_ok=True)
+        src_state = state_dir / "source.project.schema.table.state.json"
+        src_state.write_text("{}")
+
+        state_manager.clear_all_source_staging()
+
+        assert not src_state.exists()
+
+    def test_clear_all_source_staging_preserves_model_state_files(
+        self, state_manager, temp_bucket
+    ):
+        """Model state files must survive source clearing."""
+        state_dir = temp_bucket / "_state"
+        state_dir.mkdir(parents=True, exist_ok=True)
+        mdl_state = state_dir / "model.project.my_model.state.json"
+        mdl_state.write_text("{}")
+
+        state_manager.clear_all_source_staging()
+
+        assert mdl_state.exists()
+
+    def test_clear_all_source_staging_handles_multiple_sources(
+        self, state_manager, temp_bucket
+    ):
+        """All source entries cleared, all model entries preserved."""
+        # Create two sources and two models
+        for name in [
+            "source.proj.pg.orders.delta",
+            "source.proj.sf.accounts.delta",
+        ]:
+            d = temp_bucket / name
+            d.mkdir(parents=True)
+            (d / "_delta_log").mkdir()
+
+        for name in [
+            "model.proj.my_model.delta",
+            "model.proj.incr_model.delta",
+        ]:
+            d = temp_bucket / name
+            d.mkdir(parents=True)
+            (d / "_delta_log").mkdir()
+
+        state_manager.clear_all_source_staging()
+
+        remaining = [e.name for e in temp_bucket.iterdir() if e.name != "_state"]
+        assert "source.proj.pg.orders.delta" not in remaining
+        assert "source.proj.sf.accounts.delta" not in remaining
+        assert "model.proj.my_model.delta" in remaining
+        assert "model.proj.incr_model.delta" in remaining

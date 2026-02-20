@@ -651,6 +651,15 @@ class ELLayer:
             self.bucket_path.mkdir(parents=True, exist_ok=True)
         self.state_manager.clear_all_state()
 
+    def clear_source_staging(self) -> None:
+        """Clear all source staging, preserving model staging.
+
+        Must be called once at the start of each dvt run so that source
+        data is always re-extracted fresh.  Model staging is preserved
+        for incremental {{ this }} resolution.
+        """
+        self.state_manager.clear_all_source_staging()
+
     def get_staging_path(self, source_name: str) -> Path:
         """Get the staging file path for a source."""
         return self.state_manager.get_staging_path(source_name)

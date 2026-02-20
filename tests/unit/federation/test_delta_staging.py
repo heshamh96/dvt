@@ -863,3 +863,73 @@ class TestStagingExistsForModels:
             parquet_dir.mkdir()
             (parquet_dir / "part-00000.parquet").touch()
             assert sm.staging_exists("model.proj.test") is True
+
+
+# =============================================================================
+# Model staging Delta mode per incremental strategy
+# =============================================================================
+
+
+class TestModelStagingDeltaMode:
+    """Verify _save_model_staging uses the correct Delta write mode.
+
+    The Delta mode must mirror what happens on the target:
+    - table/view: overwrite
+    - incremental + append (default): append
+    - incremental + merge: overwrite
+    - incremental + delete+insert: overwrite
+    """
+
+    def test_save_model_staging_delta_mode_logic(self):
+        """Verify the source code contains strategy-aware delta mode selection."""
+        import inspect
+        from dvt.federation.engine import FederationEngine
+
+        source = inspect.getsource(FederationEngine._save_model_staging)
+        # Must check incremental_strategy for merge / delete+insert
+        assert "incremental_strategy" in source, (
+            "_save_model_staging should read incremental_strategy from model config"
+        )
+        assert '"merge"' in source or "'merge'" in source, (
+            "_save_model_staging should handle merge strategy"
+        )
+        assert '"delete+insert"' in source or "'delete+insert'" in source, (
+            "_save_model_staging should handle delete+insert strategy"
+        )
+
+    def test_table_materialization_uses_overwrite(self):
+        """Table (non-incremental) models should overwrite staging."""
+        import inspect
+        from dvt.federation.engine import FederationEngine
+
+        source = inspect.getsource(FederationEngine._save_model_staging)
+        # The else branch (non-incremental) must use overwrite
+        assert 'delta_mode = "overwrite"' in source
+
+    def test_append_strategy_uses_append(self):
+        """Default append strategy should append to staging."""
+        import inspect
+        from dvt.federation.engine import FederationEngine
+
+        source = inspect.getsource(FederationEngine._save_model_staging)
+        assert 'delta_mode = "append"' in source
+
+    def test_merge_and_delete_insert_use_overwrite(self):
+        """Merge and delete+insert strategies should overwrite staging.
+
+        These strategies modify existing rows on the target (upsert / replace).
+        If staging accumulated via append, {{ this }} would contain duplicate
+        keys from prior runs, producing incorrect comparisons.
+        """
+        import inspect
+        from dvt.federation.engine import FederationEngine
+
+        source = inspect.getsource(FederationEngine._save_model_staging)
+        # Find the merge/delete+insert branch — it must set overwrite
+        merge_idx = source.find('"merge"')
+        assert merge_idx > 0
+        # After the strategy check, overwrite should be assigned
+        overwrite_after_merge = source.find('delta_mode = "overwrite"', merge_idx - 200)
+        assert overwrite_after_merge > 0, (
+            "merge/delete+insert strategies should set delta_mode to overwrite"
+        )
