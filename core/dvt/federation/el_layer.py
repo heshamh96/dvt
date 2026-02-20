@@ -390,16 +390,27 @@ class ELLayer:
             # Check if column pushdown requires re-extraction (union-of-columns).
             if source.columns is not None:
                 existing_state = self.state_manager.get_source_state(source.source_name)
-                existing_cols = set(existing_state.columns) if existing_state else set()
-                requested_cols = set(source.columns)
+                existing_cols = list(existing_state.columns) if existing_state else []
+                requested_cols = list(source.columns)
 
-                if not requested_cols.issubset(existing_cols):
+                # Case-insensitive comparison: optimizer may lowercase names
+                # while state stores real DB-cased names.
+                existing_lower = {c.lower() for c in existing_cols}
+                requested_lower = {c.lower() for c in requested_cols}
+
+                if not requested_lower.issubset(existing_lower):
                     # Staging is missing columns this model needs.
                     # Re-extract with the union of existing + requested columns.
-                    union_cols = sorted(existing_cols | requested_cols)
+                    # Use existing (real-cased) names as the base, then add any
+                    # genuinely new columns from the requested set.
+                    union_cols = list(existing_cols)  # Start with real-cased existing
+                    for col in requested_cols:
+                        if col.lower() not in existing_lower:
+                            union_cols.append(col)
+                    union_cols.sort(key=lambda c: c.lower())
                     self._log(
                         f"  Union-of-columns: {source.source_name} needs "
-                        f"{len(requested_cols - existing_cols)} additional columns, "
+                        f"{len(requested_lower - existing_lower)} additional columns, "
                         f"re-extracting with {len(union_cols)} total"
                     )
                     # Update source columns and rebuild extraction_sql with union
@@ -465,7 +476,12 @@ class ELLayer:
             result = self._convert_to_delta(
                 parquet_tmp, final_path, source.source_name, result
             )
-            # Save state
+            # Save state — record the columns that were ACTUALLY extracted,
+            # not the full source table schema. This is critical for the
+            # union-of-columns check: when a second model needs different
+            # columns from the same source, we must know what's already in
+            # the Delta staging to decide whether re-extraction is needed.
+            actually_extracted = resolved_columns if resolved_columns else columns
             state = SourceState(
                 source_name=source.source_name,
                 table_name=source.table,
@@ -474,7 +490,7 @@ class ELLayer:
                 last_extracted_at=datetime.now().isoformat(),
                 extraction_method=result.extraction_method,
                 pk_columns=pk_columns or [],
-                columns=columns,
+                columns=actually_extracted,
             )
             self.state_manager.save_source_state(state)
 

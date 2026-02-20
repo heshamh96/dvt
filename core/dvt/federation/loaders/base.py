@@ -140,6 +140,7 @@ class FederationLoader:
         quoted_table = get_quoted_table_name(adapter, config.table_name)
 
         with adapter.connection_named("dvt_loader"):
+            ddl_executed = False
             if config.full_refresh:
                 # Full refresh: DROP + CREATE (Spark will create)
                 self._log(f"Dropping {config.table_name}...")
@@ -148,6 +149,7 @@ class FederationLoader:
                         f"DROP TABLE IF EXISTS {quoted_table} CASCADE",
                         auto_begin=True,
                     )
+                    ddl_executed = True
                 except Exception:
                     # Try without CASCADE (some DBs don't support it)
                     try:
@@ -155,6 +157,7 @@ class FederationLoader:
                             f"DROP TABLE IF EXISTS {quoted_table}",
                             auto_begin=True,
                         )
+                        ddl_executed = True
                     except Exception:
                         pass  # Table might not exist
             elif config.truncate:
@@ -162,11 +165,14 @@ class FederationLoader:
                 self._log(f"Truncating {config.table_name}...")
                 try:
                     adapter.execute(f"TRUNCATE TABLE {quoted_table}", auto_begin=True)
+                    ddl_executed = True
                 except Exception:
                     # Table might not exist - will be created by Spark
                     pass
-            # Commit DDL so it's visible to other connections (JDBC)
-            self._commit(adapter)
+            # Only commit if DDL was actually executed — committing after
+            # a failed TRUNCATE (no open transaction) would itself error.
+            if ddl_executed:
+                self._commit(adapter)
 
     def _ensure_schema_exists(
         self,

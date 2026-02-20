@@ -101,6 +101,137 @@ class TestFederationLoaderDDL:
 
 
 # =============================================================================
+# Bug 5: Connection commit guard on failed TRUNCATE
+# =============================================================================
+
+
+class TestDDLCommitGuard:
+    """Bug 5: When TRUNCATE fails (table doesn't exist), _execute_ddl should
+    NOT call _commit() — there's no open transaction to commit.
+
+    Previously, the except clause swallowed the TRUNCATE error, then the
+    unconditional _commit() would fail because no transaction was active.
+    """
+
+    def test_no_commit_after_failed_truncate(self):
+        """Failed TRUNCATE should NOT trigger commit."""
+        loader = FederationLoader()
+        mock_adapter = MagicMock()
+        mock_adapter.execute.side_effect = Exception("relation does not exist")
+        mock_adapter.connection_named.return_value.__enter__ = Mock(return_value=None)
+        mock_adapter.connection_named.return_value.__exit__ = Mock(return_value=False)
+
+        config = _make_config(full_refresh=False, truncate=True)
+
+        with patch(
+            "dvt.federation.adapter_manager.get_quoted_table_name",
+            return_value='"public"."test_table"',
+        ):
+            loader._execute_ddl(mock_adapter, config)
+
+        # commit should NOT have been called since TRUNCATE failed
+        mock_adapter.connections.commit.assert_not_called()
+
+    def test_commit_after_successful_truncate(self):
+        """Successful TRUNCATE should trigger commit."""
+        loader = FederationLoader()
+        mock_adapter = MagicMock()
+        mock_adapter.execute.return_value = None  # success
+        mock_adapter.connection_named.return_value.__enter__ = Mock(return_value=None)
+        mock_adapter.connection_named.return_value.__exit__ = Mock(return_value=False)
+
+        config = _make_config(full_refresh=False, truncate=True)
+
+        with patch(
+            "dvt.federation.adapter_manager.get_quoted_table_name",
+            return_value='"public"."test_table"',
+        ):
+            loader._execute_ddl(mock_adapter, config)
+
+        # commit SHOULD have been called
+        mock_adapter.connections.commit.assert_called_once()
+
+    def test_no_commit_after_failed_drop_both_variants(self):
+        """If both DROP CASCADE and plain DROP fail, no commit."""
+        loader = FederationLoader()
+        mock_adapter = MagicMock()
+        mock_adapter.execute.side_effect = Exception("permission denied")
+        mock_adapter.connection_named.return_value.__enter__ = Mock(return_value=None)
+        mock_adapter.connection_named.return_value.__exit__ = Mock(return_value=False)
+
+        config = _make_config(full_refresh=True, truncate=True)
+
+        with patch(
+            "dvt.federation.adapter_manager.get_quoted_table_name",
+            return_value='"public"."test_table"',
+        ):
+            loader._execute_ddl(mock_adapter, config)
+
+        mock_adapter.connections.commit.assert_not_called()
+
+    def test_commit_after_successful_drop(self):
+        """Successful DROP should trigger commit."""
+        loader = FederationLoader()
+        mock_adapter = MagicMock()
+        mock_adapter.execute.return_value = None  # success
+        mock_adapter.connection_named.return_value.__enter__ = Mock(return_value=None)
+        mock_adapter.connection_named.return_value.__exit__ = Mock(return_value=False)
+
+        config = _make_config(full_refresh=True, truncate=True)
+
+        with patch(
+            "dvt.federation.adapter_manager.get_quoted_table_name",
+            return_value='"public"."test_table"',
+        ):
+            loader._execute_ddl(mock_adapter, config)
+
+        mock_adapter.connections.commit.assert_called_once()
+
+    def test_no_commit_when_no_ddl_needed(self):
+        """No DDL (truncate=False, full_refresh=False) should not commit."""
+        loader = FederationLoader()
+        mock_adapter = MagicMock()
+        mock_adapter.connection_named.return_value.__enter__ = Mock(return_value=None)
+        mock_adapter.connection_named.return_value.__exit__ = Mock(return_value=False)
+
+        config = _make_config(full_refresh=False, truncate=False)
+
+        with patch(
+            "dvt.federation.adapter_manager.get_quoted_table_name",
+            return_value='"public"."test_table"',
+        ):
+            loader._execute_ddl(mock_adapter, config)
+
+        mock_adapter.connections.commit.assert_not_called()
+
+    def test_commit_after_drop_cascade_fails_but_plain_drop_succeeds(self):
+        """DROP CASCADE fails, plain DROP succeeds → commit should happen."""
+        loader = FederationLoader()
+        mock_adapter = MagicMock()
+        call_count = [0]
+
+        def selective_execute(sql, auto_begin=False):
+            call_count[0] += 1
+            if "CASCADE" in sql:
+                raise Exception("CASCADE not supported")
+            # Plain DROP succeeds
+
+        mock_adapter.execute.side_effect = selective_execute
+        mock_adapter.connection_named.return_value.__enter__ = Mock(return_value=None)
+        mock_adapter.connection_named.return_value.__exit__ = Mock(return_value=False)
+
+        config = _make_config(full_refresh=True, truncate=True)
+
+        with patch(
+            "dvt.federation.adapter_manager.get_quoted_table_name",
+            return_value='"public"."test_table"',
+        ):
+            loader._execute_ddl(mock_adapter, config)
+
+        mock_adapter.connections.commit.assert_called_once()
+
+
+# =============================================================================
 # LoadConfig defaults
 # =============================================================================
 
