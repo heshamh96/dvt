@@ -329,3 +329,63 @@ class TestBuildCreateTableSql:
             assert "IF NOT EXISTS" in result
         finally:
             spark.stop()
+
+    def test_databricks_includes_tblproperties(self):
+        """Databricks CREATE TABLE should include Delta Column Mapping TBLPROPERTIES."""
+        from pyspark.sql import SparkSession
+
+        spark = SparkSession.builder.appName("test").master("local[1]").getOrCreate()
+        try:
+            df = spark.createDataFrame(
+                [("CUST001", 100)], ["Customer Code", "Total Amount"]
+            )
+            result = build_create_table_sql(
+                df, "databricks", "`catalog`.`schema`.`table`"
+            )
+
+            assert "TBLPROPERTIES" in result
+            assert "'delta.columnMapping.mode' = 'name'" in result
+            assert "'delta.minReaderVersion' = '2'" in result
+            assert "'delta.minWriterVersion' = '5'" in result
+        finally:
+            spark.stop()
+
+    def test_spark_includes_tblproperties(self):
+        """Spark CREATE TABLE should include Delta Column Mapping TBLPROPERTIES."""
+        from pyspark.sql import SparkSession
+
+        spark = SparkSession.builder.appName("test").master("local[1]").getOrCreate()
+        try:
+            df = spark.createDataFrame([("Alice", 30)], ["name", "age"])
+            result = build_create_table_sql(df, "spark", "`schema`.`table`")
+
+            assert "TBLPROPERTIES" in result
+            assert "'delta.columnMapping.mode' = 'name'" in result
+        finally:
+            spark.stop()
+
+    def test_postgres_no_tblproperties(self):
+        """Postgres CREATE TABLE should NOT include TBLPROPERTIES."""
+        from pyspark.sql import SparkSession
+
+        spark = SparkSession.builder.appName("test").master("local[1]").getOrCreate()
+        try:
+            df = spark.createDataFrame([("Alice", 30)], ["name", "age"])
+            result = build_create_table_sql(df, "postgres", '"public"."test"')
+
+            assert "TBLPROPERTIES" not in result
+        finally:
+            spark.stop()
+
+    def test_snowflake_no_tblproperties(self):
+        """Snowflake CREATE TABLE should NOT include TBLPROPERTIES."""
+        from pyspark.sql import SparkSession
+
+        spark = SparkSession.builder.appName("test").master("local[1]").getOrCreate()
+        try:
+            df = spark.createDataFrame([("Alice", 30)], ["name", "age"])
+            result = build_create_table_sql(df, "snowflake", '"schema"."test"')
+
+            assert "TBLPROPERTIES" not in result
+        finally:
+            spark.stop()

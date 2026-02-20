@@ -196,7 +196,21 @@ def build_create_table_sql(df: Any, adapter_type: str, quoted_table_name: str) -
         col_defs.append(f"{col_name} {sql_type}")
 
     columns_sql = ",\n  ".join(col_defs)
-    return f"CREATE TABLE IF NOT EXISTS {quoted_table_name} (\n  {columns_sql}\n)"
+    create_sql = f"CREATE TABLE IF NOT EXISTS {quoted_table_name} (\n  {columns_sql}\n)"
+
+    # Delta Lake rejects column names with spaces unless Column Mapping is enabled.
+    # Add TBLPROPERTIES for Databricks/Spark to enable 'name' mapping mode, which
+    # decouples logical column names from physical Parquet field names.
+    if adapter_type.lower() in ("databricks", "spark"):
+        create_sql += (
+            "\nTBLPROPERTIES (\n"
+            "  'delta.columnMapping.mode' = 'name',\n"
+            "  'delta.minReaderVersion' = '2',\n"
+            "  'delta.minWriterVersion' = '5'\n"
+            ")"
+        )
+
+    return create_sql
 
 
 def spark_type_to_jdbc_type(spark_type: Any) -> str:
