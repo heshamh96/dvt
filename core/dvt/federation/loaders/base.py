@@ -303,35 +303,22 @@ class FederationLoader:
             # Determine mode and DDL handling
             #
             # For Databricks targets with special-character columns (spaces,
-            # hyphens, etc.): the adapter DDL path creates the table with
-            # Delta Column Mapping TBLPROPERTIES, but Spark's JDBC writer
-            # cannot INSERT into column-mapped tables (the JDBC driver
-            # cannot resolve physical column names). In this case, we skip
-            # adapter DDL entirely and let Spark handle both DDL and data
-            # through a single JDBC connection — avoiding the two-connection
-            # column mapping mismatch.
+            # hyphens, etc.): both the adapter DDL + JDBC append path AND the
+            # pure Spark JDBC path fail. The Databricks server rejects CREATE
+            # TABLE with special chars unless column mapping is enabled, and
+            # the JDBC driver can't INSERT into column-mapped tables. For this
+            # case, we dispatch to _load_via_adapter() which uses the adapter's
+            # SQL Connector for both DDL and data.
             from dvt.utils.identifiers import needs_column_mapping
 
-            use_spark_only = adapter_type in (
-                "databricks",
-                "spark",
-            ) and needs_column_mapping(df)
+            if (
+                adapter
+                and adapter_type in ("databricks", "spark")
+                and needs_column_mapping(df)
+            ):
+                return self._load_via_adapter(df, config, adapter)
 
-            if use_spark_only:
-                # Databricks + special column names: let Spark handle everything
-                # through a single JDBC connection (mode=overwrite -> DROP+CREATE+INSERT)
-                self._log(
-                    f"Special column names detected — using Spark-managed JDBC "
-                    f"for {config.table_name} (bypassing adapter DDL)"
-                )
-                write_mode = config.mode
-                if (
-                    config.mode == "overwrite"
-                    and config.truncate
-                    and not config.full_refresh
-                ):
-                    properties["truncate"] = "true"
-            elif adapter and config.mode == "overwrite":
+            if adapter and config.mode == "overwrite":
                 # DDL via adapter (proper quoting), data via Spark JDBC append
                 self._execute_ddl(adapter, config)
                 # Create table with properly quoted column names via adapter
@@ -382,6 +369,152 @@ class FederationLoader:
         except Exception as e:
             elapsed = time.time() - start_time
             self._log(f"JDBC load failed: {e}")
+            return LoadResult(
+                success=False,
+                table_name=config.table_name,
+                error=str(e),
+                elapsed_seconds=elapsed,
+            )
+
+    # =========================================================================
+    # Adapter SQL Connector Load (Databricks + special column names)
+    # =========================================================================
+
+    def _load_via_adapter(
+        self,
+        df: Any,  # pyspark.sql.DataFrame
+        config: LoadConfig,
+        adapter: Any,
+    ) -> LoadResult:
+        """Load using the adapter's SQL Connector for both DDL and data.
+
+        Used when Spark JDBC cannot handle special-character column names
+        on Databricks. The Databricks server rejects CREATE TABLE with
+        spaces in column names unless Delta Column Mapping is enabled,
+        and the JDBC driver cannot INSERT into column-mapped tables.
+
+        This method bypasses Spark JDBC entirely:
+        1. Creates the table via adapter DDL with TBLPROPERTIES
+        2. Collects the DataFrame to Python rows
+        3. Generates batched INSERT statements with quoted column names
+        4. Executes each batch via adapter.execute() (SQL Connector)
+
+        Performance note: This path collects data to the driver. It's
+        suitable for federation models (typically < 100K rows). For very
+        large datasets, users should avoid special-character columns on
+        Databricks targets.
+
+        Args:
+            df: PySpark DataFrame to load
+            config: Load configuration
+            adapter: dbt adapter instance (required, must be Databricks)
+
+        Returns:
+            LoadResult with success status and metadata
+        """
+        start_time = time.time()
+
+        try:
+            from dvt.federation.adapter_manager import get_quoted_table_name
+            from dvt.utils.identifiers import build_create_table_sql, quote_identifier
+
+            adapter_type = adapter.type()
+            quoted_table = get_quoted_table_name(adapter, config.table_name)
+
+            self._log(
+                f"Special column names detected — using adapter SQL Connector "
+                f"for {config.table_name} (bypassing Spark JDBC)"
+            )
+
+            # Step 1: Execute DDL (DROP/TRUNCATE) + CREATE TABLE
+            self._execute_ddl(adapter, config)
+            self._create_table_with_adapter(adapter, df, config)
+
+            # Step 2: Collect DataFrame to Python rows
+            self._log("Collecting data for adapter-based INSERT...")
+            rows = df.collect()
+            row_count = len(rows)
+
+            if row_count == 0:
+                elapsed = time.time() - start_time
+                self._log(f"No rows to insert (0 rows, {elapsed:.1f}s)")
+                return LoadResult(
+                    success=True,
+                    table_name=config.table_name,
+                    row_count=0,
+                    load_method="adapter",
+                    elapsed_seconds=elapsed,
+                )
+
+            # Step 3: Build column list (quoted for Databricks)
+            col_names = [field.name for field in df.schema.fields]
+            quoted_cols = ", ".join(
+                quote_identifier(c, adapter_type) for c in col_names
+            )
+
+            # Step 4: Batch INSERT via adapter
+            batch_size = (config.jdbc_config or {}).get("batch_size", 1000)
+            total_batches = (row_count + batch_size - 1) // batch_size
+
+            with adapter.connection_named("dvt_loader"):
+                for batch_num in range(total_batches):
+                    start_idx = batch_num * batch_size
+                    end_idx = min(start_idx + batch_size, row_count)
+                    batch = rows[start_idx:end_idx]
+
+                    # Build VALUES rows with proper SQL escaping
+                    value_rows = []
+                    for row in batch:
+                        vals = []
+                        for val in row:
+                            if val is None:
+                                vals.append("NULL")
+                            elif isinstance(val, str):
+                                # Escape single quotes by doubling them
+                                escaped = val.replace("'", "''")
+                                vals.append(f"'{escaped}'")
+                            elif isinstance(val, bool):
+                                vals.append("TRUE" if val else "FALSE")
+                            elif isinstance(val, (int, float)):
+                                vals.append(str(val))
+                            else:
+                                # datetime, date, decimal, etc. — stringify
+                                escaped = str(val).replace("'", "''")
+                                vals.append(f"'{escaped}'")
+                        value_rows.append(f"({', '.join(vals)})")
+
+                    values_sql = ",\n".join(value_rows)
+                    insert_sql = (
+                        f"INSERT INTO {quoted_table} ({quoted_cols})\n"
+                        f"VALUES\n{values_sql}"
+                    )
+
+                    adapter.execute(insert_sql, auto_begin=True)
+
+                    if total_batches > 1:
+                        self._log(
+                            f"  Batch {batch_num + 1}/{total_batches}: "
+                            f"{len(batch)} rows"
+                        )
+
+                self._commit(adapter)
+
+            elapsed = time.time() - start_time
+            self._log(
+                f"Loaded {row_count:,} rows via adapter SQL Connector in {elapsed:.1f}s"
+            )
+
+            return LoadResult(
+                success=True,
+                table_name=config.table_name,
+                row_count=row_count,
+                load_method="adapter",
+                elapsed_seconds=elapsed,
+            )
+
+        except Exception as e:
+            elapsed = time.time() - start_time
+            self._log(f"Adapter load failed: {e}")
             return LoadResult(
                 success=False,
                 table_name=config.table_name,

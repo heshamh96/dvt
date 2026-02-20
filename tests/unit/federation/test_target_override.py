@@ -244,15 +244,17 @@ class TestResolveTargetTableName:
 
 
 # =============================================================================
-# Loader: Databricks + special columns bypasses adapter DDL
+# Loader: Databricks + special columns uses adapter SQL Connector
 # =============================================================================
 
 
 class TestDatabricksSpecialColumnsPath:
-    """Tests that _load_jdbc bypasses adapter DDL for Databricks with special cols."""
+    """Tests that _load_jdbc dispatches to _load_via_adapter for Databricks
+    with special column names, and that _load_via_adapter uses adapter DDL
+    + batched INSERT statements (not Spark JDBC)."""
 
-    def _make_df_mock(self, column_names):
-        """Create a mock DataFrame with the given column names."""
+    def _make_df_mock(self, column_names, rows=None):
+        """Create a mock DataFrame with the given column names and optional rows."""
         from unittest.mock import PropertyMock
 
         fields = []
@@ -266,8 +268,9 @@ class TestDatabricksSpecialColumnsPath:
 
         df = MagicMock()
         type(df).schema = PropertyMock(return_value=schema)
-        df.count.return_value = 10
+        df.count.return_value = len(rows) if rows else 0
         df.repartition.return_value = df
+        df.collect.return_value = rows or []
         return df
 
     def _make_loader_config(self, adapter_type="databricks"):
@@ -287,39 +290,32 @@ class TestDatabricksSpecialColumnsPath:
             jdbc_config={"num_partitions": 1, "batch_size": 100},
         )
 
-    @patch("dvt.federation.loaders.base.FederationLoader._execute_ddl")
-    @patch("dvt.federation.loaders.base.FederationLoader._create_table_with_adapter")
-    def test_special_cols_skips_adapter_ddl(self, mock_create, mock_ddl):
-        """Databricks + special column names should skip adapter DDL."""
+    @patch("dvt.federation.loaders.base.FederationLoader._load_via_adapter")
+    def test_special_cols_dispatches_to_adapter(self, mock_adapter_load):
+        """Databricks + special column names should dispatch to _load_via_adapter."""
         loader = FederationLoader()
         df = self._make_df_mock(["Customer Code", "Total Amount"])
         config = self._make_loader_config("databricks")
         mock_adapter = MagicMock()
+        mock_adapter.type.return_value = "databricks"
+        mock_adapter_load.return_value = MagicMock()
 
         with patch("dvt.federation.spark_manager.SparkManager.get_instance"):
             with patch("dvt.federation.auth.get_auth_handler") as mock_auth:
                 mock_auth_instance = MagicMock()
                 mock_auth_instance.validate.return_value = (True, None)
-                mock_auth_instance.get_jdbc_properties.return_value = {
-                    "user": "token",
-                    "password": "test",
-                }
+                mock_auth_instance.get_jdbc_properties.return_value = {}
                 mock_auth.return_value = mock_auth_instance
 
-                # The JDBC write will fail but we're testing the DDL bypass
-                try:
-                    loader._load_jdbc(df, config, adapter=mock_adapter)
-                except Exception:
-                    pass
+                loader._load_jdbc(df, config, adapter=mock_adapter)
 
-        # Adapter DDL should NOT have been called
-        mock_ddl.assert_not_called()
-        mock_create.assert_not_called()
+        # Should dispatch to _load_via_adapter
+        mock_adapter_load.assert_called_once_with(df, config, mock_adapter)
 
     @patch("dvt.federation.loaders.base.FederationLoader._execute_ddl")
     @patch("dvt.federation.loaders.base.FederationLoader._create_table_with_adapter")
-    def test_simple_cols_uses_adapter_ddl(self, mock_create, mock_ddl):
-        """Databricks + simple column names should use normal adapter DDL path."""
+    def test_simple_cols_uses_jdbc_path(self, mock_create, mock_ddl):
+        """Databricks + simple column names should use normal JDBC path."""
         loader = FederationLoader()
         df = self._make_df_mock(["customer_code", "total_amount"])
         config = self._make_loader_config("databricks")
@@ -340,14 +336,14 @@ class TestDatabricksSpecialColumnsPath:
                 except Exception:
                     pass
 
-        # Adapter DDL SHOULD have been called
+        # Adapter DDL SHOULD have been called (normal JDBC path)
         mock_ddl.assert_called_once()
         mock_create.assert_called_once()
 
     @patch("dvt.federation.loaders.base.FederationLoader._execute_ddl")
     @patch("dvt.federation.loaders.base.FederationLoader._create_table_with_adapter")
-    def test_postgres_special_cols_uses_adapter_ddl(self, mock_create, mock_ddl):
-        """Postgres + special columns should still use adapter DDL (not Databricks)."""
+    def test_postgres_special_cols_uses_jdbc_path(self, mock_create, mock_ddl):
+        """Postgres + special columns should still use JDBC path (not adapter path)."""
         loader = FederationLoader()
         df = self._make_df_mock(["Customer Code", "Total Amount"])
         config = self._make_loader_config("postgres")
@@ -373,6 +369,129 @@ class TestDatabricksSpecialColumnsPath:
                 except Exception:
                     pass
 
-        # Postgres: ALWAYS uses adapter DDL regardless of column names
+        # Postgres: ALWAYS uses JDBC path regardless of column names
         mock_ddl.assert_called_once()
         mock_create.assert_called_once()
+
+    @patch("dvt.federation.loaders.base.FederationLoader._execute_ddl")
+    @patch("dvt.federation.loaders.base.FederationLoader._create_table_with_adapter")
+    @patch("dvt.federation.loaders.base.FederationLoader._commit")
+    @patch("dvt.federation.adapter_manager.get_quoted_table_name")
+    def test_load_via_adapter_uses_ddl_and_insert(
+        self, mock_quote, mock_commit, mock_create, mock_ddl
+    ):
+        """_load_via_adapter creates table via DDL then INSERTs via adapter."""
+        from unittest.mock import call
+
+        mock_quote.return_value = "`dvt_test`.`test_table`"
+
+        loader = FederationLoader()
+        # Two rows of data
+        row1 = MagicMock()
+        row1.__iter__ = Mock(return_value=iter(["CUST001", 100]))
+        row2 = MagicMock()
+        row2.__iter__ = Mock(return_value=iter(["CUST002", 200]))
+
+        df = self._make_df_mock(["Customer Code", "quantity"], rows=[row1, row2])
+        config = self._make_loader_config("databricks")
+        mock_adapter = MagicMock()
+        mock_adapter.type.return_value = "databricks"
+
+        result = loader._load_via_adapter(df, config, mock_adapter)
+
+        assert result.success is True
+        assert result.row_count == 2
+        assert result.load_method == "adapter"
+
+        # DDL and CREATE TABLE should have been called
+        mock_ddl.assert_called_once()
+        mock_create.assert_called_once()
+
+        # adapter.execute should have been called with INSERT INTO ... VALUES
+        insert_calls = [
+            c for c in mock_adapter.execute.call_args_list if "INSERT INTO" in str(c)
+        ]
+        assert len(insert_calls) == 1  # One batch for 2 rows
+        insert_sql = insert_calls[0][0][0]
+        assert "INSERT INTO `dvt_test`.`test_table`" in insert_sql
+        assert "`Customer Code`" in insert_sql
+        assert "`quantity`" in insert_sql
+        assert "CUST001" in insert_sql
+        assert "CUST002" in insert_sql
+
+    @patch("dvt.federation.loaders.base.FederationLoader._execute_ddl")
+    @patch("dvt.federation.loaders.base.FederationLoader._create_table_with_adapter")
+    @patch("dvt.federation.loaders.base.FederationLoader._commit")
+    @patch("dvt.federation.adapter_manager.get_quoted_table_name")
+    def test_load_via_adapter_escapes_values(
+        self, mock_quote, mock_commit, mock_create, mock_ddl
+    ):
+        """_load_via_adapter properly escapes SQL values."""
+        mock_quote.return_value = "`dvt_test`.`test_table`"
+
+        loader = FederationLoader()
+        row = MagicMock()
+        row.__iter__ = Mock(return_value=iter(["O'Brien", None, 42, True]))
+
+        df = self._make_df_mock(
+            ["Customer Name", "Notes", "age", "active"],
+            rows=[row],
+        )
+        config = self._make_loader_config("databricks")
+        mock_adapter = MagicMock()
+        mock_adapter.type.return_value = "databricks"
+
+        result = loader._load_via_adapter(df, config, mock_adapter)
+        assert result.success is True
+
+        insert_sql = mock_adapter.execute.call_args[0][0]
+        # Single quotes escaped by doubling
+        assert "O''Brien" in insert_sql
+        # NULL literal
+        assert "NULL" in insert_sql
+        # Numeric literal (no quotes)
+        assert "42" in insert_sql
+        # Boolean literal
+        assert "TRUE" in insert_sql
+
+    @patch("dvt.federation.loaders.base.FederationLoader._execute_ddl")
+    @patch("dvt.federation.loaders.base.FederationLoader._create_table_with_adapter")
+    @patch("dvt.federation.loaders.base.FederationLoader._commit")
+    @patch("dvt.federation.adapter_manager.get_quoted_table_name")
+    def test_load_via_adapter_empty_df(
+        self, mock_quote, mock_commit, mock_create, mock_ddl
+    ):
+        """_load_via_adapter handles empty DataFrames gracefully."""
+        mock_quote.return_value = "`dvt_test`.`test_table`"
+
+        loader = FederationLoader()
+        df = self._make_df_mock(["Customer Code"], rows=[])
+        config = self._make_loader_config("databricks")
+        mock_adapter = MagicMock()
+        mock_adapter.type.return_value = "databricks"
+
+        result = loader._load_via_adapter(df, config, mock_adapter)
+        assert result.success is True
+        assert result.row_count == 0
+        # adapter.execute should NOT have been called (no INSERTs)
+        mock_adapter.execute.assert_not_called()
+
+    @patch("dvt.federation.loaders.base.FederationLoader._load_via_adapter")
+    def test_no_adapter_skips_special_cols_check(self, mock_adapter_load):
+        """When no adapter provided, skip special cols check — use pure JDBC."""
+        loader = FederationLoader()
+        df = self._make_df_mock(["Customer Code", "Total Amount"])
+        config = self._make_loader_config("databricks")
+
+        with patch("dvt.federation.spark_manager.SparkManager.get_instance"):
+            with patch("dvt.federation.auth.get_auth_handler") as mock_auth:
+                mock_auth_instance = MagicMock()
+                mock_auth_instance.validate.return_value = (True, None)
+                mock_auth_instance.get_jdbc_properties.return_value = {}
+                mock_auth.return_value = mock_auth_instance
+
+                # No adapter -> should NOT dispatch to _load_via_adapter
+                loader._load_jdbc(df, config, adapter=None)
+
+        # _load_via_adapter should NOT have been called
+        mock_adapter_load.assert_not_called()
