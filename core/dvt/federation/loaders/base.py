@@ -301,7 +301,37 @@ class FederationLoader:
             }
 
             # Determine mode and DDL handling
-            if adapter and config.mode == "overwrite":
+            #
+            # For Databricks targets with special-character columns (spaces,
+            # hyphens, etc.): the adapter DDL path creates the table with
+            # Delta Column Mapping TBLPROPERTIES, but Spark's JDBC writer
+            # cannot INSERT into column-mapped tables (the JDBC driver
+            # cannot resolve physical column names). In this case, we skip
+            # adapter DDL entirely and let Spark handle both DDL and data
+            # through a single JDBC connection — avoiding the two-connection
+            # column mapping mismatch.
+            from dvt.utils.identifiers import needs_column_mapping
+
+            use_spark_only = adapter_type in (
+                "databricks",
+                "spark",
+            ) and needs_column_mapping(df)
+
+            if use_spark_only:
+                # Databricks + special column names: let Spark handle everything
+                # through a single JDBC connection (mode=overwrite -> DROP+CREATE+INSERT)
+                self._log(
+                    f"Special column names detected — using Spark-managed JDBC "
+                    f"for {config.table_name} (bypassing adapter DDL)"
+                )
+                write_mode = config.mode
+                if (
+                    config.mode == "overwrite"
+                    and config.truncate
+                    and not config.full_refresh
+                ):
+                    properties["truncate"] = "true"
+            elif adapter and config.mode == "overwrite":
                 # DDL via adapter (proper quoting), data via Spark JDBC append
                 self._execute_ddl(adapter, config)
                 # Create table with properly quoted column names via adapter

@@ -974,6 +974,74 @@ class FederationEngine:
 
         return result
 
+    def _resolve_target_table_name(
+        self,
+        model: Any,
+        resolution: ResolvedExecution,
+        target_config: Dict[str, Any],
+    ) -> str:
+        """Resolve the fully-qualified table name for writing to the target.
+
+        When --target overrides the model's configured target, the model's
+        schema/database (set at parse time from the default target) may not
+        match the override target. This method resolves the correct
+        schema and database from the override target's credentials.
+
+        Priority for schema:
+        1. Model's explicit schema config (user set config(schema='...'))
+        2. Override target's schema from profiles.yml
+        3. model.schema (parse-time default)
+
+        Priority for database/catalog:
+        1. Override target's catalog/database from profiles.yml
+        2. model.database (parse-time default)
+
+        Args:
+            model: ModelNode
+            resolution: Resolved execution details
+            target_config: Connection config dict for the target
+
+        Returns:
+            Fully-qualified table name (schema.table or catalog.schema.table)
+        """
+        adapter_type = target_config.get("type", "")
+
+        # Determine if --target is overriding the model's own target
+        model_config_target = getattr(getattr(model, "config", None), "target", None)
+        default_target = self._get_default_target()
+        model_own_target = model_config_target or default_target
+        is_target_override = resolution.target != model_own_target
+
+        if is_target_override:
+            # Check if the model has an explicit custom schema config.
+            # If the model defines config(schema='my_schema'), respect it
+            # even on the override target. Otherwise use the target's schema.
+            model_has_custom_schema = getattr(
+                getattr(model, "config", None), "schema", None
+            )
+
+            if model_has_custom_schema:
+                effective_schema = model.schema
+            else:
+                effective_schema = target_config.get("schema") or model.schema
+
+            # Database/catalog: always use override target's value
+            effective_database = (
+                target_config.get("catalog")
+                or target_config.get("database")
+                or getattr(model, "database", None)
+                or ""
+            )
+        else:
+            effective_schema = model.schema
+            effective_database = getattr(model, "database", None) or ""
+
+        # Build table name: catalog.schema.table or schema.table
+        if effective_database and adapter_type in ("databricks", "spark"):
+            return f"{effective_database}.{effective_schema}.{model.name}"
+        else:
+            return f"{effective_schema}.{model.name}"
+
     def _write_to_target(
         self,
         df: Any,
@@ -1061,8 +1129,13 @@ class FederationEngine:
                 else:
                     unique_key = None
 
+        # Resolve target table name — handles --target schema/database override
+        target_table_name = self._resolve_target_table_name(
+            model, resolution, target_config
+        )
+
         load_config = LoadConfig(
-            table_name=f"{model.schema}.{model.name}",
+            table_name=target_table_name,
             mode=mode,
             truncate=truncate,
             full_refresh=full_refresh,
