@@ -443,12 +443,28 @@ class ELLayer:
                         extraction_method="skip",
                     )
             else:
-                # SELECT * — staging has everything
-                return ExtractionResult(
-                    success=True,
-                    source_name=source.source_name,
-                    extraction_method="skip",
-                )
+                # SELECT * — check whether staging actually has all source columns.
+                # A previous model may have extracted only a subset (column pushdown),
+                # so we cannot assume staging covers everything.
+                existing_state = self.state_manager.get_source_state(source.source_name)
+                existing_cols = list(existing_state.columns) if existing_state else []
+                all_source_cols_lower = {c.lower() for c in columns}
+                existing_lower = {c.lower() for c in existing_cols}
+
+                if not all_source_cols_lower.issubset(existing_lower):
+                    # Staging is missing columns — re-extract with all source columns
+                    self._log(
+                        f"  Union-of-columns: {source.source_name} SELECT * needs "
+                        f"{len(all_source_cols_lower - existing_lower)} additional columns, "
+                        f"re-extracting with all {len(columns)} columns"
+                    )
+                    # Fall through to extraction below (columns=None → SELECT *)
+                else:
+                    return ExtractionResult(
+                        success=True,
+                        source_name=source.source_name,
+                        extraction_method="skip",
+                    )
 
         # Auto-detect primary key if not provided
         pk_columns = source.pk_columns

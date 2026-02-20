@@ -597,3 +597,191 @@ class TestBug4EndToEnd:
 
         # Model B's columns are a subset — should skip
         assert result_b.extraction_method == "skip"
+
+    @patch("dvt.federation.el_layer.get_extractor")
+    def test_select_star_after_subset_triggers_re_extraction(
+        self, mock_get_extractor, tmp_path
+    ):
+        """Bug 4 Dimension 3: SELECT * after a subset extraction must re-extract.
+
+        Model A extracts [Customer Code, Quantity, SKU Code] from transactions_a.
+        Model B needs SELECT * (all 10 columns).  The staging only has 3 columns,
+        so the SELECT * model must trigger re-extraction with all columns.
+        """
+        all_source_cols = [
+            "Customer Code",
+            "Quantity",
+            "SKU Code",
+            "Ordering Date",
+            "Delivery Date",
+            "Days For Delivery",
+            "Day",
+            "Month",
+            "Year",
+            "Calendar Day",
+        ]
+        mock_get_extractor.return_value = self._mock_extractor(all_source_cols)
+
+        el = ELLayer(bucket_path=tmp_path / "staging", profile_name="test")
+
+        def fake_convert(parquet_path, delta_path, source_name, extraction_result):
+            (delta_path / "_delta_log").mkdir(parents=True, exist_ok=True)
+            return ExtractionResult(
+                success=True,
+                source_name=source_name,
+                row_count=100,
+                extraction_method="jdbc",
+            )
+
+        # --- Model A: full-refresh, extracts 3 columns ---
+        source_a = SourceConfig(
+            source_name="pg__transactions_a",
+            adapter_type="postgres",
+            schema="public",
+            table="transactions_a",
+            connection=None,
+            connection_config={"type": "postgres"},
+            columns=["customer code", "quantity", "sku code"],
+        )
+
+        with patch.object(el, "_convert_to_delta", side_effect=fake_convert):
+            result_a = el._extract_source_locked(source_a, full_refresh=True)
+        assert result_a.extraction_method == "jdbc"
+
+        # State after A: only 3 columns
+        state_a = el.state_manager.get_source_state("pg__transactions_a")
+        assert len(state_a.columns) == 3
+
+        # --- Model B: full-refresh (same run), needs SELECT * (all 10) ---
+        source_b = SourceConfig(
+            source_name="pg__transactions_a",
+            adapter_type="postgres",
+            schema="public",
+            table="transactions_a",
+            connection=None,
+            connection_config={"type": "postgres"},
+            columns=None,  # SELECT *
+        )
+
+        with patch.object(el, "_convert_to_delta", side_effect=fake_convert):
+            result_b = el._extract_source_locked(source_b, full_refresh=True)
+
+        # SELECT * should NOT skip — staging only has 3 out of 10 columns
+        assert result_b.extraction_method == "jdbc"
+
+        # State should now have all 10 columns
+        state_b = el.state_manager.get_source_state("pg__transactions_a")
+        assert len(state_b.columns) == 10
+
+    @patch("dvt.federation.el_layer.get_extractor")
+    def test_select_star_after_full_extraction_skips(
+        self, mock_get_extractor, tmp_path
+    ):
+        """SELECT * after a SELECT * extraction should skip (all columns present)."""
+        all_source_cols = [
+            "Customer Code",
+            "Quantity",
+            "SKU Code",
+            "Ordering Date",
+        ]
+        mock_get_extractor.return_value = self._mock_extractor(all_source_cols)
+
+        el = ELLayer(bucket_path=tmp_path / "staging", profile_name="test")
+
+        def fake_convert(parquet_path, delta_path, source_name, extraction_result):
+            (delta_path / "_delta_log").mkdir(parents=True, exist_ok=True)
+            return ExtractionResult(
+                success=True,
+                source_name=source_name,
+                row_count=100,
+                extraction_method="jdbc",
+            )
+
+        # --- Model A: full-refresh, SELECT * ---
+        source_a = SourceConfig(
+            source_name="pg__transactions_a",
+            adapter_type="postgres",
+            schema="public",
+            table="transactions_a",
+            connection=None,
+            connection_config={"type": "postgres"},
+            columns=None,  # SELECT *
+        )
+
+        with patch.object(el, "_convert_to_delta", side_effect=fake_convert):
+            el._extract_source_locked(source_a, full_refresh=True)
+
+        # --- Model B: full-refresh (same run), also SELECT * ---
+        source_b = SourceConfig(
+            source_name="pg__transactions_a",
+            adapter_type="postgres",
+            schema="public",
+            table="transactions_a",
+            connection=None,
+            connection_config={"type": "postgres"},
+            columns=None,  # SELECT *
+        )
+
+        with patch.object(el, "_convert_to_delta", side_effect=fake_convert):
+            result_b = el._extract_source_locked(source_b, full_refresh=True)
+
+        # All columns already in staging — should skip
+        assert result_b.extraction_method == "skip"
+
+    @patch("dvt.federation.el_layer.get_extractor")
+    def test_select_star_incremental_after_subset_triggers_re_extraction(
+        self, mock_get_extractor, tmp_path
+    ):
+        """Incremental SELECT * after subset extraction must re-extract.
+
+        Same as Dimension 3 but without full-refresh. The normal skip path
+        should also detect that staging has fewer columns than SELECT * needs.
+        """
+        all_source_cols = ["Col_A", "Col_B", "Col_C", "Col_D"]
+        mock_get_extractor.return_value = self._mock_extractor(all_source_cols)
+
+        el = ELLayer(bucket_path=tmp_path / "staging", profile_name="test")
+
+        def fake_convert(parquet_path, delta_path, source_name, extraction_result):
+            (delta_path / "_delta_log").mkdir(parents=True, exist_ok=True)
+            return ExtractionResult(
+                success=True,
+                source_name=source_name,
+                row_count=50,
+                extraction_method="jdbc",
+            )
+
+        # --- Model A: extracts [Col_A, Col_B] ---
+        source_a = SourceConfig(
+            source_name="test__src",
+            adapter_type="postgres",
+            schema="public",
+            table="src",
+            connection=None,
+            connection_config={"type": "postgres"},
+            columns=["col_a", "col_b"],
+        )
+
+        with patch.object(el, "_convert_to_delta", side_effect=fake_convert):
+            el._extract_source_locked(source_a, full_refresh=False)
+
+        # --- Model B: needs SELECT * (all 4 columns) ---
+        source_b = SourceConfig(
+            source_name="test__src",
+            adapter_type="postgres",
+            schema="public",
+            table="src",
+            connection=None,
+            connection_config={"type": "postgres"},
+            columns=None,  # SELECT *
+        )
+
+        with patch.object(el, "_convert_to_delta", side_effect=fake_convert):
+            result_b = el._extract_source_locked(source_b, full_refresh=False)
+
+        # SELECT * should re-extract — staging only has 2 out of 4 columns
+        assert result_b.extraction_method == "jdbc"
+
+        # State should now have all 4
+        state_b = el.state_manager.get_source_state("test__src")
+        assert len(state_b.columns) == 4
