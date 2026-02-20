@@ -226,6 +226,54 @@ class TestResolveTargetTableName:
         result = engine._resolve_target_table_name(model, resolution, target_config)
         assert result == "public.test_model"
 
+    def test_no_override_databricks_uses_target_config_catalog(self):
+        """Native DBX model (config.target='dbx_dev') with pg_dev as default target.
+
+        model.database is 'postgres' (set at parse time from pg_dev default),
+        but the actual target is dbx_dev with catalog='demo'. The else branch
+        must read catalog from target_config, not model.database.
+        Bug: without fix, resolves to 'postgres.dvt_test.test_model'.
+        """
+        engine = _make_engine(default_target="pg_dev")
+        model = MockModel(
+            name="test_model",
+            schema="dvt_test",
+            database="postgres",  # parse-time from pg_dev default!
+            config=MockModelConfig(target="dbx_dev", schema="dvt_test"),
+        )
+        # resolution.target == model_own_target -> no override
+        resolution = _make_resolution(target="dbx_dev")
+        target_config = {"type": "databricks", "schema": "dvt_test", "catalog": "demo"}
+
+        result = engine._resolve_target_table_name(model, resolution, target_config)
+        # Must use catalog from target_config, NOT model.database
+        assert result == "demo.dvt_test.test_model"
+
+    def test_no_override_snowflake_uses_target_config_database(self):
+        """Native SF model (config.target='disf_dev') with pg_dev as default target.
+
+        model.database is 'postgres' (parse-time), but actual target is disf_dev
+        with database='Coke_DB'. Should resolve to schema.table (not 3-part
+        since snowflake is not databricks/spark).
+        """
+        engine = _make_engine(default_target="pg_dev")
+        model = MockModel(
+            name="test_model",
+            schema="public",
+            database="postgres",  # parse-time from pg_dev default!
+            config=MockModelConfig(target="disf_dev"),
+        )
+        resolution = _make_resolution(target="disf_dev")
+        target_config = {
+            "type": "snowflake",
+            "schema": "public",
+            "database": "Coke_DB",
+        }
+
+        result = engine._resolve_target_table_name(model, resolution, target_config)
+        # Snowflake: not databricks/spark, so 2-part even with database
+        assert result == "public.test_model"
+
     def test_databricks_no_catalog_uses_2part(self):
         """Databricks without catalog in config falls back to 2-part name."""
         engine = _make_engine(default_target="pg_dev")
@@ -495,3 +543,135 @@ class TestDatabricksSpecialColumnsPath:
 
         # _load_via_adapter should NOT have been called
         mock_adapter_load.assert_not_called()
+
+
+# =============================================================================
+# SparkManager: Snowflake JDBC URL warehouse parameter
+# =============================================================================
+
+
+class TestSnowflakeJdbcUrl:
+    """Tests for SparkManager.get_jdbc_url() Snowflake warehouse parameter."""
+
+    def _make_spark_manager(self):
+        """Create a SparkManager instance without starting Spark."""
+        from dvt.federation.spark_manager import SparkManager
+
+        mgr = object.__new__(SparkManager)
+        mgr._session = None
+        return mgr
+
+    def test_snowflake_jdbc_url_includes_warehouse(self):
+        """Snowflake JDBC URL must include warehouse param for partition writers."""
+        mgr = self._make_spark_manager()
+        connection = {
+            "type": "snowflake",
+            "account": "abc123",
+            "database": "MY_DB",
+            "schema": "public",
+            "warehouse": "COMPUTE_WH",
+        }
+        url = mgr.get_jdbc_url(connection)
+        assert "warehouse=COMPUTE_WH" in url
+        assert "db=MY_DB" in url
+        assert "schema=public" in url
+        assert "abc123.snowflakecomputing.com" in url
+
+    def test_snowflake_jdbc_url_no_warehouse(self):
+        """Snowflake JDBC URL without warehouse should not have empty param."""
+        mgr = self._make_spark_manager()
+        connection = {
+            "type": "snowflake",
+            "account": "abc123",
+            "database": "MY_DB",
+            "schema": "public",
+        }
+        url = mgr.get_jdbc_url(connection)
+        assert "warehouse=" not in url
+        assert "db=MY_DB" in url
+
+    def test_snowflake_jdbc_url_empty_warehouse(self):
+        """Snowflake JDBC URL with empty warehouse string should omit param."""
+        mgr = self._make_spark_manager()
+        connection = {
+            "type": "snowflake",
+            "account": "abc123",
+            "database": "MY_DB",
+            "schema": "public",
+            "warehouse": "",
+        }
+        url = mgr.get_jdbc_url(connection)
+        assert "warehouse=" not in url
+
+
+# =============================================================================
+# Test: _translate_to_spark NOT IN fix (Bug 4)
+# =============================================================================
+
+sqlglot = pytest.importorskip("sqlglot")
+
+
+class TestTranslateToSparkNotIn:
+    """Verify that _translate_to_spark fixes SQLGlot's Snowflake->Spark
+    transpilation of NOT IN (subquery) -> <> ALL (subquery).
+
+    Bug: SQLGlot parses Snowflake NOT IN as NEQ+All, then emits <> ALL
+    which Spark SQL doesn't support. The fix transforms it back to NOT ... IN.
+    """
+
+    def _make_engine(self):
+        """Build a minimal FederationEngine with mocked dependencies."""
+        from dvt.federation.engine import FederationEngine
+
+        engine = MagicMock()
+        engine._translate_to_spark = FederationEngine._translate_to_spark.__get__(
+            engine
+        )
+        return engine
+
+    def test_snowflake_not_in_subquery_becomes_spark_not_in(self):
+        """NOT IN (SELECT ...) in Snowflake SQL must become NOT ... IN (SELECT ...) in Spark."""
+        engine = self._make_engine()
+        sql = (
+            'SELECT c."Customer Code" AS customer_code '
+            "FROM customers_db_1 AS c "
+            'WHERE c."Customer Code" NOT IN (SELECT customer_code FROM this_view) '
+            "LIMIT 25"
+        )
+        result = engine._translate_to_spark(sql, "snowflake", {})
+        # Must NOT contain <> ALL
+        assert "<> ALL" not in result, f"<> ALL found in: {result}"
+        assert "NOT" in result.upper()
+        assert "IN" in result.upper()
+        # Should contain NOT ... IN (SELECT ...)
+        assert "IN (SELECT" in result or "IN\n(SELECT" in result
+
+    def test_postgres_not_in_subquery_unchanged(self):
+        """NOT IN from Postgres dialect should also work (no <> ALL)."""
+        engine = self._make_engine()
+        sql = (
+            "SELECT c.id FROM customers AS c "
+            "WHERE c.id NOT IN (SELECT id FROM existing) "
+            "LIMIT 10"
+        )
+        result = engine._translate_to_spark(sql, "postgres", {})
+        assert "<> ALL" not in result, f"<> ALL found in: {result}"
+        assert "IN" in result.upper()
+
+    def test_not_in_with_view_mapping_replacement(self):
+        """NOT IN + view mapping replacement should both work together."""
+        engine = self._make_engine()
+        sql = (
+            'SELECT c."id" FROM "mydb"."public"."customers" AS c '
+            'WHERE c."id" NOT IN (SELECT id FROM "mydb"."public"."this_table") '
+            "LIMIT 25"
+        )
+        mappings = {
+            "mydb.public.customers": "_dvt_abc_c",
+            "mydb.public.this_table": "_dvt_abc__this",
+        }
+        result = engine._translate_to_spark(sql, "snowflake", mappings)
+        assert "<> ALL" not in result, f"<> ALL found in: {result}"
+        assert "_dvt_abc_c" in result
+        assert "_dvt_abc__this" in result
+        assert "IN" in result.upper()

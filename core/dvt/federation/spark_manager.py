@@ -389,7 +389,11 @@ class SparkManager:
             account = connection.get("account", "")
             database = connection.get("database", "")
             schema = connection.get("schema", "public")
-            return f"jdbc:snowflake://{account}.snowflakecomputing.com/?db={database}&schema={schema}"
+            warehouse = connection.get("warehouse", "")
+            url = f"jdbc:snowflake://{account}.snowflakecomputing.com/?db={database}&schema={schema}"
+            if warehouse:
+                url += f"&warehouse={warehouse}"
+            return url
 
         elif adapter_type == "databricks":
             host = connection.get("host") or ""

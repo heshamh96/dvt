@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import dvt.exceptions
 import dbt_common.clients.system
 import dbt_common.exceptions
-from dvt.adapters.factory import get_adapter, register_adapter
+from dvt.adapters.factory import get_adapter, register_adapter, reset_adapters
 from dvt.artifacts.schemas.results import RunStatus
 from dvt.cli.flags import Flags
 from dvt.clients.yaml_helper import load_yaml_text
@@ -1836,7 +1836,15 @@ class DebugTask(BaseTask):
 
     @staticmethod
     def attempt_connection(profile) -> Optional[str]:
-        """Return a string containing the error message, or None if there was no error."""
+        """Return a string containing the error message, or None if there was no error.
+
+        We call reset_adapters() before register_adapter() because the dbt
+        adapter factory caches adapters by *type name* (e.g. "snowflake"),
+        not by target name.  Without the reset, testing a second target of
+        the same adapter type (e.g. sf_dev then disf_dev) silently reuses
+        the first target's cached adapter, producing a false positive.
+        """
+        reset_adapters()
         register_adapter(profile, get_mp_context())
         adapter = get_adapter(profile)
         try:

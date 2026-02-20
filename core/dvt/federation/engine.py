@@ -938,6 +938,22 @@ class FederationEngine:
                 table.set("db", None)  # Remove schema prefix
                 table.set("catalog", None)  # Remove catalog
 
+        # Fix SQLGlot Snowflake→Spark transpilation bug:
+        # SQLGlot converts NOT IN (subquery) to <> ALL (subquery) when parsing
+        # Snowflake dialect, but Spark SQL doesn't support <> ALL syntax.
+        # Transform it back to NOT ... IN (subquery).
+        def _fix_neq_all(node: exp.Expression) -> exp.Expression:
+            if isinstance(node, exp.NEQ):
+                right = node.args.get("expression")
+                if isinstance(right, exp.All):
+                    subquery = right.this
+                    if isinstance(subquery, exp.Select):
+                        subquery = exp.Subquery(this=subquery)
+                    return exp.Not(this=exp.In(this=node.this, query=subquery))
+            return node
+
+        parsed = parsed.transform(_fix_neq_all)
+
         # Transpile to Spark SQL
         return parsed.sql(dialect="spark")
 
@@ -1034,7 +1050,17 @@ class FederationEngine:
             )
         else:
             effective_schema = model.schema
-            effective_database = getattr(model, "database", None) or ""
+            # model.database is set at parse time from the default target,
+            # NOT from the model's config.target. For Databricks models that
+            # specify config(target='dbx_dev'), model.database will still be
+            # the default target's database (e.g. 'postgres' from pg_dev).
+            # Use the actual target config's catalog/database instead.
+            effective_database = (
+                target_config.get("catalog")
+                or target_config.get("database")
+                or getattr(model, "database", None)
+                or ""
+            )
 
         # Build table name: catalog.schema.table or schema.table
         if effective_database and adapter_type in ("databricks", "spark"):

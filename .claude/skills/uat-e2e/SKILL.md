@@ -9,27 +9,49 @@ Comprehensive UAT (User Acceptance Test) E2E test for DVT across all CLI command
 
 ## Overview
 
-This UAT validates every DVT CLI command against real databases (PostgreSQL, Databricks, Snowflake) with 3 consecutive runs to exercise all incremental model states. It produces a detailed report with a ship/no-ship recommendation.
+This UAT validates every DVT CLI command against real databases (PostgreSQL, Databricks, Snowflake read-only, Snowflake writable) with 3 consecutive runs to exercise all incremental model states. It produces a detailed report with a ship/no-ship recommendation.
 
 ## Prerequisites
 
 - Trial project exists in `~/Documents/My_Projects/DVT/Testing_Playground/trial_<N>_full_cli_e2e/Coke_DB/`
 - PostgreSQL running locally (port 5433)
 - Databricks workspace accessible (demo catalog, dvt_test schema)
-- Snowflake accessible (EXIM_EDWH_DEV, read-only for compile/show)
+- Snowflake EXIM accessible (EXIM_EDWH_DEV, read-only via `sf_dev`)
+- Snowflake Coke_DB accessible (Coke_DB, writable via `disf_dev`, warehouse COMPUTE_WH)
 - DVT installed: `cd core && uv sync`
-- profiles.yml configured at `~/.dvt/profiles.yml` with targets: `pg_dev`, `dbx_dev`, `sf_dev`
+- profiles.yml configured at `~/.dvt/profiles.yml` with targets: `pg_dev`, `dbx_dev`, `sf_dev`, `disf_dev`
 - computes.yml configured at `~/.dvt/computes.yml` with `local_spark`
+
+### Target Access Rules
+
+| Target | Type | Access | Usage |
+|--------|------|--------|-------|
+| `pg_dev` | postgres | read/write | Default target, seeds, models |
+| `dbx_dev` | databricks | read/write | Seeds, models, catalog=demo, schema=dvt_test |
+| `sf_dev` | snowflake | **READ ONLY** | Source data (EXIM_EDWH_DEV), compile/show only |
+| `disf_dev` | snowflake | read/write | Seeds, models, database=Coke_DB, schema=public |
+
+**CRITICAL: Never write to `sf_dev`. Only `disf_dev` is the writable Snowflake target.**
 
 ## Test Phases
 
 Execute phases sequentially. Record PASS/FAIL, timing, and row counts for every step.
 
-### Phase 1: Clean Slate
+### Phase 0: Debug (Connection Verification)
 
 ```bash
 cd <trial_project_dir>
 
+# 0a. dvt debug -- tests all targets
+time uv run --project <dvt-core>/core dvt debug
+```
+
+**Expected**: All 4 targets show `✓ OK`: pg_dev, dbx_dev, sf_dev, disf_dev.
+**Key check**: sf_dev and disf_dev must BOTH show OK (tests the adapter reset fix for same-type targets).
+
+### Phase 1: Clean Slate
+
+```bash
 # 1a. dvt clean
 time uv run --project <dvt-core>/core dvt clean
 
@@ -61,6 +83,12 @@ time uv run --project <dvt-core>/core dvt seed --target dbx_dev
 
 # 3c. Seed to Databricks with --full-refresh
 time uv run --project <dvt-core>/core dvt seed --target dbx_dev --full-refresh
+
+# 3d. Seed to Snowflake disf_dev (all seeds)
+time uv run --project <dvt-core>/core dvt seed --target disf_dev
+
+# 3e. Seed to Snowflake disf_dev with --full-refresh
+time uv run --project <dvt-core>/core dvt seed --target disf_dev --full-refresh
 ```
 
 **Record for each target**:
@@ -82,6 +110,8 @@ time uv run --project <dvt-core>/core dvt seed --target dbx_dev --full-refresh
 
 **Verification**: After seeding, query target databases to confirm row counts match.
 
+**Note on big seeds**: transactions_a/b/c (~1M rows each) are likely already seeded to pg_dev and dbx_dev from prior runs. Only re-seed if needed. Seeding to disf_dev is new and will take ~110s each.
+
 ### Phase 4: Compile & Show -- Multi-Target Including Snowflake
 
 Test compilation without execution. Validate SQL generation for all dialects.
@@ -93,11 +123,12 @@ uv run --project <dvt-core>/core dvt compile -s pushdown_databricks_only
 uv run --project <dvt-core>/core dvt compile -s snowflake_to_pg
 uv run --project <dvt-core>/core dvt compile -s pg_to_databricks
 uv run --project <dvt-core>/core dvt compile -s three_way_to_databricks
+uv run --project <dvt-core>/core dvt compile -s pg_to_snowflake
+uv run --project <dvt-core>/core dvt compile -s three_way_to_snowflake
 
 # 4b. dvt show (read-only query, good for Snowflake)
 uv run --project <dvt-core>/core dvt show -s snowflake_to_pg --limit 5
 uv run --project <dvt-core>/core dvt show -s pushdown_pg_only --limit 5
-uv run --project <dvt-core>/core dvt show -s f_country --limit 5
 
 # 4c. Compile the full project (may be slow due to multi-adapter init)
 time uv run --project <dvt-core>/core dvt compile
@@ -124,6 +155,9 @@ time uv run --project <dvt-core>/core dvt run --full-refresh
 | snowflake_to_pg | pg_dev | federation | - | 100 | ? | ? |
 | snowflake_to_databricks | dbx_dev | federation | - | 50 | ? | ? |
 | three_way_to_databricks | dbx_dev | federation | - | 25 | ? | ? |
+| **pg_to_snowflake** | **disf_dev** | federation | - | 50 | ? | ? |
+| **databricks_to_snowflake** | **disf_dev** | federation | - | 35 | ? | ? |
+| **three_way_to_snowflake** | **disf_dev** | federation | - | 25 | ? | ? |
 | transactions_pg_to_dbx | dbx_dev | federation | - | 100K | ? | ? |
 | transactions_dbx_to_pg | pg_dev | federation | - | ~100K | ? | ? |
 | incremental_limit_test | dbx_dev | federation | append | 50 | ? | ? |
@@ -132,10 +166,13 @@ time uv run --project <dvt-core>/core dvt run --full-refresh
 | incremental_delete_insert_test | dbx_dev | federation | del+ins | 20 | ? | ? |
 | incr_merge_to_pg | pg_dev | federation | merge | 25 | ? | ? |
 | incr_merge_to_dbx | dbx_dev | federation | merge | 25 | ? | ? |
+| **incr_merge_to_sf** | **disf_dev** | federation | merge | 25 | ? | ? |
 | incr_delete_insert_to_pg | pg_dev | federation | del+ins | 25 | ? | ? |
 | incr_delete_insert_to_dbx | dbx_dev | federation | del+ins | 25 | ? | ? |
+| **incr_delete_insert_to_sf** | **disf_dev** | federation | del+ins | 25 | ? | ? |
 | incr_append_to_pg | pg_dev | federation | append | 25 | ? | ? |
 | incr_append_to_dbx | dbx_dev | federation | append | 25 | ? | ? |
+| **incr_append_to_sf** | **disf_dev** | federation | append | 25 | ? | ? |
 | (Target layer models) | pg_dev | pushdown | - | varies | ? | ? |
 | (Other_Source models) | pg_dev | federation | - | varies | ? | ? |
 
@@ -143,10 +180,13 @@ time uv run --project <dvt-core>/core dvt run --full-refresh
 1. Check incremental model data values match full-refresh branch:
    - `incr_merge_to_pg`: all rows have region_name='North America', batch_label='full_refresh'
    - `incr_merge_to_dbx`: all rows have region_name='Asia Pacific', batch_label='full_refresh'
+   - `incr_merge_to_sf`: all rows have region_name='Asia Pacific', batch_label='full_refresh'
    - `incr_delete_insert_to_pg`: all rows have category_name='Beverages', batch_label='full_refresh'
    - `incr_delete_insert_to_dbx`: all rows have category_name='Energy Drinks', batch_label='full_refresh'
+   - `incr_delete_insert_to_sf`: all rows have category_name='Beverages', batch_label='full_refresh'
    - `incr_append_to_pg`: 25 rows, batch_label='full_refresh'
    - `incr_append_to_dbx`: 25 rows, batch_label='full_refresh'
+   - `incr_append_to_sf`: 25 rows, batch_label='full_refresh'
 2. Check no residual staging tables (`_dvt_staging_*`) left in target databases
 3. Check .dvt/staging/ Delta tables exist for federation sources
 
@@ -164,12 +204,15 @@ time uv run --project <dvt-core>/core dvt run
 2. Incremental MERGE models: data VALUES changed (proves incremental branch ran):
    - `incr_merge_to_pg`: region_name changed to 'Europe', batch_label='incremental', count=25
    - `incr_merge_to_dbx`: region_name changed to 'Latin America', batch_label='incremental', count=25
+   - `incr_merge_to_sf`: region_name changed to 'Middle East & Africa', batch_label='incremental', count=25
 3. Incremental DELETE+INSERT models: data VALUES changed:
    - `incr_delete_insert_to_pg`: category_name changed to 'Soft Drinks', batch_label='incremental', count=25
    - `incr_delete_insert_to_dbx`: category_name changed to 'Water', batch_label='incremental', count=25
+   - `incr_delete_insert_to_sf`: category_name changed to 'Energy Drinks', batch_label='incremental', count=25
 4. Incremental APPEND models: NO new rows added (NOT IN filter catches all):
    - `incr_append_to_pg`: still 25 rows, batch_label='full_refresh' (no new rows)
    - `incr_append_to_dbx`: still 25 rows, batch_label='full_refresh' (no new rows)
+   - `incr_append_to_sf`: still 25 rows, batch_label='full_refresh' (no new rows)
 5. `incremental_limit_test`: Quantity filter > MAX(quantity) -> likely 0 new rows (range 1-6)
 6. No residual staging tables left
 
@@ -186,8 +229,11 @@ time uv run --project <dvt-core>/core dvt run
 1. MERGE models: same data as Run 2 (idempotent -- same keys, same values)
    - `incr_merge_to_pg`: still 25 rows, region_name='Europe', batch_label='incremental'
    - `incr_merge_to_dbx`: still 25 rows, region_name='Latin America', batch_label='incremental'
+   - `incr_merge_to_sf`: still 25 rows, region_name='Middle East & Africa', batch_label='incremental'
 2. DELETE+INSERT models: same data as Run 2 (idempotent)
+   - `incr_delete_insert_to_sf`: still 25 rows, category_name='Energy Drinks', batch_label='incremental'
 3. APPEND models: still 25 rows (NOT IN filter prevents duplicates)
+   - `incr_append_to_sf`: still 25 rows
 4. Table models: identical to Run 2
 5. No residual staging tables
 
@@ -202,8 +248,14 @@ time uv run --project <dvt-core>/core dvt run -s pushdown_pg_only --target dbx_d
 # 8b. Run a DBX-targeted model with --target pg_dev (should use federation)
 time uv run --project <dvt-core>/core dvt run -s pushdown_databricks_only --target pg_dev
 
-# 8c. Run a specific federation model
+# 8c. Run a specific federation model with --full-refresh
 time uv run --project <dvt-core>/core dvt run -s snowflake_to_pg --full-refresh
+
+# 8d. Run a PG-targeted model with --target disf_dev (PG → Snowflake override)
+time uv run --project <dvt-core>/core dvt run -s pushdown_pg_only --target disf_dev --full-refresh
+
+# 8e. Run a DBX-targeted model with --target disf_dev (DBX → Snowflake override)
+time uv run --project <dvt-core>/core dvt run -s pushdown_databricks_only --target disf_dev --full-refresh
 ```
 
 **Expected**: Models execute with target override. Federation path activates when source != target.
@@ -257,6 +309,29 @@ SHOW TABLES IN dvt_test LIKE '_dvt_staging_*';
 -- Expected: empty
 ```
 
+**Snowflake disf_dev verification** (via Snowflake UI or adapter):
+```sql
+-- Table model counts
+SELECT count(*) FROM public.pg_to_snowflake;           -- 50
+SELECT count(*) FROM public.databricks_to_snowflake;    -- 35
+SELECT count(*) FROM public.three_way_to_snowflake;     -- 25
+
+-- Incremental model counts
+SELECT count(*) FROM public.incr_merge_to_sf;           -- 25
+SELECT count(*) FROM public.incr_delete_insert_to_sf;   -- 25
+SELECT count(*) FROM public.incr_append_to_sf;          -- 25
+
+-- Incremental data values
+SELECT DISTINCT region_name, batch_label FROM public.incr_merge_to_sf;
+-- Expected: Middle East & Africa, incremental
+SELECT DISTINCT category_name, batch_label FROM public.incr_delete_insert_to_sf;
+-- Expected: Energy Drinks, incremental
+
+-- No residual staging tables
+SHOW TABLES LIKE '_dvt_staging_%' IN SCHEMA public;
+-- Expected: empty
+```
+
 ### Phase 10: Staging & Pushdown Verification
 
 Check the local .dvt/staging/ directory to verify extraction optimization.
@@ -293,7 +368,7 @@ Generate findings in `<trial_dir>/findings/uat_e2e_results.md` with:
 **Date**: YYYY-MM-DD
 **Branch**: `branch_name` (commit `hash`)
 **Trial**: trial_N
-**Targets**: pg_dev (Postgres), dbx_dev (Databricks), sf_dev (Snowflake read-only)
+**Targets**: pg_dev (Postgres), dbx_dev (Databricks), sf_dev (Snowflake read-only), disf_dev (Snowflake writable)
 
 ## Executive Summary
 - Total tests: N
@@ -308,13 +383,13 @@ Generate findings in `<trial_dir>/findings/uat_e2e_results.md` with:
 (table with all seeds x targets, row counts, times)
 
 ## Incremental Model Verification
-(table showing data values after each of the 3 runs)
+(table showing data values after each of the 3 runs, including SF models)
 
 ## Optimizer Verification
 (column pruning, predicate pushdown, LIMIT pushdown evidence)
 
 ## Residual Table Check
-(confirmation no _dvt_staging_* tables left)
+(confirmation no _dvt_staging_* tables left in PG, DBX, and SF)
 
 ## dbt Compatibility Assessment
 (which native dbt commands work, which differ, gaps)
