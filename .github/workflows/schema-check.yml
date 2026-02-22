@@ -46,7 +46,7 @@ jobs:
           python-version: "3.10"
 
       - name: Checkout dbt repo
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # actions/checkout@v4
         with:
           path: ${{ env.DBT_REPO_DIRECTORY }}
           ref: ${{ inputs.target_branch }}
@@ -69,7 +69,7 @@ jobs:
 
       - name: Checkout schemas.getdbt.com repo
         if: steps.check_artifact_changes.outputs.artifacts_changed == 'true'
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # actions/checkout@v4
         with:
           repository: dbt-labs/schemas.getdbt.com
           ref: "main"
