@@ -6,7 +6,7 @@ description = "Data Virtualization Tool - Federated queries across data sources"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
-license-files = { globs = ["LICENSE"] }
+license-files = { globs = ["LICENSE", "NOTICE"] }
 keywords = []
 authors = [
     { name = "DVT Team", email = "dev@dvt.io" },
@@ -15,8 +15,7 @@ maintainers = [
     { name = "DVT Team", email = "dev@dvt.io" },
 ]
 classifiers = [
-    "Development Status :: 5 - Production/Stable",
-    "Operating System :: Microsoft :: Windows",
+    "Development Status :: 4 - Beta",
     "Operating System :: MacOS :: MacOS X",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python",

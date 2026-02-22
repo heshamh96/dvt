@@ -358,6 +358,153 @@ spark.stop()
 2. Predicate pushdown: check extraction SQL in state files for WHERE clauses
 3. LIMIT pushdown: check extraction SQL for LIMIT clauses
 
+### Phase 10.5: Incremental Staging Trace Test
+
+This phase exercises the full incremental Delta staging flow with **traceable data** to prove that `{{ this }}` resolution, NOT IN anti-join, Delta append mode, source re-extraction, and predicate pushdown safety all work correctly together.
+
+The test uses a **modified append model** with small, deterministic row sets so you can verify exact customer codes at each step.
+
+#### Step 1: Modify the test model
+
+Pick an existing append model (e.g., `incr_append_to_pg.sql`). **Save the original** for restoration later. Replace its content with a trace-test version:
+
+```sql
+{{
+    config(
+        materialized='incremental',
+        incremental_strategy='append',
+        target='pg_dev'
+    )
+}}
+
+/*
+    STAGING TRACE TEST — APPEND strategy → PostgreSQL
+    Run 1 (--full-refresh): LIMIT 5 ORDER BY ASC → first 5 customers, batch='full_refresh'
+    Run 2 (incremental):    LIMIT 10 ORDER BY ASC → NOT IN {{ this }} filters 5 already loaded
+                            → appends only NEW rows, batch='incremental'
+    Expected: PG target = 5+N rows, model staging Delta = 5+N rows (2 commits)
+*/
+
+{% if is_incremental() %}
+
+SELECT
+    c."Customer Code" as customer_code,
+    c."Customer name" as customer_name,
+    r.region_name,
+    'incremental' as batch_label
+FROM {{ source('postgres_source', 'customers_db_1') }} c
+LEFT JOIN {{ source('databricks_source', 'dim_regions') }} r
+    ON r.region_code = 'MEA'
+WHERE c."Customer Code" NOT IN (SELECT customer_code FROM {{ this }})
+ORDER BY c."Customer Code" ASC
+LIMIT 10
+
+{% else %}
+
+SELECT
+    c."Customer Code" as customer_code,
+    c."Customer name" as customer_name,
+    r.region_name,
+    'full_refresh' as batch_label
+FROM {{ source('postgres_source', 'customers_db_1') }} c
+LEFT JOIN {{ source('databricks_source', 'dim_regions') }} r
+    ON r.region_code = 'MEA'
+ORDER BY c."Customer Code" ASC
+LIMIT 5
+
+{% endif %}
+```
+
+Key design choices:
+- **LIMIT 5** on full-refresh (small, traceable set)
+- **LIMIT 10** on incremental (larger set, NOT IN filter will exclude the 5 from Run 1)
+- **ORDER BY ASC** makes customer codes deterministic and verifiable
+- **batch_label** distinguishes full_refresh vs incremental rows
+
+#### Step 2: Run 1 — Full Refresh
+
+```bash
+time uv run --project <dvt-core>/core dvt run --select incr_append_to_pg --full-refresh
+```
+
+**Verify Run 1**:
+
+```bash
+# 1. Check PG target: exactly 5 rows
+PGPASSWORD=postgres psql -h localhost -p 5433 -U postgres -d postgres \
+  -c "SELECT * FROM public.incr_append_to_pg ORDER BY customer_code;"
+# Expected: 5 rows, all batch_label='full_refresh', customer codes Cs XXXX-Cs YYYY
+
+# 2. Check model staging Delta exists and has 1 commit with 5 rows
+cat .dvt/staging/model.Coke_DB.incr_append_to_pg.delta/_delta_log/00000000000000000000.json
+# Look for: "numOutputRows":"5", "mode":"Append"
+# Look for: min/max customer_code values matching PG
+```
+
+| Check | Expected |
+|-------|----------|
+| PG row count | 5 |
+| PG batch_label | all 'full_refresh' |
+| Delta commit 0 exists | yes |
+| Delta commit 0 numOutputRows | 5 |
+| Delta commit 0 mode | Append |
+
+#### Step 3: Run 2 — Incremental
+
+```bash
+time uv run --project <dvt-core>/core dvt run --select incr_append_to_pg
+```
+
+**Watch the log output for these key lines**:
+- `Registered { this } view: _dvt_XXXX__this (5 rows)` — model staging loaded from Delta
+- `Optimizer: column pushdown on N/N sources, 0 predicates pushed` — NOT IN predicate NOT pushed (Bug 6 fix)
+- `Extracting source.Coke_DB.postgres_source.customers_db_1...` — fresh extraction (Bug 5 fix)
+- `Loaded N rows via JDBC` — new rows written to PG
+
+**Verify Run 2**:
+
+```bash
+# 1. Check PG target: original 5 + new rows
+PGPASSWORD=postgres psql -h localhost -p 5433 -U postgres -d postgres \
+  -c "SELECT * FROM public.incr_append_to_pg ORDER BY customer_code;"
+# Expected: 5 full_refresh + N incremental rows
+
+# 2. Check Delta has 2 commits
+cat .dvt/staging/model.Coke_DB.incr_append_to_pg.delta/_delta_log/00000000000000000001.json
+# Look for: "numOutputRows":"N", "mode":"Append", batch_label min/max = "incremental"
+
+# 3. Verify NO overlap: incremental customer codes must NOT appear in full_refresh set
+PGPASSWORD=postgres psql -h localhost -p 5433 -U postgres -d postgres \
+  -c "SELECT customer_code, batch_label FROM public.incr_append_to_pg ORDER BY customer_code;"
+# Each customer_code should appear exactly once
+```
+
+| Check | Expected |
+|-------|----------|
+| PG total rows | 5 + N (N = new rows from incremental branch) |
+| PG full_refresh rows | 5 (preserved from Run 1) |
+| PG incremental rows | N (new, no overlap with full_refresh) |
+| `{{ this }}` view loaded | 5 rows |
+| Predicates pushed | 0 |
+| Sources re-extracted | fresh (not stale) |
+| Delta commit 1 exists | yes |
+| Delta commit 1 mode | Append |
+| No duplicate customer_codes | confirmed |
+
+#### Step 4: Restore Original Model
+
+After the trace test, restore the original `incr_append_to_pg.sql` content. **Make sure to include `incremental_strategy='append'`** in the config block (it may not have been in the original).
+
+#### What This Phase Proves
+
+1. **Source staging cleared between runs** — `before_run()` clears `source.*` entries, forcing fresh extraction
+2. **Model staging preserved between runs** — `model.*` entries survive, enabling `{{ this }}` resolution
+3. **`{{ this }}` resolves to Delta staging** — Spark temp view loaded with correct historical data
+4. **NOT IN anti-join works** — existing customer codes excluded from incremental batch
+5. **Predicate pushdown safety** — subqueries referencing Spark temp views are NOT pushed to remote DBs
+6. **Delta append mode** — model staging accumulates rows across commits (correct for append strategy)
+7. **Data integrity** — no duplicate rows, correct batch labels, deterministic ordering
+
 ## Report Template
 
 Generate findings in `<trial_dir>/findings/uat_e2e_results.md` with:
