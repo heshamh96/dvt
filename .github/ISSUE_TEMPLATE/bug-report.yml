@@ -1,28 +1,23 @@
-name: 🐞 Bug
-description: Report a bug or an issue you've found with dbt
+name: Bug Report
+description: Report a bug or an issue you've found with DVT
 title: "[Bug] <title>"
 labels: ["bug", "triage"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to fill out this bug report!
+        Thanks for taking the time to report this bug! Please fill out the details below so we can reproduce and fix it.
+
+        If you need help troubleshooting, join our [Discord community](https://discord.gg/UjQcxJXAQp) first -- it might be a configuration issue rather than a bug.
   - type: checkboxes
     attributes:
-      label: Is this a new bug in dbt-core?
+      label: Is this a new bug in DVT?
       description: >
-        In other words, is this an error, flaw, failure or fault in our software?
-
-        If this is a bug that broke existing functionality that used to work, please open a regression issue.
-        If this is a bug in an adapter plugin, please open an issue in the adapter's repository.
-        If this is a bug experienced while using dbt Cloud, please report to [support](mailto:support@getdbt.com).
-        If this is a request for help or troubleshooting code in your own dbt project, please join our [dbt Community Slack](https://www.getdbt.com/community/join-the-community/) or open a [Discussion question](https://github.com/dbt-labs/docs.getdbt.com/discussions).
-
-        Please search to see if an issue already exists for the bug you encountered.
+        Please search existing issues before submitting to avoid duplicates.
       options:
-        - label: I believe this is a new bug in dbt-core
+        - label: I believe this is a new bug in DVT
           required: true
-        - label: I have searched the existing issues, and I could not find an existing issue for this bug
+        - label: I have searched the existing issues and could not find a match
           required: true
   - type: textarea
     attributes:
@@ -41,9 +36,9 @@ body:
       label: Steps To Reproduce
       description: Steps to reproduce the behavior.
       placeholder: |
-        1. In this environment...
-        2. With this config...
-        3. Run '...'
+        1. With this profiles.yml config...
+        2. With this computes.yml config...
+        3. Run 'dvt run --select ...'
         4. See error...
     validations:
       required: true
@@ -52,7 +47,7 @@ body:
     attributes:
       label: Relevant log output
       description: |
-        If applicable, log output to help explain your problem.
+        If applicable, paste log output to help explain your problem.
       render: shell
     validations:
       required: false
@@ -62,35 +57,46 @@ body:
       description: |
         examples:
           - **OS**: Ubuntu 24.04
-          - **Python**: 3.10.12 (`python3 --version`)
-          - **dbt-core**: 1.1.1 (`dbt --version`)
+          - **Python**: 3.12.0 (`python3 --version`)
+          - **DVT**: 1.12.106 (`dvt --version`)
       value: |
         - OS:
         - Python:
-        - dbt:
+        - DVT:
       render: markdown
     validations:
       required: false
   - type: dropdown
     id: database
     attributes:
-      label: Which database adapter are you using with dbt?
-      description: If the bug is specific to the database or adapter, please open the issue in that adapter's repository instead
+      label: Which database adapter(s) are involved?
+      description: Select all adapters relevant to this bug.
       multiple: true
       options:
         - postgres
-        - redshift
         - snowflake
-        - bigquery
-        - spark
+        - databricks
         - other (mention it in "Additional Context")
+    validations:
+      required: false
+  - type: dropdown
+    id: execution_path
+    attributes:
+      label: Execution path
+      description: Is this happening during adapter pushdown or Spark federation?
+      multiple: false
+      options:
+        - Adapter pushdown (same-engine)
+        - Spark federation (cross-engine)
+        - Not sure
+        - N/A (not related to query execution)
     validations:
       required: false
   - type: textarea
     attributes:
       label: Additional Context
       description: |
-        Links? References? Anything that will give us more context about the issue you are encountering!
+        Links? References? Model SQL? Anything that will give us more context about the issue you are encountering!
 
         Tip: You can attach images or log files by clicking this area to highlight it and then dragging files in.
     validations:
