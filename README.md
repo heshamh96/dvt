@@ -93,6 +93,7 @@ flowchart LR
     ROUTER -->|"Cross engine"| SPARK
     SPARK <--> DELTA
     SPARK -->|"Load results"| TGT
+    DELTA -->|"Staged data"| TGT
 
     style DVT_Engine fill:#1a1a2e,stroke:#e94560,stroke-width:2px,color:#fff
     style Sources fill:#0f3460,stroke:#16213e,stroke-width:1px,color:#fff
