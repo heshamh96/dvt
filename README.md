@@ -13,7 +13,6 @@
   <a href="https://pypi.org/project/dvt-core/"><img src="https://img.shields.io/pypi/v/dvt-core?color=blue&label=PyPI" alt="PyPI Version"/></a>
   <a href="https://pypi.org/project/dvt-core/"><img src="https://img.shields.io/pypi/pyversions/dvt-core?label=Python" alt="Python Versions"/></a>
   <a href="https://github.com/heshamh96/dvt/blob/master/LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-green.svg" alt="License"/></a>
-  <a href="https://discord.gg/UjQcxJXAQp"><img src="https://img.shields.io/discord/1234567890?color=5865F2&logo=discord&logoColor=white&label=Discord" alt="Discord"/></a>
 </p>
 
 ---
@@ -56,11 +55,11 @@ You never have to think about this. You write SQL. DVT decides the execution pat
 
 - **Predicate Pushdown** -- DVT's optimizer analyzes your SQL and pushes WHERE clauses down to the source databases during extraction, minimizing data movement over the wire.
 
-- **`dvt sync`** -- One command to set up your entire environment: installs database adapters, PySpark, JDBC drivers, native cloud connectors, and cloud storage dependencies. No manual JAR hunting.
+- **`dvt sync`** -- One command to set up your entire environment: installs database adapters, PySpark, JDBC drivers, and native cloud connectors. No manual JAR hunting.
 
 - **`dvt debug`** -- Comprehensive diagnostic command that validates all targets, computes, buckets, and database connections in one shot. Know exactly what's configured and what's reachable before you run anything.
 
-- **dbt-Compatible** -- Your existing dbt projects, packages, macros, and tests work with DVT. The CLI commands you know (`run`, `build`, `test`, `seed`, `snapshot`, `docs`) all work the same way.
+- **dbt-Compatible** -- Your existing dbt projects, packages, macros, and tests work with DVT. The CLI commands you know (`run`, `build`, `test`, `seed`, `docs`) all work the same way.
 
 ---
 
@@ -167,7 +166,7 @@ This scaffolds a new DVT project and creates the configuration directory at `~/.
 |------|---------|
 | `profiles.yml` | Database connection profiles (targets) |
 | `computes.yml` | Spark compute engine configuration |
-| `buckets.yml` | Staging storage configuration (local filesystem, S3, GCS, Azure) |
+| `buckets.yml` | Staging storage configuration (local filesystem) |
 
 ### 3. Configure Your Connections
 
@@ -184,7 +183,6 @@ This is where DVT shines. A single command that:
 - Installs the correct PySpark version from your `computes.yml`
 - Downloads JDBC drivers for every database in your profile
 - Downloads native cloud connectors (Snowflake, Databricks) for optimized data transfer
-- Installs cloud storage dependencies if you're using S3/GCS/Azure buckets
 - Validates Java version compatibility with your Spark version
 
 No more hunting for JAR files, no more version mismatches. One command, everything set up.
@@ -220,7 +218,7 @@ dvt debug --connection pg_dev     # Test a specific database connection
 dvt parse
 ```
 
-`dvt parse` reads every model, source, test, seed, snapshot, and macro in your project and validates that:
+`dvt parse` reads every model, source, test, seed, and macro in your project and validates that:
 - All `ref()` and `source()` references resolve correctly
 - The DAG has no cycles
 - All configurations are valid
@@ -240,7 +238,7 @@ dvt run --select my_model
 # Run with full refresh (DROP + CREATE instead of TRUNCATE + INSERT)
 dvt run --full-refresh
 
-# Run everything: seeds, models, snapshots, and tests in DAG order
+# Run everything: seeds, models, and tests in DAG order
 dvt build
 ```
 
@@ -370,27 +368,6 @@ my_project:
   buckets:
     local_staging:
       type: filesystem                   # Local disk staging (default)
-
-    # Cloud staging examples:
-    # s3_staging:
-    #   type: s3
-    #   bucket: my-dvt-staging
-    #   prefix: staging/
-    #   region: us-east-1
-    #   access_key_id: "{{ env_var('AWS_ACCESS_KEY_ID') }}"
-    #   secret_access_key: "{{ env_var('AWS_SECRET_ACCESS_KEY') }}"
-    #
-    # gcs_staging:
-    #   type: gcs
-    #   bucket: my-dvt-staging
-    #   project: my-gcp-project
-    #   keyfile: /path/to/service-account.json
-    #
-    # azure_staging:
-    #   type: azure
-    #   container: dvt-staging
-    #   storage_account: mystorageaccount
-    #   account_key: "{{ env_var('AZURE_STORAGE_KEY') }}"
 ```
 
 ### `dbt_project.yml` -- Project Configuration
@@ -433,27 +410,34 @@ DVT provides all the commands you know from dbt, plus DVT-specific additions for
 | `dvt debug` | Comprehensive diagnostics: validate all targets, computes, buckets, and test database connections. Supports `--connection <target>` to test a specific target. |
 | `dvt clean` | Extended cleanup: removes build artifacts and supports `--optimize` for Delta Lake OPTIMIZE + VACUUM, and `--older-than` for age-based staging cleanup. |
 
-### Core Commands (same as dbt)
+### Core Commands
 
 | Command | Description |
 |---------|-------------|
-| `dvt init` | Initialize a new DVT project with scaffolded directory structure and config files. |
 | `dvt run` | Compile SQL models and execute against the target database. Supports `--select`, `--exclude`, `--full-refresh`. |
-| `dvt build` | Run all seeds, models, snapshots, and tests in DAG order. The "do everything" command. |
-| `dvt test` | Run data tests on deployed models. Run this after `dvt run`. |
-| `dvt seed` | Load CSV seed files into your data warehouse. |
-| `dvt snapshot` | Execute snapshot definitions for slowly changing dimensions. (expermintal) |
+| `dvt build` | Run all seeds, models, and tests in DAG order. The "do everything" command. |
+| `dvt seed` | Load CSV seed files into any target warehouse. Uses Spark for high-performance bulk loading, supporting larger files than dbt's native seed. |
 | `dvt compile` | Generate executable SQL without running it. Output goes to `target/`. |
 | `dvt show` | Compile and run a query, returning a preview without materializing results. |
+| `dvt retry` | Retry only the nodes that failed in the previous run. |
+| `dvt docs generate` | Generate the documentation website for your project. |
+| `dvt init` | Initialize a new DVT project with scaffolded directory structure and config files. |
 | `dvt parse` | Parse the full project and validate all references, configs, and Jinja compilation. |
 | `dvt deps` | Install dbt packages from `packages.yml`. Supports `--add-package` and `--upgrade`. |
 | `dvt list` / `dvt ls` | List all resources (models, tests, sources, etc.) in your project. |
-| `dvt run-operation` | Run a named macro with supplied arguments. |
-| `dvt retry` | Retry only the nodes that failed in the previous run. (expermintal) |
-| `dvt clone` | Create clones of selected nodes based on a prior manifest state. (expermintal) |
-| `dvt source freshness` | Check the current freshness of your project's sources against defined thresholds. (expermintal) |
-| `dvt docs generate` | Generate the documentation website for your project. |
 | `dvt docs serve` | Serve the documentation website locally for browsing. |
+
+### Inherited from dbt (not yet validated in DVT)
+
+These dbt-core commands are available in DVT but have not been fully tested or adapted for multi-engine federation. They may work as expected for single-target use cases, but behavior across federated sources is not guaranteed. Use at your own discretion.
+
+| Command | Description |
+|---------|-------------|
+| `dvt test` | Run data tests on deployed models. |
+| `dvt snapshot` | Execute snapshot definitions for slowly changing dimensions. |
+| `dvt clone` | Create clones of selected nodes based on a prior manifest state. |
+| `dvt run-operation` | Run a named macro with supplied arguments. |
+| `dvt source freshness` | Check the current freshness of your project's sources against defined thresholds. |
 
 ### DVT-Specific Flags
 
@@ -486,7 +470,7 @@ dbt pioneered the idea that data analysts should be able to transform data using
 - The full CLI framework and command structure
 - SQL model compilation with Jinja templating
 - DAG-based dependency resolution and execution
-- Incremental materializations, snapshots, and seeds
+- Incremental materializations and seeds
 - Testing framework (schema tests, data tests, custom tests)
 - Documentation generation
 - Package management
