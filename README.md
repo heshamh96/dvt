@@ -442,16 +442,16 @@ DVT provides all the commands you know from dbt, plus DVT-specific additions for
 | `dvt build` | Run all seeds, models, snapshots, and tests in DAG order. The "do everything" command. |
 | `dvt test` | Run data tests on deployed models. Run this after `dvt run`. |
 | `dvt seed` | Load CSV seed files into your data warehouse. |
-| `dvt snapshot` | Execute snapshot definitions for slowly changing dimensions. |
+| `dvt snapshot` | Execute snapshot definitions for slowly changing dimensions. (expermintal) |
 | `dvt compile` | Generate executable SQL without running it. Output goes to `target/`. |
 | `dvt show` | Compile and run a query, returning a preview without materializing results. |
 | `dvt parse` | Parse the full project and validate all references, configs, and Jinja compilation. |
 | `dvt deps` | Install dbt packages from `packages.yml`. Supports `--add-package` and `--upgrade`. |
 | `dvt list` / `dvt ls` | List all resources (models, tests, sources, etc.) in your project. |
 | `dvt run-operation` | Run a named macro with supplied arguments. |
-| `dvt retry` | Retry only the nodes that failed in the previous run. |
-| `dvt clone` | Create clones of selected nodes based on a prior manifest state. |
-| `dvt source freshness` | Check the current freshness of your project's sources against defined thresholds. |
+| `dvt retry` | Retry only the nodes that failed in the previous run. (expermintal) |
+| `dvt clone` | Create clones of selected nodes based on a prior manifest state. (expermintal) |
+| `dvt source freshness` | Check the current freshness of your project's sources against defined thresholds. (expermintal) |
 | `dvt docs generate` | Generate the documentation website for your project. |
 | `dvt docs serve` | Serve the documentation website locally for browsing. |
 
@@ -509,7 +509,7 @@ We are grateful to dbt Labs for open-sourcing dbt-core under the Apache License 
 DVT is **free and open-source software** licensed under the [Apache License 2.0](LICENSE).
 
 ```
-Copyright 2025-2026 Hesham H.
+Copyright 2025-2026 Hesham Badawi.
 
 Licensed under the Apache License, Version 2.0
 You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
