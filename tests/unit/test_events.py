@@ -31,7 +31,14 @@ from dbt_common.events.helpers import get_json_string_utcnow
 def get_all_subclasses(cls):
     all_subclasses = []
     for subclass in cls.__subclasses__():
-        if subclass not in [TestLevel, DebugLevel, WarnLevel, InfoLevel, ErrorLevel, DynamicLevel]:
+        if subclass not in [
+            TestLevel,
+            DebugLevel,
+            WarnLevel,
+            InfoLevel,
+            ErrorLevel,
+            DynamicLevel,
+        ]:
             all_subclasses.append(subclass)
         all_subclasses.extend(get_all_subclasses(subclass))
     return set(all_subclasses)
@@ -65,7 +72,9 @@ class TestAdapterLogger:
         logger.debug("1 2 {}", "3")
 
         # enters lower in the call stack to test that it formats correctly
-        event = adapter_types.AdapterEventDebug(name="dbt_tests", base_msg="1 2 {}", args=[3])
+        event = adapter_types.AdapterEventDebug(
+            name="dbt_tests", base_msg="1 2 {}", args=[3]
+        )
         assert "1 2 3" in event.message()
 
         # tests that it doesn't throw
@@ -74,13 +83,17 @@ class TestAdapterLogger:
         # enters lower in the call stack to test that it formats correctly
         # in this case it's that we didn't attempt to replace anything since there
         # were no args passed after the initial message
-        event = adapter_types.AdapterEventDebug(name="dbt_tests", base_msg="boop{x}boop", args=[])
+        event = adapter_types.AdapterEventDebug(
+            name="dbt_tests", base_msg="boop{x}boop", args=[]
+        )
         assert "boop{x}boop" in event.message()
 
         # ensure AdapterLogger and subclasses makes all base_msg members
         # of type string; when someone writes logger.debug(a) where a is
         # any non-string object
-        event = adapter_types.AdapterEventDebug(name="dbt_tests", base_msg=[1, 2, 3], args=[3])
+        event = adapter_types.AdapterEventDebug(
+            name="dbt_tests", base_msg=[1, 2, 3], args=[3]
+        )
         assert isinstance(event.base_msg, str)
 
         event = core_types.JinjaLogDebug(msg=[1, 2, 3])
@@ -94,7 +107,6 @@ class TestAdapterLogger:
 
 
 class TestEventCodes:
-
     # checks to see if event codes are duplicated to keep codes singluar and clear.
     # also checks that event codes follow correct namming convention ex. E001
     def test_event_codes(self):
@@ -106,9 +118,9 @@ class TestEventCodes:
             # must be in the form 1 capital letter, 3 digits
             assert re.match("^[A-Z][0-9]{3}", code)
             # cannot have been used already
-            assert (
-                code not in all_codes
-            ), f"{code} is assigned more than once. Check types.py for duplicates."
+            assert code not in all_codes, (
+                f"{code} is assigned more than once. Check types.py for duplicates."
+            )
             all_codes.add(code)
 
 
@@ -159,7 +171,9 @@ sample_values = [
     core_types.MFTimespineWithoutYamlConfigurationDeprecation(),
     core_types.MFCumulativeTypeParamsDeprecation(),
     core_types.MicrobatchMacroOutsideOfBatchesDeprecation(),
-    core_types.GenericJSONSchemaValidationDeprecation(violation="", key_path="", file=""),
+    core_types.GenericJSONSchemaValidationDeprecation(
+        violation="", key_path="", file=""
+    ),
     core_types.UnexpectedJinjaBlockDeprecation(msg="", file=""),
     core_types.DuplicateYAMLKeysDeprecation(duplicate_description="", file=""),
     core_types.CustomTopLevelKeyDeprecation(msg="", file=""),
@@ -179,12 +193,17 @@ sample_values = [
     core_types.DuplicateNameDistinctNodeTypesDeprecation(
         resource_name="", package_name="", unique_id1="", unique_id2=""
     ),
+    core_types.TimeDimensionsRequireGranularityDeprecation(msg=""),
+    core_types.GenericSemanticLayerDeprecation(msg=""),
+    core_types.GenerateSchemaNameNullValueDeprecation(resource_unique_id=""),
     # E - DB Adapter ======================
     adapter_types.AdapterEventDebug(),
     adapter_types.AdapterEventInfo(),
     adapter_types.AdapterEventWarning(),
     adapter_types.AdapterEventError(),
-    adapter_types.AdapterRegistered(adapter_name="dvt-awesome", adapter_version="1.2.3"),
+    adapter_types.AdapterRegistered(
+        adapter_name="dvt-awesome", adapter_version="1.2.3"
+    ),
     adapter_types.NewConnection(conn_type="", conn_name=""),
     adapter_types.ConnectionReused(conn_name=""),
     adapter_types.ConnectionLeftOpenInCleanup(conn_name=""),
@@ -204,7 +223,9 @@ sample_values = [
         new_type="",
         table={"database": "", "schema": "", "identifier": ""},
     ),
-    adapter_types.SchemaCreation(relation={"database": "", "schema": "", "identifier": ""}),
+    adapter_types.SchemaCreation(
+        relation={"database": "", "schema": "", "identifier": ""}
+    ),
     adapter_types.SchemaDrop(relation={"database": "", "schema": "", "identifier": ""}),
     adapter_types.CacheAction(
         action="adding_relation",
@@ -230,7 +251,9 @@ sample_values = [
     # I - Project parsing ======================
     core_types.InputFileDiffError(category="testing", file_id="my_file"),
     core_types.InvalidValueForField(field_name="test", field_value="test"),
-    core_types.ValidationWarning(resource_type="model", field_name="access", node_name="my_macro"),
+    core_types.ValidationWarning(
+        resource_type="model", field_name="access", node_name="my_macro"
+    ),
     core_types.ParsePerfInfoPath(path=""),
     core_types.PartialParsingErrorProcessingFile(file=""),
     core_types.PartialParsingFile(file_id=""),
@@ -254,7 +277,9 @@ sample_values = [
     core_types.SeedIncreased(package_name="", name=""),
     core_types.SeedExceedsLimitSamePath(package_name="", name=""),
     core_types.SeedExceedsLimitAndPathChanged(package_name="", name=""),
-    core_types.SeedExceedsLimitChecksumChanged(package_name="", name="", checksum_name=""),
+    core_types.SeedExceedsLimitChecksumChanged(
+        package_name="", name="", checksum_name=""
+    ),
     core_types.UnusedTables(unused_tables=[]),
     core_types.WrongResourceSchemaFile(
         patch_name="", resource_type="", file_path="", plural_resource_type=""
@@ -324,7 +349,9 @@ sample_values = [
     core_types.GitProgressCheckedOutAt(end_sha=""),
     core_types.RegistryProgressGETRequest(url=""),
     core_types.RegistryProgressGETResponse(url="", resp_code=1234),
-    core_types.SelectorReportInvalidSelector(valid_selectors="", spec_method="", raw_spec=""),
+    core_types.SelectorReportInvalidSelector(
+        valid_selectors="", spec_method="", raw_spec=""
+    ),
     core_types.DepsNoPackagesFound(),
     core_types.DepsStartPackageInstall(package_name=""),
     core_types.DepsInstallInfo(version_name=""),
@@ -348,7 +375,9 @@ sample_values = [
     core_types.DepsUnpinned(revision="", git=""),
     core_types.NoNodesForSelectionCriteria(spec_raw=""),
     # P - Artifacts ======================
-    core_types.ArtifactWritten(artifact_type="manifest", artifact_path="path/to/artifact.json"),
+    core_types.ArtifactWritten(
+        artifact_type="manifest", artifact_path="path/to/artifact.json"
+    ),
     # Q - Node execution ======================
     core_types.RunningOperationCaughtError(exc=""),
     core_types.CompileComplete(),
@@ -446,7 +475,9 @@ sample_values = [
         elapsed=0.1,
         completed_at=get_json_string_utcnow(),
     ),
-    core_types.ShowNode(node_name="", preview="", is_inline=True, unique_id="model.test.my_model"),
+    core_types.ShowNode(
+        node_name="", preview="", is_inline=True, unique_id="model.test.my_model"
+    ),
     core_types.CompiledNode(
         node_name="", compiled="", is_inline=True, unique_id="model.test.my_model"
     ),
@@ -526,7 +557,6 @@ sample_values = [
 
 
 class TestEventJSONSerialization:
-
     # attempts to test that every event is serializable to json.
     # event types that take `Any` are not possible to test in this way since some will serialize
     # just fine and others won't.
@@ -536,9 +566,9 @@ class TestEventJSONSerialization:
         )
         all_event_values_list = list(map(lambda x: x.__class__, sample_values))
         diff = all_non_abstract_events.difference(set(all_event_values_list))
-        assert (
-            not diff
-        ), f"{diff}test is missing concrete values in `sample_values`. Please add the values for the aforementioned event classes"
+        assert not diff, (
+            f"{diff}test is missing concrete values in `sample_values`. Please add the values for the aforementioned event classes"
+        )
 
         # make sure everything in the list is a value not a type
         for event in sample_values:
@@ -560,7 +590,9 @@ class TestEventJSONSerialization:
             try:
                 msg_to_json(msg)
             except Exception as e:
-                raise Exception(f"{event} is not serializable to json. Originating exception: {e}")
+                raise Exception(
+                    f"{event} is not serializable to json. Originating exception: {e}"
+                )
             # Serialize to binary
             try:
                 msg.SerializeToString()
@@ -596,7 +628,9 @@ def test_bad_serialization():
     with pytest.raises(Exception) as excinfo:
         types.Note(param_event_doesnt_have="This should break")
 
-    assert 'has no field named "param_event_doesnt_have" at "Note"' in str(excinfo.value)
+    assert 'has no field named "param_event_doesnt_have" at "Note"' in str(
+        excinfo.value
+    )
 
 
 def test_single_run_error():
@@ -628,10 +662,14 @@ def test_single_run_error():
         print_run_end_messages(results)
 
         summary_event = [
-            e for e in event_mgr.event_history if isinstance(e[0], core_types.EndOfRunSummary)
+            e
+            for e in event_mgr.event_history
+            if isinstance(e[0], core_types.EndOfRunSummary)
         ]
         run_result_error_events = [
-            e for e in event_mgr.event_history if isinstance(e[0], core_types.RunResultError)
+            e
+            for e in event_mgr.event_history
+            if isinstance(e[0], core_types.RunResultError)
         ]
 
         # expect correct plural

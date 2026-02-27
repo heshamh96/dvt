@@ -808,6 +808,30 @@ class DuplicateNameDistinctNodeTypesDeprecation(WarnLevel):
         description = f"Found resources with the same name '{self.resource_name}' in package '{self.package_name}': '{self.unique_id1}' and '{self.unique_id2}'. Please update one of the resources to have a unique name."
         return line_wrap_message(_deprecation_tag(description, self.__class__.__name__))
 
+class TimeDimensionsRequireGranularityDeprecation(WarnLevel):
+    def code(self) -> str:
+        return "D041"
+
+    def message(self) -> str:
+        return line_wrap_message(_deprecation_tag(self.msg, self.__class__.__name__))
+
+
+class GenericSemanticLayerDeprecation(WarnLevel):
+    def code(self) -> str:
+        return "D042"
+
+    def message(self) -> str:
+        return line_wrap_message(_deprecation_tag(self.msg, self.__class__.__name__))
+
+
+class GenerateSchemaNameNullValueDeprecation(WarnLevel):
+    def code(self) -> str:
+        return "D044"
+
+    def message(self) -> str:
+        description = f"Node '{self.resource_unique_id}' has a schema set to None as a result of a generate_schema_name call. Please set a valid schema name."
+        return line_wrap_message(_deprecation_tag(description, self.__class__.__name__))
+
 
 # =======================================================
 # I - Project parsing
