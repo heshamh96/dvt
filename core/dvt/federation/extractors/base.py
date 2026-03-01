@@ -13,6 +13,7 @@ Extraction priority:
 import os
 import shutil
 import subprocess
+import threading
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -74,6 +75,31 @@ class BaseExtractor(ABC):
 
     # Adapter types this extractor handles (set by subclass)
     adapter_types: List[str] = []
+
+    # Adapters with limited session pools need serialised JDBC reads.
+    # Value = max concurrent JDBC extractions across all threads.
+    # Oracle XE (PROCESSES ~20) deadlocks when multiple federation
+    # models extract from Oracle sources simultaneously.
+    _SESSION_LIMITED_ADAPTERS: Dict[str, int] = {
+        "oracle": 1,  # Oracle XE deadlocks with concurrent JDBC sessions
+    }
+
+    # Class-level semaphores keyed by adapter type. Lazily created.
+    _extract_locks: Dict[str, threading.Semaphore] = {}
+    _extract_locks_init = threading.Lock()
+
+    @classmethod
+    def _get_extract_semaphore(cls, adapter_type: str) -> Optional[threading.Semaphore]:
+        """Return a Semaphore for session-limited adapters, or None."""
+        key = adapter_type.lower()
+        cap = cls._SESSION_LIMITED_ADAPTERS.get(key)
+        if cap is None:
+            return None
+
+        with cls._extract_locks_init:
+            if key not in cls._extract_locks:
+                cls._extract_locks[key] = threading.Semaphore(cap)
+            return cls._extract_locks[key]
 
     def __init__(
         self,
@@ -573,20 +599,35 @@ class BaseExtractor(ABC):
                     f"using single reader"
                 )
 
-            # Read via JDBC
-            self._log(f"Extracting {config.source_name} via Spark JDBC...")
-            df = spark.read.format("jdbc").options(**jdbc_options).load()
+            # Acquire extraction semaphore for session-limited adapters
+            # (e.g., Oracle XE). This prevents concurrent federation models
+            # from exhausting the source's session pool during extraction.
+            sem = self._get_extract_semaphore(adapter_type)
+            if sem is not None:
+                self._log(
+                    f"Waiting for {adapter_type} extraction slot "
+                    f"({config.source_name})..."
+                )
+                sem.acquire()
 
-            # Ensure output directory exists
-            output_path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                # Read via JDBC
+                self._log(f"Extracting {config.source_name} via Spark JDBC...")
+                df = spark.read.format("jdbc").options(**jdbc_options).load()
 
-            # Write to Parquet (directory with multiple part files)
-            df.write.mode("overwrite").option("compression", "zstd").parquet(
-                str(output_path)
-            )
+                # Ensure output directory exists
+                output_path.parent.mkdir(parents=True, exist_ok=True)
 
-            # Get row count from written data
-            row_count = spark.read.parquet(str(output_path)).count()
+                # Write to Parquet (directory with multiple part files)
+                df.write.mode("overwrite").option("compression", "zstd").parquet(
+                    str(output_path)
+                )
+
+                # Get row count from written data
+                row_count = spark.read.parquet(str(output_path)).count()
+            finally:
+                if sem is not None:
+                    sem.release()
 
             elapsed = time.time() - start_time
             self._log(

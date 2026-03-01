@@ -109,6 +109,12 @@ class DvtTestRunner(TestRunner):
         # Fix test node's schema/database to match the target adapter
         self._fix_test_schema(data_test, target_adapter)
 
+        # Transpile compiled SQL from CLI adapter's dialect to target dialect.
+        # At compile time, ref() resolved using the CLI adapter's quoting
+        # (e.g., MySQL backticks). We need to rewrite to the target dialect
+        # (e.g., Postgres double-quotes) so the SQL is valid on the target.
+        self._transpile_test_sql(data_test, target_adapter)
+
         # Set macro resolver on target adapter so materialization macros work
         target_adapter.set_macro_resolver(manifest)
 
@@ -169,6 +175,90 @@ class DvtTestRunner(TestRunner):
         test_result_dct["adapter_response"] = result["response"].to_dict(omit_none=True)
         TestResultData.validate(test_result_dct)
         return TestResultData.from_dict(test_result_dct)
+
+    def _transpile_test_sql(self, test_node: TestNode, target_adapter) -> None:
+        """Transpile compiled test SQL from CLI adapter dialect to target dialect.
+
+        At compile time, ``{{ ref('model') }}`` resolves using the CLI target's
+        adapter quoting (e.g., MySQL backticks). When the test executes on
+        a different adapter (e.g., Postgres), the SQL must use that adapter's
+        quoting (e.g., double-quotes).
+
+        Uses SQLGlot to transpile the SQL between dialects and also patches
+        the schema/database references to match the target adapter's credentials.
+        """
+        compiled = getattr(test_node, "compiled_code", None)
+        if not compiled:
+            return
+
+        # Determine source and target dialects
+        source_dialect = self.adapter.type().lower()
+        target_dialect = target_adapter.type().lower()
+
+        if source_dialect == target_dialect:
+            return
+
+        # Map dbt adapter types to SQLGlot dialects
+        dialect_map = {
+            "postgres": "postgres",
+            "mysql": "mysql",
+            "sqlserver": "tsql",
+            "oracle": "oracle",
+            "snowflake": "snowflake",
+            "bigquery": "bigquery",
+            "databricks": "databricks",
+            "redshift": "redshift",
+            "trino": "trino",
+            "duckdb": "duckdb",
+            "clickhouse": "clickhouse",
+        }
+
+        src_sqlglot = dialect_map.get(source_dialect, source_dialect)
+        tgt_sqlglot = dialect_map.get(target_dialect, target_dialect)
+
+        try:
+            import sqlglot
+
+            transpiled = sqlglot.transpile(
+                compiled,
+                read=src_sqlglot,
+                write=tgt_sqlglot,
+                pretty=False,
+            )
+            if transpiled:
+                # Also patch schema references: replace CLI schema with target schema
+                new_sql = transpiled[0]
+
+                # Replace schema from CLI adapter with target adapter
+                cli_creds = self.config.credentials
+                tgt_creds = target_adapter.config.credentials
+
+                cli_schema = getattr(cli_creds, "schema", None)
+                tgt_schema = getattr(tgt_creds, "schema", None)
+                cli_db = getattr(cli_creds, "database", None)
+                tgt_db = getattr(tgt_creds, "database", None)
+
+                if cli_schema and tgt_schema and cli_schema != tgt_schema:
+                    new_sql = new_sql.replace(cli_schema, tgt_schema)
+                if cli_db and tgt_db and cli_db != tgt_db:
+                    new_sql = new_sql.replace(cli_db, tgt_db)
+
+                test_node.compiled_code = new_sql
+                logger.debug(
+                    "Transpiled test %s: %s → %s",
+                    test_node.name,
+                    source_dialect,
+                    target_dialect,
+                )
+        except Exception as e:
+            logger.warning(
+                "Failed to transpile test %s from %s to %s: %s. "
+                "Executing with original SQL.",
+                test_node.name,
+                source_dialect,
+                target_dialect,
+                str(e),
+            )
 
     def _fix_test_schema(self, test_node: TestNode, target_adapter) -> None:
         """Fix test node's schema/database to match the target adapter.

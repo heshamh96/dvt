@@ -16,6 +16,7 @@ Usage:
     result = loader.load(df, config, adapter=adapter)
 """
 
+import threading
 import time
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
@@ -70,6 +71,80 @@ class FederationLoader:
     def _log(self, message: str) -> None:
         """Log a progress message."""
         self.on_progress(message)
+
+    # Adapters whose JDBC drivers have limited session pools or are known
+    # to deadlock under concurrent batch inserts.
+    #
+    # dict value = (max_partitions_per_model, max_concurrent_writes).
+    #
+    # max_partitions_per_model: caps the Spark repartition count so each
+    #   model opens at most this many JDBC writer connections.
+    #
+    # max_concurrent_writes: a threading.Semaphore that serialises the
+    #   df.write.jdbc() calls across ALL concurrent models targeting this
+    #   adapter.  Oracle XE, for example, has a hard PROCESSES limit (~20)
+    #   and deadlocks when 4 models x 4 partitions = 16 simultaneous
+    #   writers compete for sessions.
+    #
+    # Users can override max_partitions via computes.yml
+    # ``jdbc_load.num_partitions``.
+    _SESSION_LIMITED_ADAPTERS: Dict[str, tuple] = {
+        "oracle": (1, 1),  # 1 partition per model, 1 write at a time
+    }
+
+    # Class-level semaphores keyed by adapter type.  Lazily created.
+    _write_locks: Dict[str, threading.Semaphore] = {}
+    _write_locks_init = threading.Lock()
+
+    @classmethod
+    def _get_write_semaphore(cls, adapter_type: str) -> Optional[threading.Semaphore]:
+        """Return a Semaphore for session-limited adapters, or None."""
+        key = adapter_type.lower()
+        cap_tuple = cls._SESSION_LIMITED_ADAPTERS.get(key)
+        if cap_tuple is None:
+            return None
+
+        _, max_concurrent = cap_tuple
+        with cls._write_locks_init:
+            if key not in cls._write_locks:
+                cls._write_locks[key] = threading.Semaphore(max_concurrent)
+            return cls._write_locks[key]
+
+    @classmethod
+    def _cap_partitions(
+        cls,
+        adapter_type: str,
+        num_partitions: int,
+        jdbc_settings: Dict[str, Any],
+    ) -> int:
+        """Cap JDBC writer partitions for session-limited adapters.
+
+        Oracle (especially XE) has a limited session pool and deadlocks
+        when multiple concurrent models each open several JDBC writer
+        connections.  This method applies a safe per-adapter cap unless
+        the user explicitly set ``num_partitions`` in ``computes.yml``.
+
+        Args:
+            adapter_type: Target adapter type (e.g. "oracle", "postgres")
+            num_partitions: Currently resolved partition count
+            jdbc_settings: Raw jdbc_load config from computes.yml
+
+        Returns:
+            Adjusted partition count
+        """
+        adapter_key = adapter_type.lower()
+
+        # If the user explicitly configured num_partitions, respect it.
+        if "num_partitions" in jdbc_settings:
+            return num_partitions
+
+        cap_tuple = cls._SESSION_LIMITED_ADAPTERS.get(adapter_key)
+        if cap_tuple is not None:
+            max_partitions, _ = cap_tuple
+            if num_partitions > max_partitions:
+                return max_partitions
+
+        return num_partitions
 
     def load(
         self,
@@ -309,6 +384,14 @@ class FederationLoader:
             num_partitions = jdbc_settings.get("num_partitions", 4)
             batch_size = jdbc_settings.get("batch_size", 10000)
 
+            # Cap partitions for adapters with limited session pools.
+            # Oracle (especially XE) deadlocks when multiple models each
+            # open 4 parallel JDBC writers.  Use 1 writer per model so
+            # that threads: N never creates more than N Oracle sessions.
+            num_partitions = self._cap_partitions(
+                adapter_type, num_partitions, jdbc_settings
+            )
+
             # Build JDBC properties
             properties = {
                 **jdbc_props,
@@ -334,40 +417,52 @@ class FederationLoader:
             ):
                 return self._load_via_adapter(df, config, adapter)
 
-            if adapter and config.mode == "overwrite":
-                # DDL via adapter (proper quoting), data via Spark JDBC append
-                self._execute_ddl(adapter, config)
-                # Create table with properly quoted column names via adapter
-                self._create_table_with_adapter(adapter, df, config)
-                write_mode = "append"  # Table cleared by DDL, just append
-            elif adapter and config.mode == "append":
-                # Incremental append: ensure table exists (CREATE IF NOT EXISTS),
-                # then append data. No TRUNCATE or DROP.
-                self._create_table_with_adapter(adapter, df, config)
-                write_mode = "append"
-            else:
-                # Pure Spark JDBC mode (no adapter)
-                write_mode = config.mode
-                # Set truncate property for Spark to handle
-                if (
-                    config.mode == "overwrite"
-                    and config.truncate
-                    and not config.full_refresh
-                ):
-                    properties["truncate"] = "true"
-
-            # Repartition for parallel writes
+            # Repartition for parallel writes (before acquiring semaphore
+            # so data shuffle happens concurrently for other models).
             if num_partitions > 1:
                 df = df.repartition(num_partitions)
                 self._log(f"Using {num_partitions} parallel JDBC writers")
 
-            self._log(f"Loading {config.table_name} via Spark JDBC...")
-            df.write.jdbc(
-                url=jdbc_url,
-                table=config.table_name,
-                mode=write_mode,
-                properties=properties,
-            )
+            # Acquire write semaphore for session-limited adapters.
+            # Oracle XE deadlocks when multiple concurrent models write
+            # simultaneously, so we serialize DDL + JDBC writes.
+            sem = self._get_write_semaphore(adapter_type)
+            if sem is not None:
+                self._log(
+                    f"Waiting for {adapter_type} write slot ({config.table_name})..."
+                )
+                sem.acquire()
+
+            try:
+                if adapter and config.mode == "overwrite":
+                    # DDL via adapter (proper quoting), data via Spark JDBC
+                    self._execute_ddl(adapter, config)
+                    self._create_table_with_adapter(adapter, df, config)
+                    write_mode = "append"  # Table cleared by DDL, just append
+                elif adapter and config.mode == "append":
+                    # Incremental append: ensure table exists, then append.
+                    self._create_table_with_adapter(adapter, df, config)
+                    write_mode = "append"
+                else:
+                    # Pure Spark JDBC mode (no adapter)
+                    write_mode = config.mode
+                    if (
+                        config.mode == "overwrite"
+                        and config.truncate
+                        and not config.full_refresh
+                    ):
+                        properties["truncate"] = "true"
+
+                self._log(f"Loading {config.table_name} via Spark JDBC...")
+                df.write.jdbc(
+                    url=jdbc_url,
+                    table=config.table_name,
+                    mode=write_mode,
+                    properties=properties,
+                )
+            finally:
+                if sem is not None:
+                    sem.release()
 
             row_count = df.count()
             elapsed = time.time() - start_time
@@ -637,6 +732,11 @@ class FederationLoader:
         jdbc_settings = config.jdbc_config or {}
         num_partitions = jdbc_settings.get("num_partitions", 4)
         batch_size = jdbc_settings.get("batch_size", 10000)
+
+        # Cap partitions for session-limited adapters (Oracle, etc.)
+        num_partitions = self._cap_partitions(
+            adapter_type, num_partitions, jdbc_settings
+        )
 
         properties = {
             **jdbc_props,

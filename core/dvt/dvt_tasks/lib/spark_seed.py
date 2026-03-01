@@ -294,8 +294,17 @@ class SparkSeedRunner(BaseRunner):
         Automatically detects file format based on extension and uses
         appropriate Spark reader with optimized settings.
 
+        For CSV files, values are cleaned to match dbt/agate behavior before
+        type inference:
+        - Whitespace is trimmed from all values
+        - Percentage signs are stripped (e.g., "1.25%" -> "1.25")
+        - Leading underscores are stripped from numeric values (e.g., "_4" -> "4")
+
+        This ensures Spark infers the correct types and JDBC writes succeed
+        against tables created by either the adapter or Spark seed path.
+
         Supported formats:
-        - .csv      - CSV with header, schema inference, quoted fields
+        - .csv      - CSV with header, cleaned values, schema inference
         - .parquet  - Apache Parquet columnar format
         - .json     - JSON Lines (one JSON object per line)
         - .jsonl    - JSON Lines (alias for .json)
@@ -323,15 +332,21 @@ class SparkSeedRunner(BaseRunner):
         _log(f"  Reading {extension}: {file_path}")
 
         if extension == ".csv":
-            return spark.read.csv(
+            # Step 1: Read CSV as all-string columns to avoid partial inference
+            # issues with format characters (%, _, whitespace).
+            df_raw = spark.read.csv(
                 str(file_path),
                 header=True,
-                inferSchema=True,
+                inferSchema=False,  # All columns as StringType
                 nullValue="",
                 quote='"',
                 escape='"',
                 multiLine=True,
             )
+
+            # Step 2: Clean values to match dbt/agate behavior, then re-infer
+            df_cleaned = self._clean_csv_values(df_raw)
+            return df_cleaned
         elif extension == ".parquet":
             return spark.read.parquet(str(file_path))
         elif extension in (".json", ".jsonl"):
@@ -341,6 +356,196 @@ class SparkSeedRunner(BaseRunner):
         else:
             # Should never reach here due to check above
             raise ValueError(f"Unsupported seed format: {extension}")
+
+    def _clean_csv_values(self, df: Any) -> Any:
+        """Clean CSV string values to match dbt/agate type coercion behavior.
+
+        dbt's agate library applies intelligent type inference that handles
+        common data formatting patterns. This method replicates that behavior
+        for Spark DataFrames:
+
+        1. Trim leading/trailing whitespace from all values
+        2. Strip trailing '%' from percentage values (e.g., "1.25%" -> "1.25")
+        3. Strip leading '_' from underscore-prefixed numbers (e.g., "_4" -> "4")
+
+        After cleaning, type inference is applied to cast columns to the
+        appropriate numeric types (integer, long, double) or keep as string.
+
+        Args:
+            df: PySpark DataFrame with all StringType columns
+
+        Returns:
+            PySpark DataFrame with cleaned values and inferred types
+        """
+        from pyspark.sql import functions as F
+
+        for col_name in df.columns:
+            col = F.col(f"`{col_name}`")
+
+            # 1. Trim whitespace
+            cleaned = F.trim(col)
+
+            # 2. Strip trailing '%' (e.g., "1.25%" -> "1.25")
+            cleaned = F.when(
+                cleaned.endswith("%"),
+                F.regexp_replace(cleaned, r"%$", ""),
+            ).otherwise(cleaned)
+
+            # 3. Strip leading '_' from underscore-prefixed numbers
+            #    (e.g., "_4" -> "4", "_2012" -> "2012")
+            cleaned = F.when(
+                cleaned.rlike(r"^_\d[\d.]*$"),
+                F.regexp_replace(cleaned, r"^_", ""),
+            ).otherwise(cleaned)
+
+            df = df.withColumn(col_name, cleaned)
+
+        # Re-infer types from cleaned string values
+        df = self._infer_column_types(df)
+
+        return df
+
+    def _infer_column_types(self, df: Any) -> Any:
+        """Infer proper types for cleaned string columns.
+
+        Attempts to cast each string column to progressively wider types,
+        matching dbt/agate's inference priority:
+        1. Boolean (true/false/yes/no/1/0)
+        2. Integer (whole numbers within int32 range)
+        3. Long (whole numbers exceeding int32 range)
+        4. Double (decimal numbers)
+        5. Date (ISO format YYYY-MM-DD)
+        6. Keep as String (fallback)
+
+        Uses a single-pass sample strategy: collect distinct non-null values
+        (up to 100) and test casts in Python to avoid expensive full-scan
+        Spark actions per column.
+
+        Args:
+            df: PySpark DataFrame with all StringType columns
+
+        Returns:
+            PySpark DataFrame with inferred types
+        """
+        from pyspark.sql import functions as F
+        from pyspark.sql.types import (
+            BooleanType,
+            DateType,
+            DoubleType,
+            IntegerType,
+            LongType,
+            StringType,
+        )
+
+        for col_name in df.columns:
+            col_type = df.schema[col_name].dataType
+            if not isinstance(col_type, StringType):
+                continue
+
+            col = F.col(f"`{col_name}`")
+
+            # Collect a sample of distinct non-null, non-empty values
+            sample_rows = (
+                df.select(col)
+                .filter(col.isNotNull() & (F.trim(col) != ""))
+                .distinct()
+                .limit(100)
+                .collect()
+            )
+
+            if not sample_rows:
+                # All nulls/empty — keep as string
+                continue
+
+            sample_values = [row[0] for row in sample_rows]
+
+            # Try boolean (true/false/yes/no/1/0)
+            if self._all_castable_to_bool(sample_values):
+                df = df.withColumn(
+                    col_name,
+                    F.when(F.lower(col).isin("true", "yes", "1", "t", "y"), True)
+                    .when(F.lower(col).isin("false", "no", "0", "f", "n"), False)
+                    .otherwise(None)
+                    .cast(BooleanType()),
+                )
+                continue
+
+            # Try integer
+            if self._all_castable_to_int(sample_values):
+                df = df.withColumn(col_name, col.cast(IntegerType()))
+                continue
+
+            # Try long
+            if self._all_castable_to_long(sample_values):
+                df = df.withColumn(col_name, col.cast(LongType()))
+                continue
+
+            # Try double
+            if self._all_castable_to_double(sample_values):
+                df = df.withColumn(col_name, col.cast(DoubleType()))
+                continue
+
+            # Try date (ISO format YYYY-MM-DD)
+            if self._all_castable_to_date(sample_values):
+                df = df.withColumn(col_name, F.to_date(col, "yyyy-MM-dd"))
+                continue
+
+            # Keep as string
+
+        return df
+
+    _BOOL_TRUE = {"true", "false", "yes", "no", "1", "0", "t", "f", "y", "n"}
+
+    @classmethod
+    def _all_castable_to_bool(cls, values: list) -> bool:
+        """Check if all string values are boolean-like."""
+        for v in values:
+            if str(v).strip().lower() not in cls._BOOL_TRUE:
+                return False
+        return True
+
+    @staticmethod
+    def _all_castable_to_int(values: list) -> bool:
+        """Check if all string values can be cast to int."""
+        for v in values:
+            try:
+                iv = int(v)
+                if iv < -2147483648 or iv > 2147483647:
+                    return False
+            except (ValueError, TypeError):
+                return False
+        return True
+
+    @staticmethod
+    def _all_castable_to_long(values: list) -> bool:
+        """Check if all string values can be cast to long."""
+        for v in values:
+            try:
+                int(v)
+            except (ValueError, TypeError):
+                return False
+        return True
+
+    @staticmethod
+    def _all_castable_to_double(values: list) -> bool:
+        """Check if all string values can be cast to double."""
+        for v in values:
+            try:
+                float(v)
+            except (ValueError, TypeError):
+                return False
+        return True
+
+    @staticmethod
+    def _all_castable_to_date(values: list) -> bool:
+        """Check if all string values are ISO dates (YYYY-MM-DD)."""
+        import re
+
+        date_pattern = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+        for v in values:
+            if not date_pattern.match(str(v).strip()):
+                return False
+        return True
 
     def _apply_schema_overrides(self, df: Any, seed: SeedNode) -> Any:
         """Apply column type overrides from seed config.
