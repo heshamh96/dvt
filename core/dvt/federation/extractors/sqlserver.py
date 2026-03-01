@@ -1,11 +1,11 @@
 """
 SQL Server extractor for EL layer.
 
-Extraction priority:
-1. Pipe-based: bcp queryout | PyArrow streaming (if bcp on PATH)
-2. Spark JDBC: parallel reads (default fallback)
-
+Extraction method: Spark JDBC (parallel reads).
 Also handles Azure Synapse and Fabric.
+
+Legacy pipe method (_extract_via_pipe) is retained in the base class
+for potential future opt-in use but is NOT called by default.
 """
 
 import os
@@ -150,16 +150,7 @@ class SQLServerExtractor(BaseExtractor):
             )
 
     def extract(self, config: ExtractionConfig, output_path: Path) -> ExtractionResult:
-        """Extract data from SQL Server to Parquet.
-
-        Tries pipe (bcp) first, falls back to Spark JDBC.
-        """
-        if self._has_cli_tool():
-            try:
-                return self._extract_via_pipe(config, output_path)
-            except Exception as e:
-                self._log(f"Pipe extraction failed ({e}), falling back to JDBC...")
-
+        """Extract data from SQL Server to Parquet via Spark JDBC."""
         return self._extract_jdbc(config, output_path)
 
     def extract_hashes(self, config: ExtractionConfig) -> Dict[str, str]:

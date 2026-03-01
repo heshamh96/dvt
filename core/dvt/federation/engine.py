@@ -709,10 +709,14 @@ class FederationEngine:
 
             # Read staging data (auto-detect Delta vs legacy Parquet)
             staging_path_obj = Path(str(staging_path))
-            if staging_path_obj.is_dir() and (staging_path_obj / "_delta_log").is_dir():
-                df = spark.read.format("delta").load(str(staging_path))
-            else:
-                df = spark.read.parquet(str(staging_path))
+            try:
+                if staging_path_obj.is_dir() and (staging_path_obj / "_delta_log").is_dir():
+                    df = spark.read.format("delta").load(str(staging_path))
+                else:
+                    df = spark.read.parquet(str(staging_path))
+            except Exception as e:
+                self._log(f"  Warning: Could not read staging for {dep_id}: {e}")
+                continue
 
             # Create temp view with unique prefix
             alias = source_mappings.get(dep_id, source.name)
@@ -781,11 +785,20 @@ class FederationEngine:
         staging_path = el_layer.get_staging_path(model_staging_id)
         staging_path_obj = Path(str(staging_path))
 
-        # Read Delta staging (or legacy Parquet fallback)
-        if staging_path_obj.is_dir() and (staging_path_obj / "_delta_log").is_dir():
-            df = spark.read.format("delta").load(str(staging_path))
-        else:
-            df = spark.read.parquet(str(staging_path))
+        # Read Delta staging (or legacy Parquet fallback).
+        # Wrap in try/except: corrupted/empty Delta logs should not fail
+        # the entire federation — just skip self-view registration.
+        try:
+            if staging_path_obj.is_dir() and (staging_path_obj / "_delta_log").is_dir():
+                df = spark.read.format("delta").load(str(staging_path))
+            else:
+                df = spark.read.parquet(str(staging_path))
+        except Exception as e:
+            self._log(
+                f"  Warning: Could not read model staging for {{{{ this }}}} "
+                f"({model_staging_id}): {e}. Skipping self-view registration."
+            )
+            return
 
         # Register as temp view
         view_name = f"{view_prefix}_this"

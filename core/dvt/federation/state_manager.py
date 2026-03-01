@@ -316,8 +316,9 @@ class StateManager:
     def staging_exists(self, source_name: str) -> bool:
         """Check if staging data exists for a source.
 
-        Checks for Delta format first (directory with _delta_log/),
-        then falls back to legacy Parquet file for backward compatibility.
+        Checks for Delta format first (directory with _delta_log/
+        containing at least one commit JSON file), then falls back to
+        legacy Parquet file for backward compatibility.
 
         Args:
             source_name: Identifier like 'postgres__orders'
@@ -326,9 +327,14 @@ class StateManager:
             True if staging data exists (Delta or legacy Parquet)
         """
         # Delta format: directory with _delta_log/ subdirectory
+        # that contains at least one commit file (*.json).
+        # An empty _delta_log/ is a corrupted/partial write — treat as missing.
         delta_path = self.bucket_path / f"{source_name}.delta"
-        if delta_path.is_dir() and (delta_path / "_delta_log").is_dir():
-            return True
+        delta_log = delta_path / "_delta_log"
+        if delta_path.is_dir() and delta_log.is_dir():
+            has_commits = any(delta_log.glob("*.json"))
+            if has_commits:
+                return True
         # Legacy Parquet file (backward compat)
         parquet_path = self.bucket_path / f"{source_name}.parquet"
         return parquet_path.exists() or (
@@ -349,7 +355,8 @@ class StateManager:
             Path to the Delta staging directory (or legacy Parquet file)
         """
         delta_path = self.bucket_path / f"{source_name}.delta"
-        if delta_path.is_dir() and (delta_path / "_delta_log").is_dir():
+        delta_log = delta_path / "_delta_log"
+        if delta_path.is_dir() and delta_log.is_dir() and any(delta_log.glob("*.json")):
             return delta_path
         # Legacy Parquet — return it if it exists, otherwise return Delta path
         # (new extractions will create Delta)

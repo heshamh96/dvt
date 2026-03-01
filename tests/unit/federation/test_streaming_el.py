@@ -186,40 +186,8 @@ class TestFetchmanyExtractHashes:
 class TestStreamingPostgresExtractor:
     """Tests for PostgresExtractor._extract_copy_streaming()."""
 
-    def test_fallback_chain_streaming_to_buffered(self):
-        """When streaming fails, should fall back to buffered COPY."""
-        from dvt.federation.extractors.postgres import PostgresExtractor
-
-        extractor = PostgresExtractor.__new__(PostgresExtractor)
-        extractor._on_progress = None
-        extractor._lazy_connection = None
-
-        config = MagicMock()
-        config.source_name = "test"
-        output_path = MagicMock()
-
-        # Make streaming raise, buffered succeed
-        mock_result = MagicMock()
-        mock_result.extraction_method = "copy"
-
-        with (
-            patch.object(
-                extractor,
-                "_extract_copy_streaming",
-                side_effect=Exception("streaming failed"),
-            ),
-            patch.object(
-                extractor, "_extract_copy", return_value=mock_result
-            ) as mock_buffered,
-            patch.object(extractor, "_log"),
-        ):
-            result = extractor.extract(config, output_path)
-
-        mock_buffered.assert_called_once_with(config, output_path)
-        assert result.extraction_method == "copy"
-
-    def test_fallback_chain_all_to_jdbc(self):
-        """When both COPY methods fail, should fall back to JDBC."""
+    def test_extract_uses_jdbc_directly(self):
+        """extract() should use JDBC directly (no COPY/pipe fallback)."""
         from dvt.federation.extractors.postgres import PostgresExtractor
 
         extractor = PostgresExtractor.__new__(PostgresExtractor)
@@ -235,23 +203,16 @@ class TestStreamingPostgresExtractor:
 
         with (
             patch.object(
-                extractor,
-                "_extract_copy_streaming",
-                side_effect=Exception("streaming failed"),
-            ),
-            patch.object(
-                extractor,
-                "_extract_copy",
-                side_effect=Exception("buffered failed"),
-            ),
-            patch.object(
                 extractor, "_extract_jdbc", return_value=mock_result
             ) as mock_jdbc,
-            patch.object(extractor, "_log"),
+            patch.object(extractor, "_extract_copy_streaming") as mock_streaming,
+            patch.object(extractor, "_extract_copy") as mock_buffered,
         ):
             result = extractor.extract(config, output_path)
 
         mock_jdbc.assert_called_once_with(config, output_path)
+        mock_streaming.assert_not_called()
+        mock_buffered.assert_not_called()
         assert result.extraction_method == "jdbc"
 
 

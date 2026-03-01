@@ -1,9 +1,10 @@
 """
 MySQL extractor for EL layer.
 
-Extraction priority:
-1. Pipe-based: mysql --batch | PyArrow streaming (if mysql CLI on PATH)
-2. Spark JDBC: parallel reads (default fallback)
+Extraction method: Spark JDBC (parallel reads).
+
+Legacy pipe method (_extract_via_pipe) is retained in the base class
+for potential future opt-in use but is NOT called by default.
 """
 
 import os
@@ -141,16 +142,7 @@ class MySQLExtractor(BaseExtractor):
         config: ExtractionConfig,
         output_path: Path,
     ) -> ExtractionResult:
-        """Extract data from MySQL to Parquet.
-
-        Tries pipe (mysql CLI) first, falls back to Spark JDBC.
-        """
-        if self._has_cli_tool():
-            try:
-                return self._extract_via_pipe(config, output_path)
-            except Exception as e:
-                self._log(f"Pipe extraction failed ({e}), falling back to JDBC...")
-
+        """Extract data from MySQL to Parquet via Spark JDBC."""
         return self._extract_jdbc(config, output_path)
 
     def extract_hashes(

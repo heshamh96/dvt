@@ -412,57 +412,27 @@ class TestPostgresExtractorPipe:
         env = ext._build_extraction_env(config)
         assert env["PGPASSWORD"] == "secret123"
 
-    def test_extract_tries_pipe_first(self):
-        """extract() should try pipe when psql is available."""
+    def test_extract_uses_jdbc_directly(self):
+        """extract() should use JDBC directly (no pipe/COPY fallback)."""
         from dvt.federation.extractors.base import ExtractionConfig, ExtractionResult
 
         ext = self._make_extractor()
         config = ExtractionConfig(source_name="test", schema="public", table="t1")
         output_path = Path("/tmp/test.parquet")
 
-        pipe_result = ExtractionResult(
-            success=True, source_name="test", row_count=100, extraction_method="pipe"
+        jdbc_result = ExtractionResult(
+            success=True, source_name="test", row_count=100, extraction_method="jdbc"
         )
 
         with (
-            patch.object(ext, "_has_cli_tool", return_value=True),
-            patch.object(
-                ext, "_extract_via_pipe", return_value=pipe_result
-            ) as mock_pipe,
+            patch.object(ext, "_extract_jdbc", return_value=jdbc_result) as mock_jdbc,
+            patch.object(ext, "_extract_via_pipe") as mock_pipe,
         ):
             result = ext.extract(config, output_path)
 
-            mock_pipe.assert_called_once_with(config, output_path)
-            assert result.extraction_method == "pipe"
-
-    def test_extract_falls_back_on_pipe_failure(self):
-        """extract() should fall back to streaming COPY if pipe fails."""
-        from dvt.federation.extractors.base import ExtractionConfig, ExtractionResult
-
-        ext = self._make_extractor()
-        config = ExtractionConfig(source_name="test", schema="public", table="t1")
-        output_path = Path("/tmp/test.parquet")
-
-        streaming_result = ExtractionResult(
-            success=True,
-            source_name="test",
-            row_count=100,
-            extraction_method="copy_streaming",
-        )
-
-        with (
-            patch.object(ext, "_has_cli_tool", return_value=True),
-            patch.object(
-                ext, "_extract_via_pipe", side_effect=RuntimeError("pipe failed")
-            ),
-            patch.object(
-                ext, "_extract_copy_streaming", return_value=streaming_result
-            ) as mock_streaming,
-        ):
-            result = ext.extract(config, output_path)
-
-            mock_streaming.assert_called_once()
-            assert result.extraction_method == "copy_streaming"
+            mock_jdbc.assert_called_once_with(config, output_path)
+            mock_pipe.assert_not_called()
+            assert result.extraction_method == "jdbc"
 
 
 class TestMySQLExtractorPipe:
@@ -535,30 +505,8 @@ class TestMySQLExtractorPipe:
             if opts is not None:
                 assert opts.delimiter == "\t"
 
-    def test_extract_tries_pipe_first(self):
-        """extract() should try pipe when mysql CLI is available."""
-        from dvt.federation.extractors.base import ExtractionConfig, ExtractionResult
-
-        ext = self._make_extractor()
-        config = ExtractionConfig(source_name="test", schema="mydb", table="t1")
-        output_path = Path("/tmp/test.parquet")
-
-        pipe_result = ExtractionResult(
-            success=True, source_name="test", row_count=100, extraction_method="pipe"
-        )
-
-        with (
-            patch.object(ext, "_has_cli_tool", return_value=True),
-            patch.object(
-                ext, "_extract_via_pipe", return_value=pipe_result
-            ) as mock_pipe,
-        ):
-            result = ext.extract(config, output_path)
-            mock_pipe.assert_called_once()
-            assert result.extraction_method == "pipe"
-
-    def test_extract_falls_back_to_jdbc(self):
-        """extract() should fall back to JDBC if pipe fails."""
+    def test_extract_uses_jdbc_directly(self):
+        """extract() should use JDBC directly (no pipe fallback)."""
         from dvt.federation.extractors.base import ExtractionConfig, ExtractionResult
 
         ext = self._make_extractor()
@@ -570,12 +518,12 @@ class TestMySQLExtractorPipe:
         )
 
         with (
-            patch.object(ext, "_has_cli_tool", return_value=True),
-            patch.object(ext, "_extract_via_pipe", side_effect=RuntimeError("fail")),
             patch.object(ext, "_extract_jdbc", return_value=jdbc_result) as mock_jdbc,
+            patch.object(ext, "_extract_via_pipe") as mock_pipe,
         ):
             result = ext.extract(config, output_path)
-            mock_jdbc.assert_called_once()
+            mock_jdbc.assert_called_once_with(config, output_path)
+            mock_pipe.assert_not_called()
             assert result.extraction_method == "jdbc"
 
 
@@ -627,24 +575,26 @@ class TestSQLServerExtractorPipe:
         assert "-S" in cmd
         assert "sql.example.com,1433" in cmd
 
-    def test_extract_tries_pipe_first(self):
-        """extract() should try pipe when bcp is available."""
+    def test_extract_uses_jdbc_directly(self):
+        """extract() should use JDBC directly (no pipe fallback)."""
         from dvt.federation.extractors.base import ExtractionConfig, ExtractionResult
 
         ext = self._make_extractor()
         config = ExtractionConfig(source_name="test", schema="dbo", table="t1")
         output_path = Path("/tmp/test.parquet")
 
-        pipe_result = ExtractionResult(
-            success=True, source_name="test", row_count=50, extraction_method="pipe"
+        jdbc_result = ExtractionResult(
+            success=True, source_name="test", row_count=50, extraction_method="jdbc"
         )
 
         with (
-            patch.object(ext, "_has_cli_tool", return_value=True),
-            patch.object(ext, "_extract_via_pipe", return_value=pipe_result),
+            patch.object(ext, "_extract_jdbc", return_value=jdbc_result) as mock_jdbc,
+            patch.object(ext, "_extract_via_pipe") as mock_pipe,
         ):
             result = ext.extract(config, output_path)
-            assert result.extraction_method == "pipe"
+            mock_jdbc.assert_called_once_with(config, output_path)
+            mock_pipe.assert_not_called()
+            assert result.extraction_method == "jdbc"
 
 
 class TestClickHouseExtractorPipe:
@@ -725,24 +675,26 @@ class TestClickHouseExtractorPipe:
         cmd = ext._build_extraction_command(config)
         assert "--password" not in cmd
 
-    def test_extract_tries_pipe_first(self):
-        """extract() should try pipe when clickhouse-client is available."""
+    def test_extract_uses_jdbc_directly(self):
+        """extract() should use JDBC directly (no pipe fallback)."""
         from dvt.federation.extractors.base import ExtractionConfig, ExtractionResult
 
         ext = self._make_extractor()
         config = ExtractionConfig(source_name="test", schema="default", table="t1")
         output_path = Path("/tmp/test.parquet")
 
-        pipe_result = ExtractionResult(
-            success=True, source_name="test", row_count=200, extraction_method="pipe"
+        jdbc_result = ExtractionResult(
+            success=True, source_name="test", row_count=200, extraction_method="jdbc"
         )
 
         with (
-            patch.object(ext, "_has_cli_tool", return_value=True),
-            patch.object(ext, "_extract_via_pipe", return_value=pipe_result),
+            patch.object(ext, "_extract_jdbc", return_value=jdbc_result) as mock_jdbc,
+            patch.object(ext, "_extract_via_pipe") as mock_pipe,
         ):
             result = ext.extract(config, output_path)
-            assert result.extraction_method == "pipe"
+            mock_jdbc.assert_called_once_with(config, output_path)
+            mock_pipe.assert_not_called()
+            assert result.extraction_method == "jdbc"
 
 
 # =============================================================================

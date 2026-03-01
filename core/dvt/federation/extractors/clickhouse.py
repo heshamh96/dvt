@@ -1,9 +1,10 @@
 """
 ClickHouse extractor for EL layer.
 
-Extraction priority:
-1. Pipe-based: clickhouse-client --query | PyArrow streaming (if CLI on PATH)
-2. Spark JDBC: parallel reads (default fallback)
+Extraction method: Spark JDBC (parallel reads).
+
+Legacy pipe method (_extract_via_pipe) is retained in the base class
+for potential future opt-in use but is NOT called by default.
 """
 
 import os
@@ -148,16 +149,7 @@ class ClickHouseExtractor(BaseExtractor):
         return env
 
     def extract(self, config: ExtractionConfig, output_path: Path) -> ExtractionResult:
-        """Extract data from ClickHouse to Parquet.
-
-        Tries pipe (clickhouse-client) first, falls back to Spark JDBC.
-        """
-        if self._has_cli_tool():
-            try:
-                return self._extract_via_pipe(config, output_path)
-            except Exception as e:
-                self._log(f"Pipe extraction failed ({e}), falling back to JDBC...")
-
+        """Extract data from ClickHouse to Parquet via Spark JDBC."""
         return self._extract_jdbc(config, output_path)
 
     def extract_hashes(self, config: ExtractionConfig) -> Dict[str, str]:

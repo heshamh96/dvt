@@ -808,7 +808,7 @@ class TestStagingExistsForModels:
     """Tests for StateManager.staging_exists() with model-prefixed IDs."""
 
     def test_delta_staging_detected(self):
-        """staging_exists should return True for model Delta staging."""
+        """staging_exists should return True for model Delta staging with valid commits."""
         import tempfile
         from dvt.federation.state_manager import StateManager
 
@@ -816,9 +816,25 @@ class TestStagingExistsForModels:
             sm = StateManager(Path(tmpdir))
             delta_path = Path(tmpdir) / "model.Coke_DB.incremental_test.delta"
             delta_path.mkdir()
-            (delta_path / "_delta_log").mkdir()
+            delta_log = delta_path / "_delta_log"
+            delta_log.mkdir()
+            (delta_log / "00000000000000000000.json").write_text("{}")
 
             assert sm.staging_exists("model.Coke_DB.incremental_test") is True
+
+    def test_empty_delta_log_returns_false(self):
+        """staging_exists should return False when _delta_log has no commit files."""
+        import tempfile
+        from dvt.federation.state_manager import StateManager
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sm = StateManager(Path(tmpdir))
+            delta_path = Path(tmpdir) / "model.Coke_DB.corrupted.delta"
+            delta_path.mkdir()
+            (delta_path / "_delta_log").mkdir()
+            # Empty _delta_log — no commit JSON files
+
+            assert sm.staging_exists("model.Coke_DB.corrupted") is False
 
     def test_no_staging_returns_false(self):
         """staging_exists should return False when no staging exists."""

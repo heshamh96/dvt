@@ -1,11 +1,10 @@
 """
 PostgreSQL extractor for EL layer.
 
-Extraction priority:
-1. Pipe-based: psql COPY TO STDOUT | PyArrow streaming (if psql on PATH)
-2. In-process streaming COPY: psycopg2 copy_expert + PyArrow batch reader
-3. In-process buffered COPY: psycopg2 copy_expert + in-memory buffer
-4. Spark JDBC: parallel reads (default fallback)
+Extraction method: Spark JDBC (parallel reads).
+
+Legacy COPY methods (_extract_copy_streaming, _extract_copy) are retained
+for potential future opt-in use but are NOT called by default.
 """
 
 import os
@@ -32,11 +31,7 @@ from dvt.federation.extractors.base import (
 
 
 class PostgresExtractor(BaseExtractor):
-    """PostgreSQL-specific extractor using COPY for efficiency.
-
-    Extraction priority:
-    1. PostgreSQL COPY TO STDOUT (fast, single-threaded)
-    2. Spark JDBC (parallel reads, requires connection_config)
+    """PostgreSQL-specific extractor using Spark JDBC.
 
     Also works for PostgreSQL-compatible databases:
     - Greenplum, Materialize, RisingWave, CrateDB, AlloyDB, TimescaleDB
@@ -140,31 +135,7 @@ class PostgresExtractor(BaseExtractor):
         config: ExtractionConfig,
         output_path: Path,
     ) -> ExtractionResult:
-        """Extract data from PostgreSQL to Parquet.
-
-        Tries pipe (psql) first, then streaming COPY, buffered COPY,
-        then falls back to Spark JDBC.
-        """
-        # Try pipe extraction first (psql + PyArrow streaming, ~64KB memory)
-        if self._has_cli_tool():
-            try:
-                return self._extract_via_pipe(config, output_path)
-            except Exception as e:
-                self._log(f"Pipe extraction failed ({e}), trying streaming COPY...")
-
-        # Try streaming COPY (constant memory via OS page cache)
-        try:
-            return self._extract_copy_streaming(config, output_path)
-        except Exception as e:
-            self._log(f"Streaming COPY failed ({e}), trying buffered COPY...")
-
-        # Try buffered COPY (legacy, full dataset in memory)
-        try:
-            return self._extract_copy(config, output_path)
-        except Exception as e:
-            self._log(f"COPY failed ({e}), falling back to Spark JDBC...")
-
-        # Fallback to Spark JDBC (parallel reads)
+        """Extract data from PostgreSQL to Parquet via Spark JDBC."""
         return self._extract_jdbc(config, output_path)
 
     def _extract_copy_streaming(

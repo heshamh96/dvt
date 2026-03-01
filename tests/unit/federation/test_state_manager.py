@@ -356,13 +356,23 @@ class TestStateManager:
         assert result is True
 
     def test_staging_exists_true_delta(self, state_manager, temp_bucket):
-        """Should return True when Delta staging directory exists."""
+        """Should return True when Delta staging directory exists with valid commits."""
+        delta_dir = temp_bucket / "postgres__orders.delta"
+        delta_log = delta_dir / "_delta_log"
+        delta_log.mkdir(parents=True)
+        (delta_log / "00000000000000000000.json").write_text("{}")
+
+        result = state_manager.staging_exists("postgres__orders")
+        assert result is True
+
+    def test_staging_exists_false_empty_delta_log(self, state_manager, temp_bucket):
+        """Should return False when _delta_log exists but has no commit files."""
         delta_dir = temp_bucket / "postgres__orders.delta"
         delta_log = delta_dir / "_delta_log"
         delta_log.mkdir(parents=True)
 
         result = state_manager.staging_exists("postgres__orders")
-        assert result is True
+        assert result is False
 
     def test_staging_exists_false_empty_delta_dir(self, state_manager, temp_bucket):
         """Should return False when Delta directory exists but has no _delta_log."""
@@ -400,7 +410,9 @@ class TestStateManager:
         # Create both legacy Parquet and Delta
         (temp_bucket / "postgres__orders.parquet").touch()
         delta_dir = temp_bucket / "postgres__orders.delta"
-        (delta_dir / "_delta_log").mkdir(parents=True)
+        delta_log = delta_dir / "_delta_log"
+        delta_log.mkdir(parents=True)
+        (delta_log / "00000000000000000000.json").write_text("{}")
 
         path = state_manager.get_staging_path("postgres__orders")
         assert path == temp_bucket / "postgres__orders.delta"
@@ -419,6 +431,7 @@ class TestStateManager:
         delta_dir = temp_bucket / "postgres__orders.delta"
         delta_log = delta_dir / "_delta_log"
         delta_log.mkdir(parents=True)
+        (delta_log / "00000000000000000000.json").write_text("{}")
         (delta_dir / "part-00000.parquet").touch()
 
         state_manager.clear_staging("postgres__orders")
@@ -429,7 +442,9 @@ class TestStateManager:
         """Should clear both Delta and legacy Parquet staging."""
         (temp_bucket / "postgres__orders.parquet").touch()
         delta_dir = temp_bucket / "postgres__orders.delta"
-        (delta_dir / "_delta_log").mkdir(parents=True)
+        delta_log = delta_dir / "_delta_log"
+        delta_log.mkdir(parents=True)
+        (delta_log / "00000000000000000000.json").write_text("{}")
 
         state_manager.clear_staging("postgres__orders")
 

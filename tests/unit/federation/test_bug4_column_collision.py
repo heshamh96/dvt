@@ -217,10 +217,13 @@ class TestUnionOfColumnsReExtraction:
             columns=columns,
         )
         el.state_manager.save_source_state(state)
-        # Create a fake Delta staging directory with _delta_log/ so
-        # staging_exists() returns True (it checks for .delta/ + _delta_log/).
+        # Create a fake Delta staging directory with _delta_log/ and a
+        # dummy commit file so staging_exists() returns True.
+        # staging_exists() checks for .delta/ + _delta_log/ with *.json commits.
         delta_path = el.state_manager.bucket_path / "sf__cbs_f_country.delta"
-        (delta_path / "_delta_log").mkdir(parents=True, exist_ok=True)
+        delta_log = delta_path / "_delta_log"
+        delta_log.mkdir(parents=True, exist_ok=True)
+        (delta_log / "00000000000000000000.json").write_text("{}")
 
     def _mock_extractor(self, all_columns):
         extractor = MagicMock()
@@ -395,7 +398,9 @@ class TestBug4EndToEnd:
         # directory so staging_exists() returns True for subsequent calls.
         def fake_convert(parquet_path, delta_path, source_name, extraction_result):
             # Create Delta directory structure so staging_exists() works
-            (delta_path / "_delta_log").mkdir(parents=True, exist_ok=True)
+            delta_log = delta_path / "_delta_log"
+            delta_log.mkdir(parents=True, exist_ok=True)
+            (delta_log / "00000000000000000000.json").write_text("{}")
             return ExtractionResult(
                 success=True,
                 source_name=source_name,
@@ -483,7 +488,9 @@ class TestBug4EndToEnd:
         el = ELLayer(bucket_path=tmp_path / "staging", profile_name="test")
 
         def fake_convert(parquet_path, delta_path, source_name, extraction_result):
-            (delta_path / "_delta_log").mkdir(parents=True, exist_ok=True)
+            delta_log = delta_path / "_delta_log"
+            delta_log.mkdir(parents=True, exist_ok=True)
+            (delta_log / "00000000000000000000.json").write_text("{}")
             return ExtractionResult(
                 success=True,
                 source_name=source_name,
@@ -559,7 +566,9 @@ class TestBug4EndToEnd:
         el = ELLayer(bucket_path=tmp_path / "staging", profile_name="test")
 
         def fake_convert(parquet_path, delta_path, source_name, extraction_result):
-            (delta_path / "_delta_log").mkdir(parents=True, exist_ok=True)
+            delta_log = delta_path / "_delta_log"
+            delta_log.mkdir(parents=True, exist_ok=True)
+            (delta_log / "00000000000000000000.json").write_text("{}")
             return ExtractionResult(
                 success=True,
                 source_name=source_name,
@@ -625,7 +634,9 @@ class TestBug4EndToEnd:
         el = ELLayer(bucket_path=tmp_path / "staging", profile_name="test")
 
         def fake_convert(parquet_path, delta_path, source_name, extraction_result):
-            (delta_path / "_delta_log").mkdir(parents=True, exist_ok=True)
+            delta_log = delta_path / "_delta_log"
+            delta_log.mkdir(parents=True, exist_ok=True)
+            (delta_log / "00000000000000000000.json").write_text("{}")
             return ExtractionResult(
                 success=True,
                 source_name=source_name,
@@ -689,7 +700,9 @@ class TestBug4EndToEnd:
         el = ELLayer(bucket_path=tmp_path / "staging", profile_name="test")
 
         def fake_convert(parquet_path, delta_path, source_name, extraction_result):
-            (delta_path / "_delta_log").mkdir(parents=True, exist_ok=True)
+            delta_log = delta_path / "_delta_log"
+            delta_log.mkdir(parents=True, exist_ok=True)
+            (delta_log / "00000000000000000000.json").write_text("{}")
             return ExtractionResult(
                 success=True,
                 source_name=source_name,
@@ -743,7 +756,9 @@ class TestBug4EndToEnd:
         el = ELLayer(bucket_path=tmp_path / "staging", profile_name="test")
 
         def fake_convert(parquet_path, delta_path, source_name, extraction_result):
-            (delta_path / "_delta_log").mkdir(parents=True, exist_ok=True)
+            delta_log = delta_path / "_delta_log"
+            delta_log.mkdir(parents=True, exist_ok=True)
+            (delta_log / "00000000000000000000.json").write_text("{}")
             return ExtractionResult(
                 success=True,
                 source_name=source_name,
