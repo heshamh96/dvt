@@ -185,6 +185,7 @@ def cli(ctx, **kwargs):
 @global_flags
 @p.bucket_param
 @p.compute
+@p.spark
 @p.empty
 @p.event_time_start
 @p.event_time_end
@@ -743,6 +744,7 @@ def run_operation(ctx, **kwargs):
 @click.pass_context
 @global_flags
 @p.compute
+@p.spark
 @p.exclude
 @p.full_refresh
 @p.profiles_dir
@@ -761,8 +763,21 @@ def run_operation(ctx, **kwargs):
 @requires.runtime_config
 @requires.manifest
 def seed(ctx, **kwargs):
-    """Load CSV seed files into your data warehouse via Spark JDBC. Use --compute to specify compute engine, --target for destination."""
-    from dvt.dvt_tasks.dvt_seed import DvtSeedTask as SeedTask
+    """Load CSV seed files into your data warehouse.
+
+    By default, uses the database adapter (same as dbt). Use --spark to
+    enable Spark-based bulk loading with the default compute, or
+    --compute <name> to use a specific compute engine from computes.yml."""
+    # DVT: default to standard adapter-based seeding (same as dbt).
+    # --spark (boolean) → use default compute from computes.yml
+    # --compute <name> → use the named compute
+    # Neither → standard adapter-based seeding
+    flags = ctx.obj["flags"]
+    use_spark = getattr(flags, "SPARK", False) or getattr(flags, "COMPUTE", None)
+    if use_spark:
+        from dvt.dvt_tasks.dvt_seed import DvtSeedTask as SeedTask
+    else:
+        from dvt.task.seed import SeedTask
 
     task = SeedTask(
         ctx.obj["flags"],
@@ -796,7 +811,7 @@ def seed(ctx, **kwargs):
 @requires.manifest
 def snapshot(ctx, **kwargs):
     """Execute snapshots defined in your project"""
-    from dvt.task.snapshot import SnapshotTask
+    from dvt.dvt_tasks.dvt_snapshot import DvtSnapshotTask as SnapshotTask
 
     task = SnapshotTask(
         ctx.obj["flags"],
@@ -880,9 +895,9 @@ cli.commands["source"].add_command(snapshot_freshness, "snapshot-freshness")  # 
 @requires.manifest
 def test(ctx, **kwargs):
     """Runs tests on data in deployed models. Run this after `dvt run`"""
-    from dvt.task.test import TestTask
+    from dvt.dvt_tasks.dvt_test import DvtTestTask
 
-    task = TestTask(
+    task = DvtTestTask(
         ctx.obj["flags"],
         ctx.obj["runtime_config"],
         ctx.obj["manifest"],

@@ -65,11 +65,16 @@ class BaseParser(Generic[FinalValue]):
         An optional hash may be passed in to ensure uniqueness for edge cases"""
 
         return ".".join(
-            filter(None, [self.resource_type, self.project.project_name, resource_name, hash])
+            filter(
+                None,
+                [self.resource_type, self.project.project_name, resource_name, hash],
+            )
         )
 
     def _handle_extract_warning(self, warning: ExtractWarning, file: str) -> None:
-        deprecations.warn("unexpected-jinja-block-deprecation", msg=warning.msg, file=file)
+        deprecations.warn(
+            "unexpected-jinja-block-deprecation", msg=warning.msg, file=file
+        )
 
 
 class Parser(BaseParser[FinalValue], Generic[FinalValue]):
@@ -85,13 +90,17 @@ class Parser(BaseParser[FinalValue], Generic[FinalValue]):
 
 class RelationUpdate:
     # "component" is database, schema or alias
-    def __init__(self, config: RuntimeConfig, manifest: Manifest, component: str) -> None:
+    def __init__(
+        self, config: RuntimeConfig, manifest: Manifest, component: str
+    ) -> None:
         default_macro = manifest.find_generate_macro_by_name(
             component=component,
             root_project_name=config.project_name,
         )
         if default_macro is None:
-            raise DbtInternalError(f"No macro with name generate_{component}_name found")
+            raise DbtInternalError(
+                f"No macro with name generate_{component}_name found"
+            )
 
         default_macro_context = generate_generate_name_macro_context(
             default_macro, config, manifest
@@ -119,7 +128,9 @@ class RelationUpdate:
 
     def __call__(self, parsed_node: Any, override: Optional[str]) -> None:
         if getattr(parsed_node, "package_name", None) in self.package_updaters:
-            new_value = self.package_updaters[parsed_node.package_name](override, parsed_node)
+            new_value = self.package_updaters[parsed_node.package_name](
+                override, parsed_node
+            )
         else:
             new_value = self.default_updater(override, parsed_node)
 
@@ -196,7 +207,12 @@ class ConfiguredParser(
                 config[key] = [hooks.get_hook_dict(h) for h in config[key]]
 
     def _create_error_node(
-        self, name: str, path: str, original_file_path: str, raw_code: str, language: str = "sql"
+        self,
+        name: str,
+        path: str,
+        original_file_path: str,
+        raw_code: str,
+        language: str = "sql",
     ) -> UnparsedNode:
         """If we hit an error before we've actually parsed a node, provide some
         level of useful information by attaching this to the exception.
@@ -271,8 +287,12 @@ class ConfiguredParser(
             )
             raise DictParseError(exc, node=node)
 
-    def _context_for(self, parsed_node: FinalNode, config: ContextConfig) -> Dict[str, Any]:
-        return generate_parser_model_context(parsed_node, self.root_project, self.manifest, config)
+    def _context_for(
+        self, parsed_node: FinalNode, config: ContextConfig
+    ) -> Dict[str, Any]:
+        return generate_parser_model_context(
+            parsed_node, self.root_project, self.manifest, config
+        )
 
     def render_with_context(self, parsed_node: FinalNode, config: ContextConfig):
         # Given the parsed node and a ContextConfig to use during parsing,
@@ -372,7 +392,9 @@ class ConfiguredParser(
             parsed_node.group = config_dict["group"]
 
         # If we have access in the config, copy to node level
-        if parsed_node.resource_type == NodeType.Model and config_dict.get("access", None):
+        if parsed_node.resource_type == NodeType.Model and config_dict.get(
+            "access", None
+        ):
             if AccessType.is_valid(config_dict["access"]):
                 assert hasattr(parsed_node, "access")
                 parsed_node.access = AccessType(config_dict["access"])
@@ -411,10 +433,14 @@ class ConfiguredParser(
             if patch_file_id:
                 patch_file = self.manifest.files.get(patch_file_id, None)
                 if patch_file and isinstance(patch_file, SchemaSourceFile):
-                    schema_key = resource_types_to_schema_file_keys.get(parsed_node.resource_type)
+                    schema_key = resource_types_to_schema_file_keys.get(
+                        parsed_node.resource_type
+                    )
                     if schema_key:
                         if unrendered_patch_config := patch_file.get_unrendered_config(
-                            schema_key, parsed_node.name, getattr(parsed_node, "version", None)
+                            schema_key,
+                            parsed_node.name,
+                            getattr(parsed_node, "version", None),
                         ):
                             patch_config_dict = deep_merge(
                                 patch_config_dict, unrendered_patch_config
@@ -431,7 +457,9 @@ class ConfiguredParser(
         # read multiple times. Doing the validation here ensures that the config
         # is only validated once.
         if parsed_node.resource_type == NodeType.Model and validate_config_call_dict:
-            validate_model_config(config._config_call_dict, parsed_node.original_file_path)
+            validate_model_config(
+                config._config_call_dict, parsed_node.original_file_path
+            )
 
         parsed_node.config_call_dict = config._config_call_dict
         parsed_node.unrendered_config_call_dict = config._unrendered_config_call_dict
@@ -448,8 +476,12 @@ class ConfiguredParser(
 
         # at this point, we've collected our hooks. Use the node context to
         # render each hook and collect refs/sources
-        assert hasattr(parsed_node.config, "pre_hook") and hasattr(parsed_node.config, "post_hook")
-        hooks = list(itertools.chain(parsed_node.config.pre_hook, parsed_node.config.post_hook))
+        assert hasattr(parsed_node.config, "pre_hook") and hasattr(
+            parsed_node.config, "post_hook"
+        )
+        hooks = list(
+            itertools.chain(parsed_node.config.pre_hook, parsed_node.config.post_hook)
+        )
         # skip context rebuilding if there aren't any hooks
         if not hooks:
             return
@@ -459,7 +491,9 @@ class ConfiguredParser(
             get_rendered(hook.sql, context, parsed_node, capture_macros=True)
 
     def initial_config(self, fqn: List[str]) -> ContextConfig:
-        config_version = min([self.project.config_version, self.root_project.config_version])
+        config_version = min(
+            [self.project.config_version, self.root_project.config_version]
+        )
         if config_version == 2:
             return ContextConfig(
                 self.root_project,
@@ -481,12 +515,18 @@ class ConfiguredParser(
         return config_dict
 
     def render_update(
-        self, node: FinalNode, config: ContextConfig, validate_config_call_dict: bool = False
+        self,
+        node: FinalNode,
+        config: ContextConfig,
+        validate_config_call_dict: bool = False,
     ) -> None:
         try:
             context = self.render_with_context(node, config)
             self.update_parsed_node_config(
-                node, config, context=context, validate_config_call_dict=validate_config_call_dict
+                node,
+                config,
+                context=context,
+                validate_config_call_dict=validate_config_call_dict,
             )
         except ValidationError as exc:
             # we got a ValidationError - probably bad types in config()
@@ -519,7 +559,9 @@ class ConfiguredParser(
         # and TestNodes that store_failures.
         # TestNodes do not get a relation_name without store failures
         # because no schema is created.
-        if getattr(node, "is_relational", None) and not getattr(node, "is_ephemeral_model", None):
+        if getattr(node, "is_relational", None) and not getattr(
+            node, "is_ephemeral_model", None
+        ):
             adapter = get_adapter(self.root_project)
             relation_cls = adapter.Relation
             node.relation_name = str(relation_cls.create_from(self.root_project, node))

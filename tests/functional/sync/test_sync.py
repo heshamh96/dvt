@@ -31,10 +31,10 @@ class TestSyncJdbcDrivers:
     """
 
     @pytest.mark.usefixtures("sync_venv")
-    @mock.patch("dvt.task.sync.download_jdbc_jars")
-    @mock.patch("dvt.task.sync._get_active_pyspark_version", return_value=None)
-    @mock.patch("dvt.task.sync._run_uv_pip", return_value=True)
-    @mock.patch("dvt.task.sync._run_pip", return_value=True)
+    @mock.patch("dvt.dvt_tasks.dvt_sync.download_jdbc_jars")
+    @mock.patch("dvt.dvt_tasks.dvt_sync._get_active_pyspark_version", return_value=None)
+    @mock.patch("dvt.dvt_tasks.dvt_sync._run_uv_pip", return_value=True)
+    @mock.patch("dvt.dvt_tasks.dvt_sync._run_pip", return_value=True)
     def test_sync_downloads_jdbc_jars_for_profile_adapters(
         self,
         mock_run_pip,
@@ -82,10 +82,10 @@ class TestSyncNoVenvFailsOrPrompts:
         (external_venv / "bin" / "python").write_text("#!/usr/bin/env python3\n")
         (external_venv / "bin" / "python").chmod(0o755)
 
-        with mock.patch("dvt.task.sync.download_jdbc_jars"):
-            with mock.patch("dvt.task.sync._get_active_pyspark_version", return_value=None):
-                with mock.patch("dvt.task.sync._run_uv_pip", return_value=True):
-                    with mock.patch("dvt.task.sync._run_pip", return_value=True):
+        with mock.patch("dvt.dvt_tasks.dvt_sync.download_jdbc_jars"):
+            with mock.patch("dvt.dvt_tasks.dvt_sync._get_active_pyspark_version", return_value=None):
+                with mock.patch("dvt.dvt_tasks.dvt_sync._run_uv_pip", return_value=True):
+                    with mock.patch("dvt.dvt_tasks.dvt_sync._run_pip", return_value=True):
                         run_dbt(
                             ["sync", "--python-env", str(external_venv)],
                             expect_pass=True,

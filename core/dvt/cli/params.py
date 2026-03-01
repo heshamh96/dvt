@@ -675,6 +675,15 @@ compute = _create_option_and_track_env_var(
     help="Which compute engine to use (from computes.yml). Defaults to project's default compute.",
 )
 
+# DVT: Spark-based seed flag (boolean — uses default compute from computes.yml)
+spark = click.option(
+    "--spark",
+    is_flag=True,
+    default=False,
+    help="Use Spark for seeding (bulk JDBC load). Uses default compute from computes.yml. "
+    "For a specific compute, use --compute <name> instead.",
+)
+
 # DVT: Bucket selection for federation staging
 bucket_param = _create_option_and_track_env_var(
     "--bucket",

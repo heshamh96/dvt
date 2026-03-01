@@ -554,10 +554,10 @@ test:
 name: '{project_name}'
 version: '1.0.0'
 
-# This setting configures which "profile" dbt uses for this project.
+# This setting configures which "profile" dvt uses for this project.
 profile: '{project_name}'
 
-# These configurations specify where dbt should look for different types of files.
+# These configurations specify where dvt should look for different types of files.
 # The `model-paths` config, for example, states that models in this project can be
 # found in the "models/" directory. You probably won't need to change these!
 model-paths: ["models"]
@@ -569,13 +569,13 @@ snapshot-paths: ["snapshots"]
 
 clean-targets:         # directories to be removed by `dvt clean`
   - "target"
-  - "dbt_packages"
+  - "dvt_packages"
 
 
 # Configuring models
-# Full documentation: https://docs.getdbt.com/docs/configuring-models
+# Full documentation: https://github.com/heshamh96/dvt
 
-# In this example config, we tell dbt to build all models in the example/
+# In this example config, we tell dvt to build all models in the example/
 # directory as views. These settings can be overridden in the individual model
 # files using the `{{{{ config(...) }}}}` macro.
 models:
@@ -672,10 +672,10 @@ class TestInitProvidedProjectNameAndSkipProfileSetup(TestInitOutsideOfProjectBas
 name: '{project_name}'
 version: '1.0.0'
 
-# This setting configures which "profile" dbt uses for this project.
+# This setting configures which "profile" dvt uses for this project.
 profile: '{project_name}'
 
-# These configurations specify where dbt should look for different types of files.
+# These configurations specify where dvt should look for different types of files.
 # The `model-paths` config, for example, states that models in this project can be
 # found in the "models/" directory. You probably won't need to change these!
 model-paths: ["models"]
@@ -687,13 +687,13 @@ snapshot-paths: ["snapshots"]
 
 clean-targets:         # directories to be removed by `dvt clean`
   - "target"
-  - "dbt_packages"
+  - "dvt_packages"
 
 
 # Configuring models
-# Full documentation: https://docs.getdbt.com/docs/configuring-models
+# Full documentation: https://github.com/heshamh96/dvt
 
-# In this example config, we tell dbt to build all models in the example/
+# In this example config, we tell dvt to build all models in the example/
 # directory as views. These settings can be overridden in the individual model
 # files using the `{{{{ config(...) }}}}` macro.
 models:
@@ -758,10 +758,10 @@ class TestInitOutsideOfProjectWithSpecifiedProfile(TestInitOutsideOfProjectBase)
 name: '{project_name}'
 version: '1.0.0'
 
-# This setting configures which "profile" dbt uses for this project.
+# This setting configures which "profile" dvt uses for this project.
 profile: 'test'
 
-# These configurations specify where dbt should look for different types of files.
+# These configurations specify where dvt should look for different types of files.
 # The `model-paths` config, for example, states that models in this project can be
 # found in the "models/" directory. You probably won't need to change these!
 model-paths: ["models"]
@@ -773,13 +773,13 @@ snapshot-paths: ["snapshots"]
 
 clean-targets:         # directories to be removed by `dvt clean`
   - "target"
-  - "dbt_packages"
+  - "dvt_packages"
 
 
 # Configuring models
-# Full documentation: https://docs.getdbt.com/docs/configuring-models
+# Full documentation: https://github.com/heshamh96/dvt
 
-# In this example config, we tell dbt to build all models in the example/
+# In this example config, we tell dvt to build all models in the example/
 # directory as views. These settings can be overridden in the individual model
 # files using the `{{{{ config(...) }}}}` macro.
 models:

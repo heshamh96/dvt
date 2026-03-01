@@ -110,15 +110,19 @@ flowchart LR
 
 ## Tested Adapters
 
-> **Note:** DVT is currently tested and validated against the following database adapters. Support for additional adapters is planned and will be included in future releases.
+DVT has been tested and validated against the following database adapters across all core commands (`seed`, `run`, `compile`, `test`, `build`, `show`, `snapshot`, `docs generate`, and cross-engine federation):
 
-| Adapter | Status | Notes |
-|---------|--------|-------|
-| **PostgreSQL** | Tested | Full support -- pushdown and federation |
-| **Snowflake** | Tested | Full support -- pushdown and federation, JDBC warehouse passthrough |
-| **Databricks** | Tested | Full support -- pushdown and federation, native connector for bulk transfer |
+| Adapter | Pushdown | Federation | Notes |
+|---------|----------|------------|-------|
+| **PostgreSQL** | Tested | Tested | Full support -- pushdown and federation |
+| **MySQL** | Tested | Tested | Full support via `dbt-mysql` adapter |
+| **MariaDB** | Tested | Tested | Full support via `dbt-mysql` adapter (MariaDB mode) |
+| **SQL Server** | Tested | Tested | Full support via `dbt-sqlserver` adapter |
+| **Oracle** | Tested | Tested | Full support via `dbt-oracle` adapter |
+| **Snowflake** | Tested | Tested | Full support -- JDBC warehouse passthrough |
+| **Databricks** | Tested | Tested | Full support -- native connector for bulk transfer |
 
-More adapters (BigQuery, Redshift, MySQL, SQL Server, and others) are on the roadmap. DVT's architecture is adapter-agnostic -- any database with a dbt adapter and a JDBC driver can be integrated.
+DVT's architecture is adapter-agnostic -- any database with a dbt adapter and a JDBC driver can be integrated. BigQuery, Redshift, and others are on the roadmap.
 
 ---
 
@@ -417,7 +421,7 @@ DVT provides all the commands you know from dbt, plus DVT-specific additions for
 |---------|-------------|
 | `dvt run` | Compile SQL models and execute against the target database. Supports `--select`, `--exclude`, `--full-refresh`. |
 | `dvt build` | Run all seeds, models, and tests in DAG order. The "do everything" command. |
-| `dvt seed` | Load CSV seed files into any target warehouse. Uses Spark for high-performance bulk loading, supporting larger files than dbt's native seed. |
+| `dvt seed` | Load CSV seed files into any target warehouse. By default, uses the database adapter (same as dbt). Use `--spark` for Spark-based bulk loading, or `--compute <name>` for a specific Spark compute engine. |
 | `dvt compile` | Generate executable SQL without running it. Output goes to `target/`. |
 | `dvt show` | Compile and run a query, returning a preview without materializing results. |
 | `dvt retry` | Retry only the nodes that failed in the previous run. |
@@ -426,6 +430,8 @@ DVT provides all the commands you know from dbt, plus DVT-specific additions for
 | `dvt parse` | Parse the full project and validate all references, configs, and Jinja compilation. |
 | `dvt deps` | Install dbt packages from `packages.yml`. Supports `--add-package` and `--upgrade`. |
 | `dvt list` / `dvt ls` | List all resources (models, tests, sources, etc.) in your project. |
+| `dvt test` | Run data tests (schema tests, singular tests, custom tests) on deployed models. Tested across all supported adapters. |
+| `dvt snapshot` | Execute snapshot definitions for slowly changing dimensions. Uses adapter-only execution (same as dbt). See [Snapshot Notes](#snapshot-notes) below. |
 | `dvt docs serve` | Serve the documentation website locally for browsing. |
 
 ### Inherited from dbt (not yet validated in DVT)
@@ -434,8 +440,6 @@ These dbt-core commands are available in DVT but have not been fully tested or a
 
 | Command | Description |
 |---------|-------------|
-| `dvt test` | Run data tests on deployed models. |
-| `dvt snapshot` | Execute snapshot definitions for slowly changing dimensions. |
 | `dvt clone` | Create clones of selected nodes based on a prior manifest state. |
 | `dvt run-operation` | Run a named macro with supplied arguments. |
 | `dvt source freshness` | Check the current freshness of your project's sources against defined thresholds. |
@@ -446,7 +450,8 @@ These flags are available on commands that interact with the federation engine:
 
 | Flag | Available On | Description |
 |------|-------------|-------------|
-| `--compute` / `-c` | `run`, `build`, `seed` | Select which compute engine to use from `computes.yml` |
+| `--compute` / `-c` | `run`, `build`, `seed` | Select which compute engine to use from `computes.yml`. For `seed`, activates Spark-based bulk loading with the named compute. |
+| `--spark` | `seed`, `build` | Use Spark for seeding (bulk JDBC load) with the default compute from `computes.yml`. Shorthand for `--compute <default>`. |
 | `--bucket` / `-b` | `run`, `build` | Select which staging bucket to use from `buckets.yml` |
 | `--connection <target>` | `debug` | Test connectivity to a specific database target |
 | `--debug-target` | `debug` | Show only target configurations in debug output |
@@ -458,6 +463,57 @@ These flags are available on commands that interact with the federation engine:
 ### dbt Compatibility Note
 
 All standard dbt-core CLI commands work as expected in DVT. The commands listed above represent the full set available today. Some dbt Cloud-specific features (such as `dbt cloud` subcommands) are not included, as DVT is focused on the open-source, self-hosted experience.
+
+---
+
+## Cross-Dialect Compilation
+
+DVT compiles each model using the adapter that matches its target. When a model has `config(target='mssql_docker')`, `dvt compile` uses the MSSQL adapter for macro resolution and Jinja rendering, then transpiles the SQL to the target dialect via SQLGlot. This means:
+
+- **Macros resolve per-target**: `{{ ref() }}`, `{{ source() }}`, and adapter-specific macros all render using the correct adapter for each model's target.
+- **No live connection needed**: `dvt compile` only needs the adapter plugin installed, not a live database connection.
+- **Automatic transpilation**: If a model's source dialect differs from its execution dialect, SQLGlot handles the translation (identifier quoting, function names, cast syntax, etc.).
+
+Write your SQL in the dialect of the target database. DVT handles the rest.
+
+For **adapter dispatch** (writing macros that work across engines), use dbt's standard `adapter.dispatch()` pattern:
+
+```sql
+{% macro my_timestamp_macro() %}
+    {{ return(adapter.dispatch('my_timestamp_macro')()) }}
+{% endmacro %}
+
+{% macro postgres__my_timestamp_macro() %}
+    current_timestamp
+{% endmacro %}
+
+{% macro sqlserver__my_timestamp_macro() %}
+    GETDATE()
+{% endmacro %}
+```
+
+---
+
+## Snapshot Notes
+
+DVT snapshots work via **adapter-only execution** (same as dbt) -- no federation path. Key points:
+
+- **Same-engine only**: All sources referenced by a snapshot must be on the same engine as the snapshot's target. Cross-engine snapshots are not supported.
+- **Automatic schema resolution**: When a snapshot has `config(target='mssql_docker')`, DVT automatically resolves the correct schema from the target's profile config (e.g., `dbo` for MSSQL, `SYSTEM` for Oracle, `devdb` for MySQL). You don't need to hardcode `target_schema`.
+- **Omit `target_schema`**: For cross-engine portability, omit `target_schema` from your snapshot config and let DVT resolve it from the target's profile. If you do set `target_schema`, it will be respected as an explicit override.
+
+```sql
+{% snapshot my_snapshot %}
+{{
+    config(
+        unique_key='id',
+        strategy='check',
+        check_cols=['name', 'status']
+    )
+}}
+SELECT * FROM {{ ref('my_model') }}
+{% endsnapshot %}
+```
 
 ---
 
