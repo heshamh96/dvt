@@ -124,3 +124,14 @@ poetry.lock
 *.onefile-build/
 dist/dvt
 dist/dvt.bin
+
+# Test project artifacts at repo root (pollute default_project_dir() resolution)
+ConflictProject/
+StructureTest/
+TestProject/
+_sync_test_proj/
+
+# DVT scratch files
+buckets.yml
+computes.yml
+data/

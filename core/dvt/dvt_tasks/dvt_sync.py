@@ -241,6 +241,22 @@ def _silent_uv_pip(env_path: Path, args: List[str], timeout: int = 120) -> bool:
         return False
 
 
+def _get_installed_version(env_path: Path, package: str) -> Optional[str]:
+    """Return the installed version of a package, or None if not installed."""
+    site_dirs = list(env_path.glob("lib/python*/site-packages"))
+    if not site_dirs:
+        site_dirs = list(env_path.glob("Lib/site-packages"))
+    normalized = package.replace("-", "_")
+    for site in site_dirs:
+        for dist in site.glob(f"{normalized}-*.dist-info"):
+            # Extract version from directory name: dbt_adapters-1.22.6.dist-info
+            name = dist.name  # e.g. "dbt_adapters-1.22.6.dist-info"
+            version_part = name[len(normalized) + 1 : -len(".dist-info")]
+            if version_part:
+                return version_part
+    return None
+
+
 def _is_package_installed(env_path: Path, package: str) -> bool:
     """Check if a package is installed in the given env (by looking for dist-info)."""
     site_dirs = list(env_path.glob("lib/python*/site-packages"))
@@ -255,13 +271,13 @@ def _is_package_installed(env_path: Path, package: str) -> bool:
     return False
 
 
-def _plant_dbt_core_metadata(env_path: Path, dvt_version: str) -> None:
-    """Create a stub dbt_core dist-info so importlib.metadata.version("dbt-core") works.
+def _plant_stub_metadata(env_path: Path, package_name: str, version: str) -> None:
+    """Create a stub dist-info so ``importlib.metadata.version(package_name)`` works.
 
-    Some community adapters (notably dbt-databricks) call
-    ``importlib.metadata.version("dbt-core")`` at module load time.
-    Since DVT replaces dbt-core, we plant minimal package metadata that
-    reports DVT's own version.  No actual dbt-core code is installed.
+    Some community adapters check ``importlib.metadata.version("dbt-core")``
+    or ``importlib.metadata.version("dbt-adapters")`` at import time.
+    DVT replaces both via dvt-core + dvt-adapters, so we plant minimal
+    package metadata that reports DVT's own version.
     """
     site_dirs = list(env_path.glob("lib/python*/site-packages"))
     if not site_dirs:
@@ -270,81 +286,74 @@ def _plant_dbt_core_metadata(env_path: Path, dvt_version: str) -> None:
         return
 
     site = site_dirs[0]
-    dist_dir = site / f"dbt_core-{dvt_version}.dist-info"
+    dist_name = package_name.replace("-", "_")
+    dist_dir = site / f"{dist_name}-{version}.dist-info"
     dist_dir.mkdir(exist_ok=True)
 
-    # Minimal METADATA (PEP 566) — just enough for importlib.metadata
     metadata_content = (
         "Metadata-Version: 2.1\n"
-        f"Name: dbt-core\n"
-        f"Version: {dvt_version}\n"
-        "Summary: Provided by dvt-core (stub metadata only)\n"
+        f"Name: {package_name}\n"
+        f"Version: {version}\n"
+        f"Summary: Provided by dvt (stub metadata only)\n"
     )
     (dist_dir / "METADATA").write_text(metadata_content)
-
-    # INSTALLER marker
     (dist_dir / "INSTALLER").write_text("dvt-sync\n")
-
-    # Empty RECORD (no files owned)
     (dist_dir / "RECORD").write_text("")
 
 
+def _plant_dbt_core_metadata(env_path: Path, dvt_version: str) -> None:
+    """Backward-compatible wrapper for dbt-core stub."""
+    _plant_stub_metadata(env_path, "dbt-core", dvt_version)
+
+
 def _repair_dbt_namespace(env_path: Path, env_python: Path, pkg_manager: str) -> None:
-    """Remove dbt-core (pulled in by community adapters) and repair dbt-adapters.
+    """Remove dbt-core and dbt-adapters pulled in by community adapter deps.
 
-    Community adapters (dbt-postgres, dbt-mysql, etc.) declare dbt-core as a
-    dependency.  When installed, dbt-core writes files into the dbt/ namespace
-    that collide with dbt-adapters, causing critical files like factory.py to
-    go missing.  DVT replaces dbt-core via its reverse shim, so dbt-core must
-    not be present.
+    Community adapters (dbt-postgres, dbt-mysql, etc.) declare dbt-core and
+    dbt-adapters as dependencies.  DVT replaces both with dvt-core + dvt-adapters,
+    so the upstream packages must not be present (they write conflicting files
+    into the dbt.* namespace).
 
-    After cleanup, a stub dist-info is planted so that
-    ``importlib.metadata.version("dbt-core")`` still works (some adapters
-    like dbt-databricks check it at import time).
+    After cleanup, stub dist-info entries are planted so that
+    ``importlib.metadata.version("dbt-core")`` and
+    ``importlib.metadata.version("dbt-adapters")`` still work (some adapters
+    like dbt-databricks check these at import time).
 
     This function runs silently — no output is shown to the user.
     """
-    if not _is_package_installed(env_path, "dbt-core"):
-        return
-
-    # Check if this is already our stub (INSTALLER == "dvt-sync")
-    site_dirs = list(env_path.glob("lib/python*/site-packages"))
-    if not site_dirs:
-        site_dirs = list(env_path.glob("Lib/site-packages"))
-    for site in site_dirs:
-        for dist in site.glob("dbt_core-*.dist-info"):
-            installer = dist / "INSTALLER"
-            if installer.exists() and installer.read_text().strip() == "dvt-sync":
-                return  # Already our stub — nothing to do
-
-    # 1. Remove dbt-core
-    if pkg_manager == "uv":
-        ok = _silent_uv_pip(env_path, ["uninstall", "dbt-core"])
-        if not ok:
-            _silent_pip(env_python, ["uninstall", "dbt-core", "-y"])
-    else:
-        _silent_pip(env_python, ["uninstall", "dbt-core", "-y"])
-
-    # 2. Reinstall dbt-adapters (--no-deps so it doesn't pull dbt-core back)
-    #    to restore any files that were clobbered (factory.py, protocol.py, base/, sql/, etc.)
-    if pkg_manager == "uv":
-        ok = _silent_uv_pip(
-            env_path, ["install", "--reinstall", "--no-deps", "dbt-adapters"]
-        )
-        if not ok:
-            _silent_pip(
-                env_python,
-                ["install", "--force-reinstall", "--no-deps", "dbt-adapters"],
-            )
-    else:
-        _silent_pip(
-            env_python, ["install", "--force-reinstall", "--no-deps", "dbt-adapters"]
-        )
-
-    # 3. Plant stub dbt-core metadata so importlib.metadata.version("dbt-core") works
     from dvt.version import __version__ as dvt_version
 
-    _plant_dbt_core_metadata(env_path, dvt_version)
+    def _is_our_stub(env: Path, pkg_dist_pattern: str) -> bool:
+        site_dirs = list(env.glob("lib/python*/site-packages"))
+        if not site_dirs:
+            site_dirs = list(env.glob("Lib/site-packages"))
+        for site in site_dirs:
+            for dist in site.glob(pkg_dist_pattern):
+                installer = dist / "INSTALLER"
+                if installer.exists() and installer.read_text().strip() == "dvt-sync":
+                    return True
+        return False
+
+    def _uninstall(pkg: str) -> None:
+        if pkg_manager == "uv":
+            ok = _silent_uv_pip(env_path, ["uninstall", pkg])
+            if not ok:
+                _silent_pip(env_python, ["uninstall", pkg, "-y"])
+        else:
+            _silent_pip(env_python, ["uninstall", pkg, "-y"])
+
+    # --- dbt-core: remove if real (not our stub) ---
+    if _is_package_installed(env_path, "dbt-core"):
+        if not _is_our_stub(env_path, "dbt_core-*.dist-info"):
+            _uninstall("dbt-core")
+            _plant_dbt_core_metadata(env_path, dvt_version)
+
+    # --- dbt-adapters: remove if real (not our stub) ---
+    # dvt-adapters replaces dbt-adapters; the pip dbt-adapters would conflict.
+    if _is_package_installed(env_path, "dbt-adapters"):
+        if not _is_our_stub(env_path, "dbt_adapters-*.dist-info"):
+            _uninstall("dbt-adapters")
+            _plant_stub_metadata(env_path, "dbt-adapters", dvt_version)
 
 
 def _detect_package_manager(env_python: Path) -> str:

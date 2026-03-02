@@ -51,7 +51,7 @@ class TestProjectMethods:
     def test__str__(self, project: Project):
         assert (
             str(project)
-            == "{'name': 'test_project', 'version': 1.0, 'project-root': 'doesnt/actually/exist', 'profile': 'test_profile', 'model-paths': ['models'], 'macro-paths': ['macros'], 'seed-paths': ['seeds'], 'test-paths': ['tests'], 'analysis-paths': ['analyses'], 'docs-paths': ['docs'], 'asset-paths': ['assets'], 'target-path': 'target', 'snapshot-paths': ['snapshots'], 'clean-targets': ['target'], 'log-path': 'path/to/project/logs', 'quoting': {}, 'models': {}, 'on-run-start': [], 'on-run-end': [], 'dispatch': [{'macro_namespace': 'dbt_utils', 'search_order': ['test_project', 'dbt_utils']}], 'seeds': {}, 'snapshots': {}, 'sources': {}, 'data_tests': {}, 'unit_tests': {}, 'metrics': {}, 'semantic-models': {}, 'saved-queries': {}, 'exposures': {}, 'functions': {}, 'vars': {}, 'require-dvt-version': ['=0.0.0'], 'restrict-access': False, 'dvt-cloud': {}, 'flags': {}, 'query-comment': {'comment': \"\\n{%- set comment_dict = {} -%}\\n{%- do comment_dict.update(\\n    app='dbt',\\n    dbt_version=dbt_version,\\n    profile_name=target.get('profile_name'),\\n    target_name=target.get('target_name'),\\n) -%}\\n{%- if node is not none -%}\\n  {%- do comment_dict.update(\\n    node_id=node.unique_id,\\n  ) -%}\\n{% else %}\\n  {# in the node context, the connection name is the node_id #}\\n  {%- do comment_dict.update(connection_name=connection_name) -%}\\n{%- endif -%}\\n{{ return(tojson(comment_dict)) }}\\n\", 'append': False, 'job-label': False}, 'packages': []}"
+            == "{'name': 'test_project', 'version': 1.0, 'project-root': 'doesnt/actually/exist', 'profile': 'test_profile', 'model-paths': ['models'], 'macro-paths': ['macros'], 'seed-paths': ['seeds'], 'test-paths': ['tests'], 'analysis-paths': ['analyses'], 'docs-paths': ['docs'], 'asset-paths': ['assets'], 'target-path': 'target', 'snapshot-paths': ['snapshots'], 'clean-targets': ['target'], 'log-path': 'path/to/project/logs', 'quoting': {}, 'models': {}, 'on-run-start': [], 'on-run-end': [], 'dispatch': [{'macro_namespace': 'dbt_utils', 'search_order': ['test_project', 'dbt_utils']}], 'seeds': {}, 'snapshots': {}, 'sources': {}, 'data_tests': {}, 'unit_tests': {}, 'metrics': {}, 'semantic-models': {}, 'saved-queries': {}, 'exposures': {}, 'functions': {}, 'vars': {}, 'require-dvt-version': ['=0.0.0'], 'restrict-access': False, 'dvt-cloud': {}, 'flags': {}, 'query-comment': {'comment': \"\\n{%- set comment_dict = {} -%}\\n{%- do comment_dict.update(\\n    app='dvt',\\n    dbt_version=dbt_version,\\n    profile_name=target.get('profile_name'),\\n    target_name=target.get('target_name'),\\n) -%}\\n{%- if node is not none -%}\\n  {%- do comment_dict.update(\\n    node_id=node.unique_id,\\n  ) -%}\\n{% else %}\\n  {# in the node context, the connection name is the node_id #}\\n  {%- do comment_dict.update(connection_name=connection_name) -%}\\n{%- endif -%}\\n{{ return(tojson(comment_dict)) }}\\n\", 'append': False, 'job-label': False}, 'packages': []}"
         )
 
     def test_get_selector(self, project: Project):
@@ -108,7 +108,15 @@ class TestProjectInitialization(BaseConfigTest):
         self.assertEqual(project.analysis_paths, ["analyses"])
         self.assertEqual(
             set(project.docs_paths),
-            {"models", "seeds", "snapshots", "analyses", "macros", "tests", "functions"},
+            {
+                "models",
+                "seeds",
+                "snapshots",
+                "analyses",
+                "macros",
+                "tests",
+                "functions",
+            },
         )
         self.assertEqual(project.asset_paths, [])
         self.assertEqual(project.target_path, "target")
@@ -120,7 +128,9 @@ class TestProjectInitialization(BaseConfigTest):
         self.assertEqual(project.on_run_start, [])
         self.assertEqual(project.on_run_end, [])
         self.assertEqual(project.seeds, {})
-        self.assertEqual(project.dbt_version, [VersionSpecifier.from_version_string(">=0.0.0")])
+        self.assertEqual(
+            project.dbt_version, [VersionSpecifier.from_version_string(">=0.0.0")]
+        )
         self.assertEqual(project.packages, PackageConfig(packages=[]))
         # just make sure str() doesn't crash anything, that's always
         # embarrassing
@@ -137,7 +147,15 @@ class TestProjectInitialization(BaseConfigTest):
         )
         self.assertEqual(
             set(project.docs_paths),
-            {"other-models", "seeds", "snapshots", "analyses", "macros", "tests", "functions"},
+            {
+                "other-models",
+                "seeds",
+                "snapshots",
+                "analyses",
+                "macros",
+                "tests",
+                "functions",
+            },
         )
 
     def test_all_overrides(self):
@@ -196,7 +214,10 @@ class TestProjectInitialization(BaseConfigTest):
                 {
                     "local": "foo",
                 },
-                {"git": "git@example.com:dvt-labs/dvt-utils.git", "revision": "test-rev"},
+                {
+                    "git": "git@example.com:dvt-labs/dvt-utils.git",
+                    "revision": "test-rev",
+                },
             ],
         }
         project = project_from_config_norender(
@@ -214,7 +235,9 @@ class TestProjectInitialization(BaseConfigTest):
         self.assertEqual(project.asset_paths, ["other-assets"])
         self.assertEqual(project.clean_targets, ["another-target"])
         self.assertEqual(project.packages_install_path, "other-dbt_packages")
-        self.assertEqual(project.quoting, {"identifier": False, "snowflake_ignore_case": True})
+        self.assertEqual(
+            project.quoting, {"identifier": False, "snowflake_ignore_case": True}
+        )
         self.assertEqual(
             project.models,
             {
@@ -256,7 +279,9 @@ class TestProjectInitialization(BaseConfigTest):
                 "my_test_project": {"fail_calc": "sum(failures)"},
             },
         )
-        self.assertEqual(project.dbt_version, [VersionSpecifier.from_version_string(">=0.1.0")])
+        self.assertEqual(
+            project.dbt_version, [VersionSpecifier.from_version_string(">=0.1.0")]
+        )
         self.assertEqual(
             project.packages,
             PackageConfig(
@@ -273,7 +298,9 @@ class TestProjectInitialization(BaseConfigTest):
                 ]
             ),
         )
-        str(project)  # this does the equivalent of project.to_project_config(with_packages=True)
+        str(
+            project
+        )  # this does the equivalent of project.to_project_config(with_packages=True)
         json.dumps(project.to_project_config())
 
     def test_string_run_hooks(self):
@@ -290,7 +317,9 @@ class TestProjectInitialization(BaseConfigTest):
     def test_invalid_project_name(self):
         self.default_project_data["name"] = "invalid-project-name"
         with self.assertRaises(dvt.exceptions.DvtProjectError) as exc:
-            project_from_config_norender(self.default_project_data, project_root=self.project_dir)
+            project_from_config_norender(
+                self.default_project_data, project_root=self.project_dir
+            )
 
         self.assertIn("invalid-project-name", str(exc.exception))
 
@@ -305,12 +334,16 @@ class TestProjectInitialization(BaseConfigTest):
     def test_invalid_version(self):
         self.default_project_data["require-dvt-version"] = "hello!"
         with self.assertRaises(dvt.exceptions.DvtProjectError):
-            project_from_config_norender(self.default_project_data, project_root=self.project_dir)
+            project_from_config_norender(
+                self.default_project_data, project_root=self.project_dir
+            )
 
     def test_unsupported_version(self):
         self.default_project_data["require-dvt-version"] = ">99999.0.0"
         # allowed, because the RuntimeConfig checks, not the Project itself
-        project_from_config_norender(self.default_project_data, project_root=self.project_dir)
+        project_from_config_norender(
+            self.default_project_data, project_root=self.project_dir
+        )
 
     def test_none_values(self):
         self.default_project_data.update(
@@ -331,13 +364,19 @@ class TestProjectInitialization(BaseConfigTest):
         self.default_project_data.update(
             {
                 "models": {"vars": None, "pre-hook": None, "post-hook": None},
-                "seeds": {"vars": None, "pre-hook": None, "post-hook": None, "column_types": None},
+                "seeds": {
+                    "vars": None,
+                    "pre-hook": None,
+                    "post-hook": None,
+                    "column_types": None,
+                },
             }
         )
         project = project_from_config_rendered(self.default_project_data)
         self.assertEqual(project.models, {"vars": {}, "pre-hook": [], "post-hook": []})
         self.assertEqual(
-            project.seeds, {"vars": {}, "pre-hook": [], "post-hook": [], "column_types": {}}
+            project.seeds,
+            {"vars": {}, "pre-hook": [], "post-hook": [], "column_types": {}},
         )
 
     @pytest.mark.skipif(os.name == "nt", reason="crashes CI for Windows")
@@ -442,7 +481,9 @@ class TestProjectInitialization(BaseConfigTest):
         }
 
         project = project_from_config_rendered(
-            self.default_project_data, packages, packages_specified_path=DEPENDENCIES_FILE_NAME
+            self.default_project_data,
+            packages,
+            packages_specified_path=DEPENDENCIES_FILE_NAME,
         )
         git_package = project.packages.packages[0]
         # packages did not render because packages_specified_path=DEPENDENCIES_FILE_NAME
@@ -476,7 +517,9 @@ class TestVariableProjectFile(BaseConfigTest):
         self.write_project(self.default_project_data)
 
     def test_cli_and_env_vars(self):
-        renderer = dvt.config.renderer.DvtProjectYamlRenderer(None, {"cli_version": "0.1.2"})
+        renderer = dvt.config.renderer.DvtProjectYamlRenderer(
+            None, {"cli_version": "0.1.2"}
+        )
         with mock.patch.dict(os.environ, self.env_override):
             safe_set_invocation_context()  # reset invocation context with new env
             project = dvt.config.Project.from_project_root(
@@ -511,7 +554,9 @@ class TestVarLookups(unittest.TestCase):
         self.projects = ["my_project", "other_project", "third_project"]
         load_plugin("postgres")
         self.local_var_search = mock.MagicMock(
-            fqn=["my_project", "my_model"], resource_type=NodeType.Model, package_name="my_project"
+            fqn=["my_project", "my_model"],
+            resource_type=NodeType.Model,
+            package_name="my_project",
         )
         self.other_var_search = mock.MagicMock(
             fqn=["other_project", "model"],
@@ -579,7 +624,9 @@ class TestGetRequiredVersion:
         }
 
     def test_supported_version(self, project_dict: Dict[str, Any]) -> None:
-        specifiers = _get_required_version(project_dict=project_dict, verify_version=True)
+        specifiers = _get_required_version(
+            project_dict=project_dict, verify_version=True
+        )
         assert set(x.to_version_string() for x in specifiers) == {">0.0.0"}
 
     def test_unsupported_version(self, project_dict: Dict[str, Any]) -> None:
@@ -591,13 +638,20 @@ class TestGetRequiredVersion:
 
     def test_unsupported_version_no_check(self, project_dict: Dict[str, Any]) -> None:
         project_dict["require-dvt-version"] = ">99999.0.0"
-        specifiers = _get_required_version(project_dict=project_dict, verify_version=False)
+        specifiers = _get_required_version(
+            project_dict=project_dict, verify_version=False
+        )
         assert set(x.to_version_string() for x in specifiers) == {">99999.0.0"}
 
     def test_supported_version_range(self, project_dict: Dict[str, Any]) -> None:
         project_dict["require-dvt-version"] = [">0.0.0", "<=99999.0.0"]
-        specifiers = _get_required_version(project_dict=project_dict, verify_version=True)
-        assert set(x.to_version_string() for x in specifiers) == {">0.0.0", "<=99999.0.0"}
+        specifiers = _get_required_version(
+            project_dict=project_dict, verify_version=True
+        )
+        assert set(x.to_version_string() for x in specifiers) == {
+            ">0.0.0",
+            "<=99999.0.0",
+        }
 
     def test_unsupported_version_range(self, project_dict: Dict[str, Any]) -> None:
         project_dict["require-dvt-version"] = [">0.0.0", "<=0.0.1"]
@@ -606,9 +660,13 @@ class TestGetRequiredVersion:
         ):
             _get_required_version(project_dict=project_dict, verify_version=True)
 
-    def test_unsupported_version_range_no_check(self, project_dict: Dict[str, Any]) -> None:
+    def test_unsupported_version_range_no_check(
+        self, project_dict: Dict[str, Any]
+    ) -> None:
         project_dict["require-dvt-version"] = [">0.0.0", "<=0.0.1"]
-        specifiers = _get_required_version(project_dict=project_dict, verify_version=False)
+        specifiers = _get_required_version(
+            project_dict=project_dict, verify_version=False
+        )
         assert set(x.to_version_string() for x in specifiers) == {">0.0.0", "<=0.0.1"}
 
     def test_impossible_version_range(self, project_dict: Dict[str, Any]) -> None:
@@ -621,7 +679,6 @@ class TestGetRequiredVersion:
 
 
 class TestDeprecations:
-
     def test_jsonschema_validate(self) -> None:
         from dvt.jsonschemas.jsonschemas import jsonschema_validate
 

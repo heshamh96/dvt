@@ -5,9 +5,9 @@ so that third-party adapters (dbt-mysql, dbt-sqlserver, dbt-oracle, etc.) that
 still import from ``dbt.exceptions``, ``dbt.version``, ``dbt.contracts.*``, etc.
 can work without the upstream ``dbt-core`` package being installed.
 
-The ``dbt.adapters.*`` namespace is handled separately by ``dvt/adapters/__init__.py``
-and is **not** touched here. Similarly, ``dbt.include.*`` works as a native
-namespace package and needs no intervention.
+``dbt.adapters.*`` is routed to ``dvt.adapters.*`` via the catch-all rule.
+The ``dvt-adapters`` package provides the full adapter interface.
+``dbt.include.*`` works as a native namespace package and needs no intervention.
 
 Usage
 -----
@@ -18,14 +18,13 @@ finder is registered before any adapter code runs::
 
 Mapping rules (in priority order)
 ---------------------------------
-1. ``dbt.adapters.*`` → skip (already handled)
-2. ``dbt.include.*``  → skip (namespace package, already on disk)
-3. ``dbt_common.*``   → skip (already installed)
-4. ``dbt.clients.*``  → ``dbt_common.clients.*``
-5. ``dbt.events``     → synthetic module exposing ``AdapterLogger``
-6. ``dbt.utils``      → synthetic module merging ``dvt.utils`` + ``dbt_common.utils``
-7. ``dbt.contracts.connection`` → ``dbt.adapters.contracts.connection``
-8. ``dbt.*``          → ``dvt.*``  (catch-all for exceptions, version, contracts.*, context.*, etc.)
+1. ``dbt.include.*``  → skip (namespace package, already on disk)
+2. ``dbt_common.*``   → skip (already installed)
+3. ``dbt.clients.*``  → ``dbt_common.clients.*``
+4. ``dbt.events``     → synthetic module exposing ``AdapterLogger``
+5. ``dbt.utils``      → synthetic module merging ``dvt.utils`` + ``dbt_common.utils``
+6. ``dbt.contracts.connection`` → ``dvt.adapters.contracts.connection``
+7. ``dbt.*``          → ``dvt.*``  (catch-all: adapters, exceptions, version, contracts.*, context.*, etc.)
 """
 
 import importlib
@@ -51,7 +50,6 @@ class _DbtShimFinder(importlib.abc.MetaPathFinder):
 
     # Prefixes we must NOT touch (they have their own resolution mechanism)
     _SKIP_PREFIXES = (
-        "dbt.adapters.",
         "dbt.include.",
         "dbt_common.",
         "dbt_adapters.",
@@ -60,7 +58,6 @@ class _DbtShimFinder(importlib.abc.MetaPathFinder):
     # Exact top-level names we must NOT touch
     _SKIP_EXACT = frozenset(
         {
-            "dbt.adapters",
             "dbt.include",
         }
     )
@@ -100,9 +97,9 @@ class _DbtShimFinder(importlib.abc.MetaPathFinder):
         if fullname == "dbt.clients":
             return "dbt_common.clients"
 
-        # --- Rule 7: dbt.contracts.connection → dbt.adapters.contracts.connection ---
+        # --- Rule 6: dbt.contracts.connection → dvt.adapters.contracts.connection ---
         if fullname == "dbt.contracts.connection":
-            return "dbt.adapters.contracts.connection"
+            return "dvt.adapters.contracts.connection"
 
         # --- Rule 5: dbt.events → synthetic (handled specially in loader) ---
         if fullname == "dbt.events":
@@ -130,6 +127,16 @@ class _DbtShimLoader(importlib.abc.Loader):
 
         mod = importlib.import_module(self.target_name)
         sys.modules[spec.name] = mod
+
+        # When dvt.adapters is first loaded, eagerly extend its __path__
+        # to include site-packages/dbt/adapters/ where third-party adapter
+        # plugins are installed.  This must happen before any relative
+        # import like ``import_module('.postgres', 'dvt.adapters')``
+        # because Python's PathFinder resolves subpackages via __path__
+        # without consulting sys.meta_path finders.
+        if self.target_name == "dvt.adapters":
+            _DvtAdaptersFallbackFinder._extend_path()
+
         return mod
 
     def exec_module(self, module):
@@ -150,9 +157,9 @@ class _DbtShimLoader(importlib.abc.Loader):
             name, "Shim: dbt.events -> AdapterLogger from dbt-adapters"
         )
         try:
-            from dbt.adapters.events.logging import AdapterLogger
+            from dvt.adapters.events.logging import AdapterLogger  # type: ignore[attr-defined]
 
-            mod.AdapterLogger = AdapterLogger
+            mod.AdapterLogger = AdapterLogger  # type: ignore[attr-defined]
         except ImportError:
             pass
         sys.modules[name] = mod
@@ -191,6 +198,115 @@ class _DbtShimLoader(importlib.abc.Loader):
         return mod
 
 
-# Register the finder — insert *after* the dvt.adapters finder (position 1)
-# so that dvt.adapters.* resolution takes priority.
+# ---------------------------------------------------------------------------
+# Fallback finder: dvt.adapters.<plugin> → dbt.adapters.<plugin> (from pip)
+# ---------------------------------------------------------------------------
+# The shim maps ``dbt.adapters.*`` → ``dvt.adapters.*``.  Core modules
+# (factory, base, sql, etc.) resolve to dvt-adapters.  But adapter plugins
+# (postgres, snowflake, mysql, etc.) have no local ``dvt.adapters.<plugin>``
+# — they're installed as ``dbt.adapters.<plugin>`` by pip.  This finder
+# catches those misses and loads from pip by temporarily disabling the shim.
+#
+# NOTE: This used to live in ``core/dvt/adapters/__init__.py`` but
+# ``extend_path`` namespace packages only execute the *first* ``__init__.py``
+# on the path (from dvt-adapters), so this code never ran.  Moving it here
+# ensures it's always registered.
+# ---------------------------------------------------------------------------
+
+
+class _DvtAdaptersFallbackFinder(importlib.abc.MetaPathFinder):
+    """Extend ``dvt.adapters.__path__`` to include pip's ``dbt/adapters/`` dirs.
+
+    Third-party dbt adapter plugins (dbt-postgres, dbt-snowflake, etc.) install
+    their code into ``site-packages/dbt/adapters/<plugin>/``.  The shim maps
+    ``dbt.adapters.*`` → ``dvt.adapters.*``, but ``dvt.adapters.__path__`` only
+    covers dvt-adapters and dvt-core paths.
+
+    This finder runs once: on the first miss for ``dvt.adapters.<X>``, it
+    discovers all ``dbt/adapters/`` directories in ``sys.path`` / site-packages
+    and appends them to ``dvt.adapters.__path__``.  After that, normal Python
+    import machinery finds the plugins under the extended path — no further
+    interception needed.
+    """
+
+    _extended = False
+
+    def find_spec(self, fullname, path, target=None):
+        if not fullname.startswith("dvt.adapters."):
+            return None
+        if fullname in sys.modules:
+            return None
+
+        if not self._extended:
+            self._extend_path()
+
+        # After extending the path, use importlib to find the spec.
+        # We must temporarily remove ourselves from sys.meta_path to
+        # avoid infinite recursion, then use the standard finders.
+        try:
+            sys.meta_path.remove(self)
+        except ValueError:
+            pass
+
+        try:
+            import importlib.util
+
+            spec = importlib.util.find_spec(fullname)
+            return spec
+        except (ImportError, ModuleNotFoundError, ValueError):
+            return None
+        finally:
+            if self not in sys.meta_path:
+                sys.meta_path.append(self)
+
+    @classmethod
+    def _extend_path(cls):
+        """Add ``dbt/adapters`` directories from sys.path to ``dvt.adapters.__path__``.
+
+        Uses ``sys.modules`` to get the already-imported ``dvt.adapters`` module
+        rather than ``import dvt.adapters`` to avoid circular import issues when
+        called during ``dvt/__init__.py`` execution.
+        """
+        cls._extended = True
+
+        import os
+        import site
+
+        _dva = sys.modules.get("dvt.adapters")
+        if _dva is None:
+            # Not imported yet — will be retried on next find_spec call.
+            cls._extended = False
+            return
+
+        existing = set(getattr(_dva, "__path__", []))
+
+        # Gather candidate dbt/adapters directories from site-packages and sys.path
+        candidates = []
+        try:
+            candidates.extend(
+                os.path.join(sp, "dbt", "adapters") for sp in site.getsitepackages()
+            )
+        except AttributeError:
+            pass
+        try:
+            candidates.append(
+                os.path.join(site.getusersitepackages(), "dbt", "adapters")
+            )
+        except AttributeError:
+            pass
+        for sp_dir in sys.path:
+            if sp_dir:
+                candidates.append(os.path.join(sp_dir, "dbt", "adapters"))
+
+        for dbt_adapters_dir in candidates:
+            if dbt_adapters_dir not in existing and os.path.isdir(dbt_adapters_dir):
+                _dva.__path__.append(dbt_adapters_dir)
+                existing.add(dbt_adapters_dir)
+
+
+# Register both finders.
+# The shim finder goes early (position 1) so third-party ``dbt.*`` imports
+# get redirected before anything else.
+# The fallback finder should be LAST so normal resolution is tried first.
 sys.meta_path.insert(1, _DbtShimFinder())
+sys.meta_path.append(_DvtAdaptersFallbackFinder())

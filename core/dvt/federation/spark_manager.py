@@ -400,9 +400,11 @@ class SparkManager:
             http_path = connection.get("http_path") or ""
             catalog = connection.get("catalog") or ""
             schema = connection.get("schema") or "default"
-            # Build Databricks JDBC URL with all required parameters
+            # Build Databricks JDBC URL with all required parameters.
+            # EnableArrow=0 disables Arrow transfer mode which is incompatible
+            # with local Spark's JVM (sun.misc.Unsafe not accessible on Java 17+).
             url = f"jdbc:databricks://{host}:443"
-            params = [f"httpPath={http_path}"]
+            params = [f"httpPath={http_path}", "EnableArrow=0"]
             if catalog:
                 params.append(f"ConnCatalog={catalog}")
             if schema:

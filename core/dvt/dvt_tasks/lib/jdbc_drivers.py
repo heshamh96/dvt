@@ -13,23 +13,24 @@ Supported adapters and JARs (used by sync; all URLs verified):
 |------------|-------------------------------------------------------------|----------------------------------|
 | athena     | com.amazonaws:athena-jdbc:2024.51.1                        | athena-jdbc-2024.51.1.jar       |
 | clickhouse | com.clickhouse:clickhouse-jdbc:0.6.0                        | clickhouse-jdbc-0.6.0.jar       |
-| databricks | com.databricks:databricks-jdbc:2.6.34                      | databricks-jdbc-2.6.34.jar      |
+| databricks | com.databricks:databricks-jdbc:2.6.40                      | databricks-jdbc-2.6.40.jar      |
 | db2        | com.ibm.db2:jcc:11.5.9.0                                    | jcc-11.5.9.0.jar                |
 | duckdb     | org.duckdb:duckdb_jdbc:0.10.0                               | duckdb_jdbc-0.10.0.jar         |
 | exasol     | com.exasol:exasol-jdbc:7.1.19                               | exasol-jdbc-7.1.19.jar          |
-| fabric     | com.microsoft.sqlserver:mssql-jdbc:12.4.2.jre11            | mssql-jdbc-12.4.2.jre11.jar     |
+| fabric     | com.microsoft.sqlserver:mssql-jdbc:12.8.1.jre11            | mssql-jdbc-12.8.1.jre11.jar     |
 | firebolt   | io.firebolt:firebolt-jdbc:3.6.5                             | firebolt-jdbc-3.6.5.jar         |
 | greenplum  | org.postgresql:postgresql:42.7.3                            | postgresql-42.7.3.jar           |
 | materialize| org.postgresql:postgresql:42.7.3                            | postgresql-42.7.3.jar           |
-| mysql      | com.mysql:mysql-connector-j:8.2.0                           | mysql-connector-j-8.2.0.jar     |
-| oracle     | com.oracle.database.jdbc:ojdbc11:23.3.0.23.09              | ojdbc11-23.3.0.23.09.jar        |
+| mariadb    | org.mariadb.jdbc:mariadb-java-client:3.5.2                  | mariadb-java-client-3.5.2.jar   |
+| mysql      | com.mysql:mysql-connector-j:9.2.0                           | mysql-connector-j-9.2.0.jar     |
+| oracle     | com.oracle.database.jdbc:ojdbc11:23.7.0.25.01              | ojdbc11-23.7.0.25.01.jar        |
 | postgres   | org.postgresql:postgresql:42.7.3                            | postgresql-42.7.3.jar           |
 | redshift   | com.amazon.redshift:redshift-jdbc42:2.1.0.21                | redshift-jdbc42-2.1.0.21.jar    |
 | singlestore| com.singlestore:singlestore-jdbc-client:1.2.0                | singlestore-jdbc-client-1.2.0.jar |
-| snowflake  | net.snowflake:snowflake-jdbc:3.10.3                          | snowflake-jdbc-3.10.3.jar       |
-| sqlserver  | com.microsoft.sqlserver:mssql-jdbc:12.4.2.jre11            | mssql-jdbc-12.4.2.jre11.jar     |
-| synapse    | com.microsoft.sqlserver:mssql-jdbc:12.4.2.jre11            | mssql-jdbc-12.4.2.jre11.jar     |
-| tidb       | com.mysql:mysql-connector-j:8.2.0                           | mysql-connector-j-8.2.0.jar     |
+| snowflake  | net.snowflake:snowflake-jdbc:3.19.0                          | snowflake-jdbc-3.19.0.jar       |
+| sqlserver  | com.microsoft.sqlserver:mssql-jdbc:12.8.1.jre11            | mssql-jdbc-12.8.1.jre11.jar     |
+| synapse    | com.microsoft.sqlserver:mssql-jdbc:12.8.1.jre11            | mssql-jdbc-12.8.1.jre11.jar     |
+| tidb       | com.mysql:mysql-connector-j:9.2.0                           | mysql-connector-j-9.2.0.jar     |
 | trino      | io.trino:trino-jdbc:428                                     | trino-jdbc-428.jar              |
 | vertica    | com.vertica.jdbc:vertica-jdbc:24.4.0-0                       | vertica-jdbc-24.4.0-0.jar      |
 
@@ -50,19 +51,22 @@ ADAPTER_TO_JDBC_DRIVERS: dict[str, list[tuple[str, str, str]]] = {
         ("com.amazon.redshift", "redshift-jdbc42", "2.1.0.21"),
     ],
     "snowflake": [
-        ("net.snowflake", "snowflake-jdbc", "3.10.3"),
+        ("net.snowflake", "snowflake-jdbc", "3.19.0"),
     ],
     "mysql": [
-        ("com.mysql", "mysql-connector-j", "8.2.0"),
+        ("com.mysql", "mysql-connector-j", "9.2.0"),
+    ],
+    "mariadb": [
+        ("org.mariadb.jdbc", "mariadb-java-client", "3.5.2"),
     ],
     "oracle": [
-        ("com.oracle.database.jdbc", "ojdbc11", "23.3.0.23.09"),
+        ("com.oracle.database.jdbc", "ojdbc11", "23.7.0.25.01"),
     ],
     "sqlserver": [
-        ("com.microsoft.sqlserver", "mssql-jdbc", "12.4.2.jre11"),
+        ("com.microsoft.sqlserver", "mssql-jdbc", "12.8.1.jre11"),
     ],
     "databricks": [
-        ("com.databricks", "databricks-jdbc", "2.6.34"),
+        ("com.databricks", "databricks-jdbc", "2.6.40"),
     ],
     "trino": [
         ("io.trino", "trino-jdbc", "428"),
@@ -85,17 +89,17 @@ ADAPTER_TO_JDBC_DRIVERS: dict[str, list[tuple[str, str, str]]] = {
     ],
     "synapse": [
         # Azure Synapse uses MS SQL driver
-        ("com.microsoft.sqlserver", "mssql-jdbc", "12.4.2.jre11"),
+        ("com.microsoft.sqlserver", "mssql-jdbc", "12.8.1.jre11"),
     ],
     "fabric": [
-        ("com.microsoft.sqlserver", "mssql-jdbc", "12.4.2.jre11"),
+        ("com.microsoft.sqlserver", "mssql-jdbc", "12.8.1.jre11"),
     ],
     "singlestore": [
         ("com.singlestore", "singlestore-jdbc-client", "1.2.0"),
     ],
     "tidb": [
         # TiDB is MySQL-compatible
-        ("com.mysql", "mysql-connector-j", "8.2.0"),
+        ("com.mysql", "mysql-connector-j", "9.2.0"),
     ],
     "materialize": [
         # Materialize is PostgreSQL-compatible

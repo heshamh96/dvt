@@ -223,13 +223,29 @@ def _get_dbt_plugins_info() -> Iterator[Tuple[str, str]]:
 
 
 def _get_adapter_plugin_names() -> Iterator[str]:
-    spec = importlib.util.find_spec("dvt.adapters")
-    # If None, then nothing provides an importable 'dvt.adapters', so we will
-    # not be reporting plugin versions today
-    if spec is None or spec.submodule_search_locations is None:
+    # Use the already-imported module's __path__ which includes both
+    # dvt-adapters paths AND site-packages/dbt/adapters/ (extended by
+    # the fallback finder in dbt_shim.py).  importlib.util.find_spec()
+    # only returns the first provider's search locations, missing plugins
+    # installed under the dbt.adapters namespace.
+    #
+    # Ensure the path has been extended to include pip's dbt/adapters dirs
+    # so we can discover third-party adapter plugins.
+    from dvt.dbt_shim import _DvtAdaptersFallbackFinder
+
+    _DvtAdaptersFallbackFinder._extend_path()
+
+    try:
+        import dvt.adapters as _dva
+
+        search_locations = getattr(_dva, "__path__", None)
+    except ImportError:
+        search_locations = None
+
+    if search_locations is None:
         return
 
-    for adapters_path in spec.submodule_search_locations:
+    for adapters_path in search_locations:
         version_glob = os.path.join(adapters_path, "*", "__version__.py")
         for version_path in glob.glob(version_glob):
             # the path is like .../dbt/adapters/{plugin_name}/__version__.py

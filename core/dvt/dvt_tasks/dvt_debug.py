@@ -1449,12 +1449,10 @@ class DvtDebugTask(DebugTask):
 
     def _debug_native_connectors(self) -> None:
         """Display native connector and JDBC driver availability as compact table."""
-        native_dir = get_native_connectors_dir(
-            str(self.profiles_dir) if self.profiles_dir else None
-        )
-        jdbc_dir = get_spark_jars_dir(
-            str(self.profiles_dir) if self.profiles_dir else None
-        )
+        # JDBC drivers and native connectors are always in DVT_HOME (~/.dvt/),
+        # not in the project-local profiles_dir. dvt sync downloads them there.
+        native_dir = get_native_connectors_dir(None)
+        jdbc_dir = get_spark_jars_dir(None)
 
         fire_event(DebugCmdOut(msg=""))
         fire_event(DebugCmdOut(msg=_table_header("Connectors & Drivers")))
@@ -1532,10 +1530,8 @@ class DvtDebugTask(DebugTask):
         )
         has_computes = computes_path.exists()
 
-        # Check Spark JARs (JDBC drivers, cloud connectors)
-        jdbc_dir = get_spark_jars_dir(
-            str(self.profiles_dir) if self.profiles_dir else None
-        )
+        # JDBC drivers are global in DVT_HOME, not per-project profiles_dir
+        jdbc_dir = get_spark_jars_dir(None)
         has_jdbc = (
             jdbc_dir.exists() and any(jdbc_dir.iterdir())
             if jdbc_dir.exists()
