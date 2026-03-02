@@ -181,6 +181,33 @@ class FederationLoader:
     # DDL Operations via Adapter
     # =========================================================================
 
+    def _table_exists(self, adapter: Any, config: LoadConfig) -> bool:
+        """Check if the target table already exists in the database.
+
+        Uses a lightweight SELECT 1 query that works across all SQL dialects.
+        This avoids information_schema queries which vary between databases.
+
+        Args:
+            adapter: dbt adapter instance
+            config: Load configuration with table_name
+
+        Returns:
+            True if the table exists, False otherwise
+        """
+        from dvt.federation.adapter_manager import get_quoted_table_name
+
+        quoted_table = get_quoted_table_name(adapter, config.table_name)
+
+        with adapter.connection_named("dvt_loader"):
+            try:
+                adapter.execute(
+                    f"SELECT 1 FROM {quoted_table} WHERE 1=0", auto_begin=True
+                )
+                self._commit(adapter)
+                return True
+            except Exception:
+                return False
+
     def _commit(self, adapter: Any) -> None:
         """Commit the adapter connection.
 
@@ -435,13 +462,40 @@ class FederationLoader:
 
             try:
                 if adapter and config.mode == "overwrite":
-                    # DDL via adapter (proper quoting), data via Spark JDBC
-                    self._execute_ddl(adapter, config)
-                    self._create_table_with_adapter(adapter, df, config)
-                    write_mode = "append"  # Table cleared by DDL, just append
+                    # DDL contract for overwrite mode:
+                    #
+                    # 1. --full-refresh: DROP CASCADE + CREATE + INSERT
+                    #    Recreates table from scratch using Spark-inferred types.
+                    #
+                    # 2. Table exists (subsequent run): TRUNCATE + INSERT
+                    #    Preserves the existing table schema (adapter-created
+                    #    datatypes like text, float8, integer) — Spark just
+                    #    inserts data. No CREATE TABLE call.
+                    #
+                    # 3. Table does not exist (first run): CREATE + INSERT
+                    #    Creates table from Spark DataFrame schema since no
+                    #    prior schema exists to preserve.
+                    #
+                    # This contract ensures `dvt seed --spark` preserves
+                    # adapter-created types when the table already exists
+                    # (e.g., after `dvt seed` created it with agate types).
+                    if config.full_refresh:
+                        # Path 1: DROP + CREATE + INSERT
+                        self._execute_ddl(adapter, config)
+                        self._create_table_with_adapter(adapter, df, config)
+                    elif self._table_exists(adapter, config):
+                        # Path 2: TRUNCATE + INSERT (preserve existing schema)
+                        self._execute_ddl(adapter, config)
+                        # Intentionally skip _create_table_with_adapter() —
+                        # the table already exists with the correct datatypes.
+                    else:
+                        # Path 3: CREATE + INSERT (first run, no table yet)
+                        self._create_table_with_adapter(adapter, df, config)
+                    write_mode = "append"  # Table prepared by DDL, just append
                 elif adapter and config.mode == "append":
                     # Incremental append: ensure table exists, then append.
-                    self._create_table_with_adapter(adapter, df, config)
+                    if not self._table_exists(adapter, config):
+                        self._create_table_with_adapter(adapter, df, config)
                     write_mode = "append"
                 else:
                     # Pure Spark JDBC mode (no adapter)
@@ -537,9 +591,17 @@ class FederationLoader:
                 f"for {config.table_name} (bypassing Spark JDBC)"
             )
 
-            # Step 1: Execute DDL (DROP/TRUNCATE) + CREATE TABLE
-            self._execute_ddl(adapter, config)
-            self._create_table_with_adapter(adapter, df, config)
+            # Step 1: DDL contract (same as _load_jdbc)
+            if config.full_refresh:
+                # DROP + CREATE
+                self._execute_ddl(adapter, config)
+                self._create_table_with_adapter(adapter, df, config)
+            elif self._table_exists(adapter, config):
+                # TRUNCATE only (preserve existing schema)
+                self._execute_ddl(adapter, config)
+            else:
+                # First run: CREATE
+                self._create_table_with_adapter(adapter, df, config)
 
             # Step 2: Collect DataFrame to Python rows
             self._log("Collecting data for adapter-based INSERT...")

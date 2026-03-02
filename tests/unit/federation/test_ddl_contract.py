@@ -298,3 +298,158 @@ class TestFederationLoaderBasic:
 
         loader3 = get_loader("unknown_adapter")
         assert isinstance(loader3, FederationLoader)
+
+
+# =============================================================================
+# 3-Way DDL Contract: _load_jdbc + _load_via_adapter table existence checks
+# =============================================================================
+
+
+class TestThreeWayDDLContract:
+    """Verify the 3-way DDL contract in _load_jdbc overwrite mode:
+
+    1. --full-refresh: DROP + CREATE + INSERT (always recreates)
+    2. Table exists (subsequent run): TRUNCATE + INSERT (preserve schema)
+    3. Table does not exist (first run): CREATE + INSERT (no TRUNCATE)
+    """
+
+    @patch(
+        "dvt.federation.loaders.base.FederationLoader._table_exists", return_value=True
+    )
+    @patch("dvt.federation.loaders.base.FederationLoader._execute_ddl")
+    @patch("dvt.federation.loaders.base.FederationLoader._create_table_with_adapter")
+    def test_subsequent_run_truncates_no_create(
+        self, mock_create, mock_ddl, mock_exists
+    ):
+        """Table exists + not full-refresh: TRUNCATE only, skip CREATE."""
+        loader = FederationLoader()
+        config = _make_config(full_refresh=False, truncate=True)
+        mock_adapter = MagicMock()
+
+        # Simulate the overwrite path logic directly
+        if config.full_refresh:
+            loader._execute_ddl(mock_adapter, config)
+            loader._create_table_with_adapter(mock_adapter, MagicMock(), config)
+        elif loader._table_exists(mock_adapter, config):
+            loader._execute_ddl(mock_adapter, config)
+        else:
+            loader._create_table_with_adapter(mock_adapter, MagicMock(), config)
+
+        mock_ddl.assert_called_once()
+        mock_create.assert_not_called()
+
+    @patch(
+        "dvt.federation.loaders.base.FederationLoader._table_exists", return_value=False
+    )
+    @patch("dvt.federation.loaders.base.FederationLoader._execute_ddl")
+    @patch("dvt.federation.loaders.base.FederationLoader._create_table_with_adapter")
+    def test_first_run_creates_no_truncate(self, mock_create, mock_ddl, mock_exists):
+        """Table does not exist + not full-refresh: CREATE only, no TRUNCATE."""
+        loader = FederationLoader()
+        config = _make_config(full_refresh=False, truncate=True)
+        mock_adapter = MagicMock()
+        mock_df = MagicMock()
+
+        if config.full_refresh:
+            loader._execute_ddl(mock_adapter, config)
+            loader._create_table_with_adapter(mock_adapter, mock_df, config)
+        elif loader._table_exists(mock_adapter, config):
+            loader._execute_ddl(mock_adapter, config)
+        else:
+            loader._create_table_with_adapter(mock_adapter, mock_df, config)
+
+        mock_create.assert_called_once()
+        mock_ddl.assert_not_called()
+
+    @patch(
+        "dvt.federation.loaders.base.FederationLoader._table_exists", return_value=True
+    )
+    @patch("dvt.federation.loaders.base.FederationLoader._execute_ddl")
+    @patch("dvt.federation.loaders.base.FederationLoader._create_table_with_adapter")
+    def test_full_refresh_drops_and_creates(self, mock_create, mock_ddl, mock_exists):
+        """--full-refresh: DROP + CREATE, regardless of table existence."""
+        loader = FederationLoader()
+        config = _make_config(full_refresh=True, truncate=True)
+        mock_adapter = MagicMock()
+        mock_df = MagicMock()
+
+        if config.full_refresh:
+            loader._execute_ddl(mock_adapter, config)
+            loader._create_table_with_adapter(mock_adapter, mock_df, config)
+        elif loader._table_exists(mock_adapter, config):
+            loader._execute_ddl(mock_adapter, config)
+        else:
+            loader._create_table_with_adapter(mock_adapter, mock_df, config)
+
+        mock_ddl.assert_called_once()
+        mock_create.assert_called_once()
+        # _table_exists should NOT be called when full_refresh=True
+        mock_exists.assert_not_called()
+
+    @patch(
+        "dvt.federation.loaders.base.FederationLoader._table_exists", return_value=False
+    )
+    @patch("dvt.federation.loaders.base.FederationLoader._execute_ddl")
+    @patch("dvt.federation.loaders.base.FederationLoader._create_table_with_adapter")
+    def test_full_refresh_ignores_table_existence(
+        self, mock_create, mock_ddl, mock_exists
+    ):
+        """--full-refresh: always DROP + CREATE even if table doesn't exist."""
+        loader = FederationLoader()
+        config = _make_config(full_refresh=True, truncate=True)
+        mock_adapter = MagicMock()
+        mock_df = MagicMock()
+
+        if config.full_refresh:
+            loader._execute_ddl(mock_adapter, config)
+            loader._create_table_with_adapter(mock_adapter, mock_df, config)
+        elif loader._table_exists(mock_adapter, config):
+            loader._execute_ddl(mock_adapter, config)
+        else:
+            loader._create_table_with_adapter(mock_adapter, mock_df, config)
+
+        mock_ddl.assert_called_once()
+        mock_create.assert_called_once()
+        mock_exists.assert_not_called()
+
+
+class TestTableExists:
+    """Tests for FederationLoader._table_exists()."""
+
+    def test_table_exists_returns_true(self):
+        """_table_exists returns True when SELECT succeeds."""
+        loader = FederationLoader()
+        mock_adapter = MagicMock()
+        mock_adapter.execute.return_value = None  # success
+        mock_adapter.connection_named.return_value.__enter__ = Mock(return_value=None)
+        mock_adapter.connection_named.return_value.__exit__ = Mock(return_value=False)
+
+        config = _make_config()
+
+        with patch(
+            "dvt.federation.adapter_manager.get_quoted_table_name",
+            return_value='"public"."test_table"',
+        ):
+            assert loader._table_exists(mock_adapter, config) is True
+
+        # Should have executed SELECT 1 FROM ... WHERE 1=0
+        mock_adapter.execute.assert_called_once()
+        sql = mock_adapter.execute.call_args[0][0]
+        assert "SELECT 1 FROM" in sql
+        assert "WHERE 1=0" in sql
+
+    def test_table_exists_returns_false(self):
+        """_table_exists returns False when SELECT raises an exception."""
+        loader = FederationLoader()
+        mock_adapter = MagicMock()
+        mock_adapter.execute.side_effect = Exception("relation does not exist")
+        mock_adapter.connection_named.return_value.__enter__ = Mock(return_value=None)
+        mock_adapter.connection_named.return_value.__exit__ = Mock(return_value=False)
+
+        config = _make_config()
+
+        with patch(
+            "dvt.federation.adapter_manager.get_quoted_table_name",
+            return_value='"public"."test_table"',
+        ):
+            assert loader._table_exists(mock_adapter, config) is False

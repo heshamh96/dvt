@@ -360,10 +360,14 @@ class TestDatabricksSpecialColumnsPath:
         # Should dispatch to _load_via_adapter
         mock_adapter_load.assert_called_once_with(df, config, mock_adapter)
 
+    @patch(
+        "dvt.federation.loaders.base.FederationLoader._table_exists", return_value=False
+    )
     @patch("dvt.federation.loaders.base.FederationLoader._execute_ddl")
     @patch("dvt.federation.loaders.base.FederationLoader._create_table_with_adapter")
-    def test_simple_cols_uses_jdbc_path(self, mock_create, mock_ddl):
-        """Databricks + simple column names should use normal JDBC path."""
+    def test_simple_cols_uses_jdbc_path(self, mock_create, mock_ddl, mock_exists):
+        """Databricks + simple column names should use normal JDBC path.
+        When table does not exist: CREATE (no DDL), data via JDBC."""
         loader = FederationLoader()
         df = self._make_df_mock(["customer_code", "total_amount"])
         config = self._make_loader_config("databricks")
@@ -384,14 +388,20 @@ class TestDatabricksSpecialColumnsPath:
                 except Exception:
                     pass
 
-        # Adapter DDL SHOULD have been called (normal JDBC path)
-        mock_ddl.assert_called_once()
+        # Table doesn't exist: CREATE called, DDL (TRUNCATE) NOT called
         mock_create.assert_called_once()
+        mock_ddl.assert_not_called()
 
+    @patch(
+        "dvt.federation.loaders.base.FederationLoader._table_exists", return_value=False
+    )
     @patch("dvt.federation.loaders.base.FederationLoader._execute_ddl")
     @patch("dvt.federation.loaders.base.FederationLoader._create_table_with_adapter")
-    def test_postgres_special_cols_uses_jdbc_path(self, mock_create, mock_ddl):
-        """Postgres + special columns should still use JDBC path (not adapter path)."""
+    def test_postgres_special_cols_uses_jdbc_path(
+        self, mock_create, mock_ddl, mock_exists
+    ):
+        """Postgres + special columns should still use JDBC path (not adapter path).
+        When table does not exist: CREATE (no DDL), data via JDBC."""
         loader = FederationLoader()
         df = self._make_df_mock(["Customer Code", "Total Amount"])
         config = self._make_loader_config("postgres")
@@ -417,18 +427,22 @@ class TestDatabricksSpecialColumnsPath:
                 except Exception:
                     pass
 
-        # Postgres: ALWAYS uses JDBC path regardless of column names
-        mock_ddl.assert_called_once()
+        # Table doesn't exist: CREATE called, DDL (TRUNCATE) NOT called
         mock_create.assert_called_once()
+        mock_ddl.assert_not_called()
 
+    @patch(
+        "dvt.federation.loaders.base.FederationLoader._table_exists", return_value=False
+    )
     @patch("dvt.federation.loaders.base.FederationLoader._execute_ddl")
     @patch("dvt.federation.loaders.base.FederationLoader._create_table_with_adapter")
     @patch("dvt.federation.loaders.base.FederationLoader._commit")
     @patch("dvt.federation.adapter_manager.get_quoted_table_name")
     def test_load_via_adapter_uses_ddl_and_insert(
-        self, mock_quote, mock_commit, mock_create, mock_ddl
+        self, mock_quote, mock_commit, mock_create, mock_ddl, mock_exists
     ):
-        """_load_via_adapter creates table via DDL then INSERTs via adapter."""
+        """_load_via_adapter creates table via DDL then INSERTs via adapter.
+        When table does not exist (first run): CREATE + INSERT."""
         from unittest.mock import call
 
         mock_quote.return_value = "`dvt_test`.`test_table`"
@@ -451,9 +465,9 @@ class TestDatabricksSpecialColumnsPath:
         assert result.row_count == 2
         assert result.load_method == "adapter"
 
-        # DDL and CREATE TABLE should have been called
-        mock_ddl.assert_called_once()
+        # Table doesn't exist: CREATE called, DDL (TRUNCATE) NOT called
         mock_create.assert_called_once()
+        mock_ddl.assert_not_called()
 
         # adapter.execute should have been called with INSERT INTO ... VALUES
         insert_calls = [
@@ -503,12 +517,15 @@ class TestDatabricksSpecialColumnsPath:
         # Boolean literal
         assert "TRUE" in insert_sql
 
+    @patch(
+        "dvt.federation.loaders.base.FederationLoader._table_exists", return_value=False
+    )
     @patch("dvt.federation.loaders.base.FederationLoader._execute_ddl")
     @patch("dvt.federation.loaders.base.FederationLoader._create_table_with_adapter")
     @patch("dvt.federation.loaders.base.FederationLoader._commit")
     @patch("dvt.federation.adapter_manager.get_quoted_table_name")
     def test_load_via_adapter_empty_df(
-        self, mock_quote, mock_commit, mock_create, mock_ddl
+        self, mock_quote, mock_commit, mock_create, mock_ddl, mock_exists
     ):
         """_load_via_adapter handles empty DataFrames gracefully."""
         mock_quote.return_value = "`dvt_test`.`test_table`"
