@@ -183,3 +183,42 @@ dvt run --full-refresh                             | all 9 engines    | PASS=65 
 dvt run                                            | all 9 engines    | PASS=65 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=65          |   614s
 # Same 65 models. Incremental models use TRUNCATE+INSERT (default DDL contract).
 # Federation models skip staging extraction when Delta staging already exists.
+
+# ================================================================================
+# DATE: 2026-03-06 (Adapter E2E + CLI UAT — Testing Factory validation)
+# Context: Updated Testing Factory for 8 engines (5 Docker + 3 external).
+#          Added 8 new federation models (17 total in adapter test project).
+#          dvt-core commits: b25b0d615 (quoting fix), 0ec388b42 (testing-factory docs)
+# ================================================================================
+
+# PHASE 25: CLI UAT (19 commands) — 2026-03-06 18:31
+run_all.sh (19 CLI commands)                       | pg_dev           | 19 passed, 0 failed, 0 skipped                          |    ~60s
+# Commands: init, debug, clean, deps, sync, compile, show, run, seed, test,
+#           build, list, parse, retry, clone, run_operation, snapshot,
+#           source_freshness, docs_generate
+
+# PHASE 26: dvt debug (all 8 writable engines) — 2026-03-06 18:39
+dvt debug                                          | all 8 engines    | ALL PASS (pg/mysql/mssql/oracle/mariadb/pg_dev/disf/dbx) |    ~10s
+
+# PHASE 27: dvt seed (adapter, excl. large CSVs) — 2026-03-06 19:07
+dvt seed (excl transactions_b/c)                   | pg_docker        | PASS=9 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=9            |     1s
+dvt seed (excl transactions_b/c)                   | mysql_docker     | PASS=9 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=9            |     5s
+dvt seed (excl transactions_b/c)                   | mssql_docker     | PASS=9 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=9            |     6s
+dvt seed (excl transactions_b/c)                   | oracle_docker    | PASS=9 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=9            |    13s
+dvt seed (excl transactions_b/c)                   | mariadb_docker   | PASS=9 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=9            |     5s
+dvt seed --full-refresh (excl transactions_b/c)    | pg_dev           | PASS=9 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=9            |     1s
+dvt seed (excl transactions_b/c)                   | disf_dev         | PASS=5 WARN=0 ERROR=4 SKIP=0 NO-OP=0 TOTAL=9            |    16s
+# disf_dev errors: customers_db_1, customers_db_2, packs, transactions_a — column names with spaces
+dvt seed (excl transactions_b/c)                   | dbx_dev          | PASS=5 WARN=0 ERROR=4 SKIP=0 NO-OP=0 TOTAL=9            |   104s
+# dbx_dev errors: same 4 CSVs with spaces in column names — pre-existing adapter limitation
+
+# PHASE 28: dvt run --full-refresh (all 65 models, 9 engines) — 2026-03-06 19:28
+dvt run --full-refresh                             | all 9 engines    | PASS=63 WARN=0 ERROR=1 SKIP=1 NO-OP=0 TOTAL=65          |  1020s
+# ERROR: c_vw_b_dim_officers (stale relation cache — transient, passes on retry)
+# SKIP: d_b_dim_officers (depends on c_vw_b_dim_officers)
+# Retry: both models pass individually (PASS=2/2)
+# Effective: 65/65
+
+# PHASE 29: dvt run (incremental) — 2026-03-06 19:47
+dvt run                                            | all 9 engines    | PASS=65 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=65          |  1088s
+# Clean run, no errors.
