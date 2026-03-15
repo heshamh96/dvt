@@ -2,10 +2,10 @@
 
 ## Overview
 
-DVT extends dbt's configuration system with three additions:
+DVT extends dbt's configuration system with these additions:
 1. **profiles.yml** — multi-adapter + bucket connections (extended from dbt)
-2. **sources.yml** — Sling extraction config per source table (extended from dbt)
-3. **Model config** — per-model target override + bucket format (extended from dbt)
+2. **sources.yml** — metadata only: connection + schema + tables (extended from dbt, NO sling config)
+3. **Model config** — `connection` (extraction), `target` (materialization target), `format` (bucket), `sling` (Sling options)
 
 All standard dbt configuration (dbt_project.yml, selectors.yml, packages.yml) works unchanged.
 
@@ -108,8 +108,10 @@ my_project:
 
 ## sources.yml
 
-DVT extends dbt's sources.yml with a `sling:` configuration block that controls
-how each source table is extracted to the default target.
+DVT extends dbt's sources.yml with a **required** `connection` property.
+sources.yml is **metadata only** — it declares what tables exist on what connections.
+It does NOT contain extraction config. All extraction behavior is controlled by the
+**model** that references the source.
 
 ```yaml
 version: 2
@@ -117,109 +119,90 @@ version: 2
 sources:
   - name: crm
     description: "CRM system on PostgreSQL"
-    connection: source_postgres               # profiles.yml output name
+    connection: source_postgres               # REQUIRED: profiles.yml output name
     schema: public
-    sling:                                    # source-level defaults
-      mode: incremental
-      primary_key: [id]
     tables:
       - name: customers
         description: "Customer master data"
-        sling:                                # table-level overrides
-          update_key: updated_at
         columns:
           - name: id
             data_tests:
               - unique
               - not_null
-
       - name: orders
-        sling:
-          update_key: modified_at
-          select: [id, customer_id, order_date, total_amount, modified_at]  # column selection
-
       - name: ref_countries
-        sling:
-          mode: full-refresh                  # small reference table, always full
 
-      - name: events
-        sling:
-          mode: change-capture                # CDC from transaction log
-          change_capture_options:
-            run_max_events: 10000
-            soft_delete: true
-
-  - name: billing
-    description: "Billing system on MySQL"
-    connection: source_mysql
-    schema: billing
-    sling:
-      mode: incremental
-      primary_key: [invoice_id]
-      update_key: last_modified
+  - name: erp
+    description: "ERP system on SQL Server"
+    connection: source_sqlserver
+    schema: dbo
     tables:
       - name: invoices
-      - name: payments
+      - name: products
       - name: line_items
-        sling:
-          mode: full-refresh
-          primary_key: [line_item_id]
-
-  - name: files
-    description: "CSV files on S3"
-    connection: data_lake
-    sling:
-      mode: full-refresh
-    tables:
-      - name: exchange_rates
-        sling:
-          src_stream: "s3://company-data-lake/reference/exchange_rates.csv"
-          source_options:
-            format: csv
-            header: true
 ```
 
-### Sling Config Keys (per source table)
-
-| Key | Description | Default |
-|-----|-------------|---------|
-| `mode` | Extraction mode: `full-refresh`, `incremental`, `truncate`, `snapshot`, `change-capture` | `full-refresh` |
-| `primary_key` | Column(s) for upsert in incremental mode | none |
-| `update_key` | Column for watermark-based incremental extraction | none |
-| `select` | List of columns to extract (column pruning) | all columns |
-| `src_stream` | Custom SQL or file path override for extraction | table name |
-| `source_options` | Sling source options (format, encoding, flatten, etc.) | {} |
-| `target_options` | Sling target options (column_casing, batch_limit, etc.) | {} |
-| `change_capture_options` | CDC-specific options (run_max_events, soft_delete, etc.) | {} |
-| `transforms` | Sling inline transforms (trim, upper, hash, etc.) | none |
-| `disabled` | Skip this table during extraction | false |
-
-### Config Hierarchy
-
-```
-dbt_project.yml (project-level DVT defaults)
-  → source-level sling: {} (applies to all tables in this source)
-    → table-level sling: {} (overrides source defaults)
-```
-
-Example in dbt_project.yml:
-```yaml
-# dbt_project.yml
-name: my_project
-...
-
-# DVT-specific config
-dvt:
-  extraction_schema: dvt_raw          # schema for extraction tables (default: dvt_raw)
-  sling:                              # project-level extraction defaults
-    mode: full-refresh
-    target_options:
-      column_casing: snake
-```
+**Key points:**
+- `connection` is **required** on every source
+- No `sling:` blocks — extraction config belongs on models
+- Standard dbt source features (descriptions, tests, freshness) work unchanged
 
 ## Model Config
 
-DVT extends dbt's model config with `target` and `format` options.
+DVT extends dbt's model config with `connection`, `target`, `format`, `path`, and `sling` options.
+
+### connection (extraction from remote source)
+
+The `connection` config tells DVT this model extracts data from a remote source via Sling.
+The model's compiled SQL runs on the **source** database. Sling streams the result to the target.
+
+```sql
+-- models/staging/stg_customers.sql
+{{ config(
+    materialized='table',
+    connection='source_postgres'     -- source database to extract from
+) }}
+SELECT * FROM {{ source('crm', 'customers') }}
+```
+
+### connection + incremental (cross-engine incremental)
+
+```sql
+-- models/staging/stg_orders.sql
+{{ config(
+    materialized='incremental',
+    connection='source_postgres',
+    unique_key='id'                  -- maps to Sling's primary_key for merge
+) }}
+SELECT id, customer_id, order_date, total, updated_at
+FROM {{ source('crm', 'orders') }}
+{% if is_incremental() %}
+WHERE updated_at > (SELECT MAX(updated_at) FROM {{ this }})
+{% endif %}
+```
+
+DVT pre-resolves the watermark and formats it in the source's dialect.
+
+### connection + sling (Sling-specific options)
+
+```sql
+-- models/staging/stg_invoices.sql
+{{ config(
+    materialized='table',
+    connection='source_sqlserver',
+    sling={
+        'target_options': {
+            'column_casing': 'snake',
+            'column_typing': {
+                'string': {'length_factor': 2},
+                'decimal': {'min_precision': 18},
+                'boolean': {'cast_as': 'integer'},
+            }
+        }
+    }
+) }}
+SELECT * FROM {{ source('erp', 'invoices') }}
+```
 
 ### target (per-model target override)
 
@@ -231,9 +214,7 @@ DVT extends dbt's model config with `target` and `format` options.
     format='delta',                  -- output format for bucket targets
     path='analytics/orders/',        -- path within the bucket
 ) }}
-
 SELECT * FROM {{ ref('fct_orders') }}
-WHERE order_date < DATEADD(year, -2, CURRENT_DATE)
 ```
 
 ### format (bucket materialization format)
@@ -253,7 +234,7 @@ All standard dbt config works as-is:
 - `database`: target database override
 - `tags`: model tags for selection
 - `pre_hook` / `post_hook`: SQL hooks
-- `unique_key`: for incremental merge
+- `unique_key`: for incremental merge (also maps to Sling primary_key)
 - `strategy`: for snapshots (timestamp, check)
 - etc.
 
@@ -274,7 +255,7 @@ macro-paths: ["macros"]
 models:
   my_project:
     staging:
-      +materialized: view
+      +materialized: table
     marts:
       +materialized: table
     archive:
@@ -286,30 +267,31 @@ seeds:
   my_project:
     +schema: seeds
 
-# DVT-specific project config
+# DVT-specific project config (optional)
 dvt:
-  extraction_schema: dvt_raw
+  sling:                           # project-level sling defaults
+    target_options:
+      column_casing: snake
 ```
 
-## Extraction Node Naming
+## Extraction Model Naming
 
-When DVT generates extraction nodes from sources.yml, they are named:
+DVT does NOT auto-generate extraction nodes. Users name their extraction models
+whatever they want, following their project's conventions:
 
 ```
-{extraction_schema}.{source_name}__{table_name}
-
-Examples:
-  dvt_raw.crm__customers
-  dvt_raw.crm__orders
-  dvt_raw.billing__invoices
+models/
+  staging/
+    stg_customers.sql          ← config(connection='source_postgres')
+    stg_orders.sql             ← config(connection='source_postgres', incremental)
+    stg_invoices.sql           ← config(connection='source_sqlserver')
+  marts/
+    dim_customers.sql          ← pushdown (refs stg_customers)
+    fct_orders.sql             ← pushdown (refs stg_orders + stg_customers)
 ```
 
-The extraction schema is configurable via `dvt.extraction_schema` in `dbt_project.yml`.
-Default: `dvt_raw`.
-
-In model SQL, users reference sources normally via `{{ source('crm', 'customers') }}`.
-DVT resolves this to `dvt_raw.crm__customers` (the extraction table) instead of
-the original source table on the remote database.
+Downstream models reference extraction models via `{{ ref('stg_customers') }}` —
+standard dbt behavior.
 
 ## Environment Variables
 
@@ -318,7 +300,6 @@ DVT respects all dbt environment variables plus:
 | Variable | Description |
 |----------|-------------|
 | `DVT_PROFILES_DIR` | Override profiles.yml location |
-| `DVT_EXTRACTION_SCHEMA` | Override extraction schema name |
 | `SLING_THREADS` | Number of parallel Sling extractions |
 | `SLING_STATE` | State store for CDC (Sling native) |
 | `DUCKDB_PATH` | Path to DuckDB binary (for extensions) |

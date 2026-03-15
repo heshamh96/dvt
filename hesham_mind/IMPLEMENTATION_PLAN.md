@@ -74,24 +74,25 @@ Update entry_points to include `dvt = dvt.cli.main:cli` (already done).
 - Handle special auth: key-pair, OAuth, service accounts
 - Unit tests: one test per adapter type
 
-### P1.2: Source config parser (Week 3)
+### P1.2: Watermark formatter (Week 3)
 
-`core/dvt/config/source_config.py`
+`core/dvt/extraction/watermark_formatter.py`
 
-- Parse `sling:` config from sources.yml
-- Implement config hierarchy: project defaults → source defaults → table overrides
-- Validate sling config keys (mode, primary_key, update_key, etc.)
-- Unit tests
+- Dialect-specific literal formatting for watermark values
+- Support: postgres, mysql, sqlserver, oracle, snowflake, bigquery,
+  redshift, databricks, clickhouse, trino, duckdb, sqlite
+- Types: timestamp, date, integer, string
+- Unit tests: one test per dialect × type combination
 
-### P1.3: Extraction node generator (Week 4)
+### P1.3: Model connection config detection (Week 4)
 
-`core/dvt/extraction/node_generator.py`
+`core/dvt/config/target_resolver.py`
 
-- After dbt builds the manifest, inject extraction nodes
-- One extraction node per source table that has a `connection:` different from target
-- Extraction nodes are upstream dependencies of any model that refs the source
-- Node naming: `{extraction_schema}.{source_name}__{table_name}`
-- Extraction nodes carry Sling config (mode, pk, uk, etc.)
+- Detect `connection` config on models during compilation
+- Validate connection exists in profiles.yml
+- Validate extraction models are not ephemeral or snapshot
+- Validate extraction models reference sources from one connection only
+- Map dbt incremental strategy → Sling mode/merge strategy
 
 ### P1.4: Sling client wrapper (Week 4)
 
@@ -109,36 +110,34 @@ Update entry_points to include `dvt = dvt.cli.main:cli` (already done).
 `core/dvt/runners/extraction_runner.py`
 
 - `DvtRunTask(RunTask)`:
-  - Override `before_run()` to inject extraction nodes
-  - Override `get_runner()` to return DvtModelRunner or ExtractionRunner
+  - Override `get_runner()` to return DvtModelRunner
   - Reuse ALL dbt lifecycle decorators
 
-- `ExtractionRunner`:
-  - Calls Sling client to extract source → target
-  - Handles mode (full-refresh, incremental, etc.)
-  - Reports results (rows extracted, duration)
-
 - `DvtModelRunner(ModelRunner)`:
+  - Detect `connection` config → route to Sling extraction path
+  - For extraction models: compile SQL, pre-resolve watermarks (dialect-specific),
+    call Sling with compiled SQL as src_stream, map materialization to Sling mode
   - For pushdown models: delegates to `super().execute()` (stock dbt)
   - For cross-target models: execute on default target, then Sling to model target
 
-### P1.6: Target resolver (Week 5)
+### P1.6: Cross-engine incremental wiring (Weeks 5-6)
 
-`core/dvt/config/target_resolver.py`
-
-- Resolve per-model target from config hierarchy
-- Determine execution path: pushdown vs cross-target
-- Map target name → profiles.yml output → connection info
+- Pre-resolve `{{ this }}` watermark queries from target before compilation
+- Format watermark as dialect-specific literal for source engine
+- Substitute literal into compiled SQL before sending to Sling
+- Map dbt incremental strategy → Sling merge strategy
+- Test: incremental extraction model across Postgres → Snowflake
 
 ### P1.7: Integration testing (Week 7)
 
-- End-to-end test: Postgres source → extraction → Postgres target model
-- End-to-end test: two sources (Postgres + MySQL) → extraction → target model
-- Verify incremental extraction works across runs
-- Verify `--select my_model` only extracts needed sources
+- End-to-end test: extraction model (Postgres source → Postgres target)
+- End-to-end test: extraction model + pushdown model (Postgres → Snowflake)
+- Verify incremental extraction works across runs with dialect-specific watermarks
+- Verify `--full-refresh` forces full extraction + full rebuild
+- Verify `--select` only runs selected models
 
-**Phase 1 Deliverable:** `dvt run` extracts remote sources via Sling and
-executes models via pushdown. Incremental extraction works.
+**Phase 1 Deliverable:** `dvt run` with user-written extraction models via Sling
+and pushdown models via adapter. Cross-engine incremental works.
 
 ---
 
@@ -181,14 +180,12 @@ executes models via pushdown. Incremental extraction works.
   or via Sling's native file writing
 - Path construction: `{bucket_prefix}/{path}/{model_name}/`
 
-### P2.4: Incremental model + extraction wiring (Weeks 11-12)
+### P2.4: Two-model pattern support (Weeks 11-12)
 
-- Wire dbt's `is_incremental()` with Sling's incremental extraction
-- When a model is incremental AND its sources are incremental:
-  - Extraction node extracts only delta (Sling incremental mode)
-  - Model SQL runs with `is_incremental()` = true
-  - Only new/changed data flows through the pipeline
-- Handle `--full-refresh` flag: force full extraction + full model rebuild
+- Support models that target a source connection (pushdown on source)
+- These are standard dbt models with `config(target='source_xxx')`
+- The extraction model then refs the source-side model
+- Test: filter on SQL Server via T-SQL, extract filtered result via Sling
 
 ### P2.5: DvtBuildTask (Week 12)
 
@@ -304,9 +301,10 @@ debugging, and documentation.
 | Risk | Mitigation |
 |------|-----------|
 | Sling Python wrapper limitations | Fall back to subprocess calls to sling CLI |
-| SQLGlot transpilation gaps | Maintain dialect_patches.py for manual overrides |
+| SQLGlot transpilation gaps (dvt show only) | Maintain dialect_patches.py for manual overrides |
 | dbt adapter config parsing for Sling URLs | Start with top 6 adapters, add others incrementally |
-| Extraction node injection into dbt manifest | Study ManifestLoader.load() carefully, find cleanest hook point |
-| Incremental extraction + incremental model interaction | Design careful state management, test extensively |
+| Watermark formatting for exotic dialects | Start with top 12 dialects, add others as needed |
+| Cross-engine incremental watermark resolution | Pre-resolve from target, substitute literal. Test extensively. |
+| Model SQL dialect must match source engine | Document clearly. Two-model pattern for complex filtering. |
 | Sling CDC requires Pro license | Document as optional feature, ensure free-tier works without CDC |
 | DuckDB ATTACH limitations (read-only, limited dialect support) | Use as dev tool only, not production path |

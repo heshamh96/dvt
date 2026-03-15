@@ -19,11 +19,13 @@ sources on ANY database, and materialize results to ANY target (including cloud 
 
 2. **The target database is the compute engine.** Models push down to the target via dbt adapters. DVT does NOT run model SQL in DuckDB (except for `dvt show`). The warehouse does the heavy lifting.
 
-3. **Sling handles ALL data movement.** Extraction from sources, loading to targets, seeding CSV files, cross-target materialization, CDC — all via Sling. No custom JDBC code, no PySpark, no intermediate staging files managed by DVT.
+3. **Sling handles ALL data movement.** Cross-engine extraction, loading to targets, seeding CSV files, cross-target materialization, CDC — all via Sling. No custom JDBC code, no PySpark, no intermediate staging files managed by DVT.
 
-4. **Sources become physical extraction nodes in the DAG.** When `dvt run` is issued, each source table becomes a real DAG node that Sling materializes on the target. These are cached — incremental sources only extract the delta on subsequent runs.
+4. **User-written extraction models, NOT auto-generated nodes.** Users write standard dbt models with a `connection` config to extract data from remote sources via Sling. This follows the dbt "base views" / "staging models" pattern. Users control naming, SQL, filtering, and incremental logic. DVT does NOT auto-generate hidden DAG nodes.
 
-5. **DuckDB is scoped to three use cases.** `dvt show` (local queries), local file/API processing, and virtual federation. It is NOT the core transform engine.
+5. **Cross-engine incremental models work seamlessly.** dbt's `is_incremental()` macro works across engines. DVT pre-resolves the watermark value from the target, formats it as a dialect-specific literal for the source engine, and substitutes it into the extraction query before Sling executes it.
+
+6. **DuckDB is scoped to three use cases.** `dvt show` (local queries), local file/API processing, and virtual federation. It is NOT the core transform engine.
 
 ## System Overview
 
@@ -33,13 +35,15 @@ sources on ANY database, and materialize results to ANY target (including cloud 
 │                                                                         │
 │  profiles.yml          sources.yml           models/                    │
 │  ┌──────────────┐     ┌──────────────┐      ┌──────────────┐           │
-│  │ target: sf   │     │ crm:         │      │ dim_customer  │           │
-│  │ outputs:     │     │  conn: pg    │      │ fct_orders    │           │
-│  │  sf: {...}   │     │  sling:      │      │ rpt_revenue   │           │
-│  │  pg: {...}   │     │   mode: incr │      │               │           │
-│  │  s3: {...}   │     │   pk: [id]   │      │ config:       │           │
-│  │  gcs: {...}  │     │   uk: upd_at │      │  target=s3    │           │
-│  └──────────────┘     └──────────────┘      └──────────────┘           │
+│  │ target: sf   │     │ crm:         │      │ stg_customers │           │
+│  │ outputs:     │     │  conn: pg    │      │  connection:pg│           │
+│  │  sf: {...}   │     │  tables:     │      │ stg_orders    │           │
+│  │  pg: {...}   │     │   -customers │      │  connection:pg│           │
+│  │  s3: {...}   │     │   -orders    │      │  incremental  │           │
+│  │  gcs: {...}  │     │              │      │ dim_customers │           │
+│  └──────────────┘     └──────────────┘      │ fct_orders    │           │
+│                        (metadata only,       │  target=s3    │           │
+│                         no sling config)     └──────────────┘           │
 └─────────────────────────────────────────────────────────────────────────┘
                                │
                                ▼
@@ -49,26 +53,28 @@ sources on ANY database, and materialize results to ANY target (including cloud 
 │  ┌─────────────────────────────────────────────────────────────────┐   │
 │  │                     DAG Resolution                               │   │
 │  │                                                                   │   │
-│  │  1. Parse sources.yml → generate extraction nodes                │   │
-│  │  2. Parse models/ → standard dbt parsing                         │   │
-│  │  3. Build DAG: extraction nodes → models → tests                 │   │
-│  │  4. Resolve targets: per-model target overrides                  │   │
+│  │  1. Parse sources.yml (metadata: connection + tables)             │   │
+│  │  2. Parse models/ → detect `connection` config on models         │   │
+│  │  3. Build DAG: extraction models → pushdown models → tests       │   │
+│  │  4. Resolve targets + execution paths per model                  │   │
 │  └─────────────────────────────────────────────────────────────────┘   │
 │                               │                                         │
 │  ┌─────────────────────────────────────────────────────────────────┐   │
 │  │                     Execution (per node in DAG order)            │   │
 │  │                                                                   │   │
-│  │  EXTRACTION NODE:                                                 │   │
-│  │    Sling streams data from source connection → default target     │   │
-│  │    Mode: full-refresh / incremental / change-capture              │   │
-│  │    Result: physical table on the default target                   │   │
+│  │  EXTRACTION MODEL (has `connection` config):                       │   │
+│  │    DVT compiles model SQL (Jinja → SQL in source dialect)         │   │
+│  │    For incremental: pre-resolves watermark, dialect-specific lit. │   │
+│  │    Sling executes compiled SQL on SOURCE, streams to TARGET       │   │
+│  │    Sling handles merge strategy for incremental models            │   │
+│  │    Result: physical table on the model's target                   │   │
 │  │                                                                   │   │
-│  │  MODEL NODE (target == default target):                           │   │
+│  │  PUSHDOWN MODEL (no `connection` config, target == default):      │   │
 │  │    dbt adapter pushes down SQL to the target                      │   │
 │  │    Standard dbt materialization (table/view/incremental/ephemeral)│   │
 │  │                                                                   │   │
-│  │  MODEL NODE (target != default target):                           │   │
-│  │    dbt adapter runs SQL on default target (where sources live)    │   │
+│  │  CROSS-TARGET MODEL (no `connection`, target != default):         │   │
+│  │    dbt adapter runs SQL on default target                         │   │
 │  │    Sling streams result → model's configured target               │   │
 │  │    Target may be another DB or a cloud bucket (Delta/Parquet/CSV) │   │
 │  │                                                                   │   │
@@ -125,13 +131,13 @@ core/
     runners/
       __init__.py
       model_runner.py               # DvtModelRunner(ModelRunner)
-      extraction_runner.py          # Runs Sling extraction for source nodes
+      extraction_runner.py          # Runs Sling extraction for models with `connection` config
       seed_runner.py                # Runs Sling seed loading
     extraction/
       __init__.py
       sling_client.py               # Python wrapper around Sling
       connection_mapper.py          # profiles.yml → Sling connection URLs
-      node_generator.py             # Auto-generates extraction DAG nodes from sources.yml
+      watermark_formatter.py        # Dialect-specific watermark literal formatting
     loading/
       __init__.py
       sling_loader.py               # Load results to non-default targets via Sling
@@ -139,8 +145,7 @@ core/
     config/
       __init__.py
       dvt_project.py                # DVT-specific project config
-      source_config.py              # Sling extraction config from sources.yml
-      target_resolver.py            # Resolves per-model target overrides
+      target_resolver.py            # Resolves per-model target + connection overrides
     federation/
       __init__.py
       engine.py                     # DuckDB engine for dvt show / local dev
@@ -161,18 +166,15 @@ DVT hooks into dbt-core at these specific points:
    dbt's commands but routes to DvtXxxTask subclasses.
 
 2. **Task subclasses** — DvtRunTask(RunTask), DvtBuildTask(BuildTask), etc.
-   Override `get_runner()` to return DVT runners. Override `before_run()` to
-   inject extraction nodes. Reuse ALL dbt lifecycle decorators.
+   Override `get_runner()` to return DVT runners. Reuse ALL dbt lifecycle decorators.
 
 3. **Runner subclasses** — DvtModelRunner(ModelRunner). Override `execute()` to
-   handle cross-target materialization. Override `compile()` for extraction queries.
+   detect `connection` config and route to Sling extraction or adapter pushdown.
+   For incremental extraction models, pre-resolve watermarks and format as
+   dialect-specific literals before sending to Sling.
 
-4. **Manifest augmentation** — After dbt builds the manifest, DVT injects
-   extraction nodes (one per source table) as upstream dependencies.
-
-5. **Config extension** — DVT reads `sling:` config from sources.yml and
-   `target:` / `format:` from model config(). These are passed through dbt's
-   existing config system.
+4. **Config extension** — DVT reads `connection`, `target`, `format`, `sling`
+   from model config(). These are passed through dbt's existing config system.
 
 ## Data Flow Examples
 
@@ -189,32 +191,35 @@ Flow:
   3. Done. This is stock dbt behavior.
 ```
 
-### Example 2: Cross-engine extraction + pushdown
+### Example 2: User-written extraction model + pushdown
 
 ```
-Source: Postgres.public.customers (remote)
-Source: Postgres.public.orders (remote)
-Model: models/fct_orders.sql → config(materialized='incremental')
+User writes:
+  models/staging/stg_customers.sql → config(materialized='table', connection='source_postgres')
+  models/staging/stg_orders.sql → config(materialized='incremental', connection='source_postgres', unique_key='id')
+  models/marts/fct_orders.sql → config(materialized='table')  (no connection — pushdown)
+
 Target: Snowflake (default)
 
 Flow:
-  1. Sling extracts customers → Snowflake.dvt_raw.crm__customers (incremental)
-  2. Sling extracts orders → Snowflake.dvt_raw.crm__orders (incremental)
-  3. Snowflake executes: MERGE INTO fct_orders ... (pushdown via dbt-snowflake)
+  1. Sling executes stg_customers SQL on Postgres, streams result → Snowflake.stg_customers
+  2. Sling executes stg_orders SQL on Postgres (with watermark), merges → Snowflake.stg_orders
+  3. Snowflake executes fct_orders SQL via pushdown (refs stg_customers + stg_orders)
   4. Done.
 ```
 
 ### Example 3: Cross-target materialization to bucket
 
 ```
-Source: Postgres.public.orders (remote)
-Model: models/archive_orders.sql → config(target='data_lake', format='delta')
-Target: S3 bucket
+User writes:
+  models/archive/archive_orders.sql → config(target='data_lake', format='delta')
+
+Target: S3 bucket (model-level override)
 
 Flow:
-  1. Sling extracts orders → Snowflake.dvt_raw.crm__orders (incremental)
-  2. Snowflake executes model SQL → temp result
-  3. Sling streams result from Snowflake → S3 as Delta Lake format
+  1. Snowflake executes model SQL → temp result (refs stg_orders which already exists)
+  2. Sling streams result from Snowflake → S3 as Delta Lake format
+  3. Temp table dropped
   4. Done.
 ```
 

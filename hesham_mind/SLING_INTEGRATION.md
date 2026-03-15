@@ -46,43 +46,34 @@ MinIO, Cloudflare R2, Wasabi, SFTP
 
 ## How DVT Uses Sling
 
-### 1. Source Extraction
+### 1. Extraction Models (Models with `connection` Config)
 
-When `dvt run` encounters an extraction node:
+When `dvt run` encounters a model with `connection` config:
 
 ```python
 from sling import Replication, ReplicationStream
 
-# DVT generates this from sources.yml + profiles.yml
+# DVT compiles the model SQL (Jinja → SQL in source dialect)
+# For incremental: watermark is pre-resolved and substituted as dialect-specific literal
+compiled_sql = dvt_compile_extraction_model(model, manifest)
+
 replication = Replication(
-    source=source_connection_url,       # mapped from profiles.yml
-    target=target_connection_url,       # default target from profiles.yml
+    source=source_connection_url,       # from model's connection config → profiles.yml
+    target=target_connection_url,       # model's target from profiles.yml
     streams={
-        "public.customers": ReplicationStream(
-            object="dvt_raw.crm__customers",
-            mode="incremental",
-            primary_key=["id"],
-            update_key="updated_at",
+        f"{model.name}.custom": ReplicationStream(
+            sql=compiled_sql,                   # the model's compiled SQL
+            object=f"{schema}.{model.name}",    # target table
+            mode=sling_mode,                    # mapped from dbt materialization
+            primary_key=model.unique_key,       # from model config
         ),
     },
 )
 replication.run()
 ```
 
-**With predicate pushdown (federation optimizer):**
-```python
-# Instead of extracting all columns and all rows,
-# DVT analyzes downstream models to determine what's needed
-streams={
-    "public.customers.custom": ReplicationStream(
-        sql="SELECT id, name, email, updated_at FROM public.customers WHERE region = 'US'",
-        object="dvt_raw.crm__customers",
-        mode="incremental",
-        primary_key=["id"],
-        update_key="updated_at",
-    ),
-}
-```
+The user controls the SQL — column selection, filtering, joins — by writing it
+in their extraction model. DVT does NOT auto-generate extraction queries.
 
 ### 2. Seed Loading
 
@@ -180,115 +171,104 @@ This mapping lives in `core/dvt/extraction/connection_mapper.py`. It handles:
 - Environment variable resolution (Jinja rendering happens before mapping)
 - Special auth methods (key-pair, OAuth, service accounts)
 
-## Sling Extraction Modes in DVT Context
+## Sling Modes Mapped from dbt Materializations
 
-### full-refresh
+DVT maps dbt model materializations to Sling modes for extraction models:
 
-```yaml
-# sources.yml
-- name: ref_countries
-  sling:
-    mode: full-refresh
+### table → Sling full-refresh
+
+```sql
+{{ config(materialized='table', connection='source_postgres') }}
+SELECT * FROM {{ source('crm', 'customers') }}
 ```
 
-- Sling drops and recreates the extraction table every run
-- Use for small reference tables that change rarely
-- No state tracking needed
+- Sling drops and recreates the target table every run
+- Default write behavior (no `--full-refresh` needed)
 
-### incremental (with primary_key + update_key)
+### incremental → Sling incremental (with merge)
 
-```yaml
-# sources.yml
-- name: orders
-  sling:
-    mode: incremental
-    primary_key: [id]
-    update_key: modified_at
+```sql
+{{ config(materialized='incremental', connection='source_postgres', unique_key='id') }}
+SELECT * FROM {{ source('crm', 'orders') }}
+{% if is_incremental() %}
+WHERE updated_at > (SELECT MAX(updated_at) FROM {{ this }})
+{% endif %}
 ```
 
-- First run: full table load
-- Subsequent runs: Sling queries `MAX(update_key)` from the extraction table
-  and only fetches rows where `update_key > watermark`
-- Fetched rows are upserted (matched on primary_key)
-- State is implicit: the watermark lives in the extraction table itself
+- DVT pre-resolves the watermark from the target in dialect-specific format
+- Sling executes the filtered SQL on the source (only delta rows)
+- Sling merges the result into the target table using the mapped merge strategy
+- `unique_key` maps to Sling's `primary_key`
+- dbt strategies map to Sling: `merge` → `update_insert`, `delete+insert` → `delete_insert`, `append` → no primary_key
 
-### incremental (with primary_key only)
+### --full-refresh on any extraction model
 
-```yaml
-# sources.yml
-- name: products
-  sling:
-    mode: incremental
-    primary_key: [product_id]
+- `is_incremental()` returns false → full SQL, no watermark
+- Sling uses `full-refresh` mode → drop + create + full load
+- Matches stock dbt `--full-refresh` behavior exactly
+
+## Dialect-Specific Watermark Formatting
+
+When DVT pre-resolves the watermark for cross-engine incremental models, it must
+format the value as a valid SQL literal for the **source** database's dialect.
+
+DVT maintains a `watermark_formatter.py` with dialect-specific templates:
+
+| Source Engine | Timestamp Format | Date Format |
+|---|---|---|
+| PostgreSQL | `'{value}'::TIMESTAMP` | `'{value}'::DATE` |
+| MySQL/MariaDB | `'{value}'` | `'{value}'` |
+| SQL Server | `CONVERT(DATETIME2, '{value}', 121)` | `CONVERT(DATE, '{value}', 23)` |
+| Oracle | `TO_TIMESTAMP('{value}', 'YYYY-MM-DD HH24:MI:SS.FF6')` | `TO_DATE('{value}', 'YYYY-MM-DD')` |
+| Snowflake | `TO_TIMESTAMP('{value}')` | `TO_DATE('{value}')` |
+| BigQuery | `TIMESTAMP '{value}'` | `DATE '{value}'` |
+| Redshift | `'{value}'::TIMESTAMP` | `'{value}'::DATE` |
+| Databricks | `TIMESTAMP '{value}'` | `DATE '{value}'` |
+| ClickHouse | `toDateTime64('{value}', 6)` | `toDate('{value}')` |
+| Trino | `TIMESTAMP '{value}'` | `DATE '{value}'` |
+
+Integer/numeric watermarks: plain literals (`12345`).
+String watermarks: `'value'` (SQL Server: `N'value'`).
+
+## Sling Type Mapping
+
+Sling uses a two-step type mapping: source native → Sling general → target native.
+
+**General types:** `bigint`, `integer`, `smallint`, `float`, `decimal`, `string`,
+`text`, `bool`, `date`, `datetime`, `timestamp`, `timestampz`, `time`, `json`,
+`binary`, `uuid`.
+
+Standard analytics types (integers, floats, strings, booleans, dates, timestamps,
+decimals) map cleanly across all engines. No user intervention needed.
+
+Exotic types (`GEOGRAPHY`, `HSTORE`, `TSVECTOR`, `INTERVAL`, nested ARRAY/STRUCT)
+are mapped to `text` or `json` with a DVT002 warning.
+
+Users can override column types via model `sling` config:
+```sql
+{{ config(
+    connection='source_oracle',
+    sling={'columns': {'amount': 'decimal(18,4)', 'notes': 'text'}}
+) }}
 ```
-
-- Every run: full data upsert (Sling reads entire source, merges on primary_key)
-- More expensive than update_key-based incremental but catches all changes
-- Good for tables without a reliable updated_at column
-
-### change-capture (CDC)
-
-```yaml
-# sources.yml
-- name: events
-  sling:
-    mode: change-capture
-    primary_key: [event_id]
-    change_capture_options:
-      run_max_events: 50000
-      soft_delete: true
-```
-
-- First run: automatic initial snapshot (chunked for large tables)
-- Subsequent runs: reads database transaction log from last position
-- Captures inserts, updates, AND deletes
-- Adds metadata columns: `_sling_synced_at`, `_sling_synced_op`, `_sling_cdc_seq`
-- Requires `SLING_STATE` env var for position tracking
-- Currently supports: MySQL/MariaDB (binlog). Postgres (WAL) coming soon.
-- NOTE: CDC requires Sling Pro Max license
-
-### snapshot
-
-```yaml
-# sources.yml
-- name: daily_metrics
-  sling:
-    mode: snapshot
-```
-
-- Every run: appends full dataset with `_sling_loaded_at` timestamp
-- Keeps full history of how the source looked at each extraction point
-- Good for Type 2 SCD patterns or audit trails
-
-### backfill
-
-```yaml
-# sources.yml
-- name: historical_orders
-  sling:
-    mode: backfill
-    primary_key: [id]
-    update_key: order_date
-    source_options:
-      range: "2020-01-01,2024-01-01"
-```
-
-- One-time or manual backfill of a specific range
-- Useful for historical data loading or re-processing a time window
 
 ## Sling Transforms (Inline Row-Level)
 
 Sling supports 50+ built-in transform functions applied during extraction.
 These are NOT SQL transforms — they're applied row-by-row in Go during streaming.
 
-```yaml
-# sources.yml
-- name: customers
-  sling:
-    transforms:
-      email: ["lower", "trim_space"]
-      phone: ["replace_non_printable"]
-      name: ["trim_space", "replace_accents"]
+```sql
+-- model config
+{{ config(
+    connection='source_postgres',
+    sling={
+        'transforms': {
+            'email': ['lower', 'trim_space'],
+            'phone': ['replace_non_printable'],
+            'name': ['trim_space', 'replace_accents'],
+        }
+    }
+) }}
 ```
 
 Available functions: `upper`, `lower`, `trim_space`, `replace_accents`,
@@ -301,24 +281,19 @@ reaches the target for SQL-based transformation.
 ## Sling Hooks in DVT Context
 
 Sling's hook system (pre/post SQL, HTTP webhooks, checks) can be exposed
-in sources.yml for advanced extraction workflows:
+in model sling config for advanced extraction workflows:
 
-```yaml
-# sources.yml (future feature)
-- name: orders
-  sling:
-    mode: incremental
-    primary_key: [id]
-    update_key: modified_at
-    hooks:
-      pre:
-        - type: query
-          connection: source_postgres
-          query: "ANALYZE public.orders"    # update stats before extraction
-      post:
-        - type: check
-          check: "run.total_rows > 0"       # fail if no rows extracted
-          on_failure: warn
+```sql
+-- models/staging/stg_orders.sql (future feature)
+{{ config(
+    connection='source_postgres',
+    sling={
+        'hooks': {
+            'pre': [{'type': 'query', 'query': 'ANALYZE public.orders'}],
+            'post': [{'type': 'check', 'check': 'run.total_rows > 0', 'on_failure': 'warn'}],
+        }
+    }
+) }}
 ```
 
 ## Error Handling
