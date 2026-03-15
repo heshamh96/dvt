@@ -61,7 +61,7 @@ def _map_postgres(c: Dict[str, Any]) -> str:
     host = _safe(c.get("host", "localhost"))
     port = _safe(c.get("port", "5432"))
     dbname = _safe(c.get("dbname", c.get("database", "")))
-    sslmode = _safe(c.get("sslmode", "prefer"))
+    sslmode = _safe(c.get("sslmode", "disable"))
     url = f"postgres://{user}:{password}@{host}:{port}/{dbname}?sslmode={sslmode}"
     schema = c.get("schema")
     if schema:
@@ -95,9 +95,18 @@ def _map_sqlserver(c: Dict[str, Any]) -> str:
     port = _safe(c.get("port", "1433"))
     database = _safe(c.get("database", ""))
     url = f"sqlserver://{user}:{password}@{host}:{port}/{database}"
+    params = []
     encrypt = c.get("encrypt")
     if encrypt is not None:
-        url += f"?encrypt={str(encrypt).lower()}"
+        params.append(f"encrypt={str(encrypt).lower()}")
+    trust_cert = c.get("trust_cert", c.get("TrustServerCertificate"))
+    if trust_cert is not None:
+        params.append(f"TrustServerCertificate={str(trust_cert).lower()}")
+    elif encrypt is not None and not encrypt:
+        # When encrypt=false on a local Docker, also trust the self-signed cert
+        params.append("TrustServerCertificate=true")
+    if params:
+        url += "?" + "&".join(params)
     return url
 
 

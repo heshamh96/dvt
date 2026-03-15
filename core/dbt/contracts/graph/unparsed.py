@@ -157,9 +157,11 @@ class UnparsedVersion(dbtClassMixin):
     constraints: List[Dict[str, Any]] = field(default_factory=list)
     docs: Docs = field(default_factory=Docs)
     data_tests: Optional[List[TestDef]] = None
-    tests: Optional[List[TestDef]] = None  # back compat for previous name of 'data_tests'
-    columns: Sequence[Union[dbt_common.helper_types.IncludeExclude, UnparsedColumn]] = field(
-        default_factory=list
+    tests: Optional[List[TestDef]] = (
+        None  # back compat for previous name of 'data_tests'
+    )
+    columns: Sequence[Union[dbt_common.helper_types.IncludeExclude, UnparsedColumn]] = (
+        field(default_factory=list)
     )
     deprecation_date: Optional[datetime.datetime] = None
 
@@ -191,7 +193,9 @@ class UnparsedVersion(dbtClassMixin):
                     self._include_exclude = column
                     has_include_exclude = True
                 else:
-                    raise ParsingError("version can have at most one include/exclude element")
+                    raise ParsingError(
+                        "version can have at most one include/exclude element"
+                    )
             else:
                 self._unparsed_columns.append(column)
 
@@ -209,7 +213,9 @@ class UnparsedSingularTestUpdate(HasConfig, HasColumnProps, HasYamlMetadata):
 
 
 @dataclass
-class UnparsedNodeUpdate(HasConfig, HasColumnTests, HasColumnAndTestProps, HasYamlMetadata):
+class UnparsedNodeUpdate(
+    HasConfig, HasColumnTests, HasColumnAndTestProps, HasYamlMetadata
+):
     quote_columns: Optional[bool] = None
     access: Optional[str] = None
 
@@ -250,13 +256,18 @@ class UnparsedModelUpdate(UnparsedNodeUpdate):
                 else self.columns
             )
             column_names_to_columns = {column.name: column for column in columns}
-            if self.time_spine.standard_granularity_column not in column_names_to_columns:
+            if (
+                self.time_spine.standard_granularity_column
+                not in column_names_to_columns
+            ):
                 raise ParsingError(
                     f"Time spine standard granularity column must be defined on the model. Got invalid "
                     f"column name '{self.time_spine.standard_granularity_column}' for model '{self.name}'. Valid names"
                     f"{' for latest version' if self.latest_version else ''}: {list(column_names_to_columns.keys())}."
                 )
-            standard_column = column_names_to_columns[self.time_spine.standard_granularity_column]
+            standard_column = column_names_to_columns[
+                self.time_spine.standard_granularity_column
+            ]
             if not standard_column.granularity:
                 raise ParsingError(
                     f"Time spine standard granularity column must have a granularity defined. Please add one for "
@@ -348,6 +359,8 @@ class UnparsedSourceDefinition(dbtClassMixin):
     config: Dict[str, Any] = field(default_factory=dict)
     unrendered_database: Optional[str] = None
     unrendered_schema: Optional[str] = None
+    # DVT extension: which profiles.yml output this source lives on
+    connection: Optional[str] = None
 
     @classmethod
     def validate(cls, data):
@@ -386,7 +399,9 @@ class SourceTablePatch(dbtClassMixin):
     external: Optional[ExternalTable] = None
     tags: Optional[List[str]] = None
     data_tests: Optional[List[TestDef]] = None
-    tests: Optional[List[TestDef]] = None  # back compat for previous name of 'data_tests'
+    tests: Optional[List[TestDef]] = (
+        None  # back compat for previous name of 'data_tests'
+    )
     columns: Optional[Sequence[UnparsedColumn]] = None
 
     def to_patch_dict(self) -> Dict[str, Any]:
@@ -420,7 +435,9 @@ class SourcePatch(dbtClassMixin):
     schema: Optional[str] = None
     loader: Optional[str] = None
     quoting: Optional[Quoting] = None
-    freshness: Optional[Optional[FreshnessThreshold]] = field(default_factory=FreshnessThreshold)
+    freshness: Optional[Optional[FreshnessThreshold]] = field(
+        default_factory=FreshnessThreshold
+    )
     loaded_at_field: Optional[str] = None
     loaded_at_field_present: Optional[bool] = None
     tables: Optional[List[SourceTablePatch]] = None
@@ -518,7 +535,9 @@ class UnparsedExposure(dbtClassMixin):
                 deprecations.warn("exposure-name", exposure=data["name"])
 
         if data["owner"].get("name") is None and data["owner"].get("email") is None:
-            raise ValidationError("Exposure owner must have at least one of 'name' or 'email'.")
+            raise ValidationError(
+                "Exposure owner must have at least one of 'name' or 'email'."
+            )
 
 
 @dataclass
@@ -646,7 +665,9 @@ class UnparsedGroup(dbtClassMixin):
     def validate(cls, data):
         super(UnparsedGroup, cls).validate(data)
         if data["owner"].get("name") is None and data["owner"].get("email") is None:
-            raise ValidationError("Group owner must have at least one of 'name' or 'email'.")
+            raise ValidationError(
+                "Group owner must have at least one of 'name' or 'email'."
+            )
 
 
 #
@@ -749,7 +770,9 @@ def normalize_date(d: Optional[datetime.date]) -> Optional[datetime.datetime]:
         return None
 
     # convert date to datetime
-    dt = d if type(d) == datetime.datetime else datetime.datetime(d.year, d.month, d.day)
+    dt = (
+        d if type(d) == datetime.datetime else datetime.datetime(d.year, d.month, d.day)
+    )
 
     if not dt.tzinfo:
         # date is naive, re-interpret as system time zone
@@ -774,4 +797,6 @@ class UnparsedUnitTest(dbtClassMixin):
         super(UnparsedUnitTest, cls).validate(data)
         if data.get("versions", None):
             if data["versions"].get("include") and data["versions"].get("exclude"):
-                raise ValidationError("Unit tests can not both include and exclude versions.")
+                raise ValidationError(
+                    "Unit tests can not both include and exclude versions."
+                )
