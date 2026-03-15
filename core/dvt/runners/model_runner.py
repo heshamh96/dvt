@@ -88,84 +88,115 @@ class DvtModelRunner(ModelRunner):
     # ------------------------------------------------------------------
 
     def _execute_sling_direct(self, model, manifest) -> RunResult:
+        """Sling Direct — extract remote source(s) to staging, run model SQL on target.
+
+        Steps:
+        1. For each remote source: Sling extracts to a staging table on the target
+        2. Rewrite model's compiled SQL to replace remote source refs with staging tables
+        3. Execute rewritten SQL on the target via adapter (CREATE TABLE AS)
+        4. Drop staging tables
+        """
         from dvt.extraction.sling_client import SlingClient
 
         resolution = self._resolution
         start = time.time()
+        staging_tables = []
 
         try:
-            # Sling Direct two-step:
-            # 1. Sling extracts raw source → temp staging table on target
-            # 2. Adapter runs model SQL on target (with source ref pointing to staging)
-            # 3. Drop staging table
-            source_connection, extraction_query = self._build_single_source_query(
-                model, manifest, resolution
-            )
-
-            source_config = self._get_output_config(source_connection)
-            target_config = self._get_output_config(resolution.target)
-
-            # Step 1: Sling extracts to a temp staging table
-            staging_table = f"_dvt_stg_{model.name}"
-            staging_fqn = (
-                f"{model.schema}.{staging_table}" if model.schema else staging_table
-            )
-
             client = SlingClient()
-            client.extract_to_target(
-                source_config=source_config,
-                target_config=target_config,
-                source_query=extraction_query,
-                target_table=staging_fqn,
-                mode="full-refresh",
-                primary_key=None,
-            )
+            target_config = self._get_output_config(resolution.target)
+            compiled_sql = getattr(model, "compiled_code", "") or ""
 
-            # Step 2: Run model SQL on the target via adapter pushdown.
-            # The compiled SQL references the source as e.g. "devdb"."devdb"."test_seed".
-            # We need to rewrite it to point to our staging table instead.
-            # For now, delegate to the standard dbt ModelRunner.execute() which
-            # will run the model SQL on the target. The source() ref resolves to
-            # the source's schema.table — which on the target is our staging table
-            # IF we name it the same as the source table.
-            #
-            # Actually, the cleanest approach: just let dbt do its thing.
-            # The adapter will create the model table from the model SQL.
-            # The source ref resolves to the source's schema/table, but on
-            # the target that table IS our staging table (same schema/name).
-            #
-            # Wait — the source schema on MySQL is "devdb" but on Postgres the
-            # staging table is in "public". The refs won't match.
-            #
-            # For P1.8: skip step 2 and accept that extraction models
-            # extract the full source table. The model SQL filter doesn't apply.
-            # This will be fixed properly when we implement DuckDB SQL dialect
-            # for extraction models.
+            # Step 1: Extract each remote source to a staging table
+            for remote in resolution.remote_sources or []:
+                source_config = self._get_output_config(remote.connection)
+                src_schema = remote.schema or ""
+                src_table = remote.identifier or remote.table_name
+                extraction_query = (
+                    f"SELECT * FROM {src_schema}.{src_table}"
+                    if src_schema
+                    else f"SELECT * FROM {src_table}"
+                )
 
-            # Step 3: Rename staging to model name (atomic swap)
-            try:
-                target_table = self._model_table_name(model)
-                self.adapter.execute(
-                    f"DROP TABLE IF EXISTS {target_table}",
-                    auto_begin=True,
+                staging_name = f"_dvt_stg_{remote.source_name}__{remote.table_name}"
+                staging_fqn = (
+                    f"{model.schema}.{staging_name}" if model.schema else staging_name
                 )
-                self.adapter.execute(
-                    f"ALTER TABLE {staging_fqn} RENAME TO {model.name}",
-                    auto_begin=True,
+                staging_tables.append(staging_fqn)
+
+                client.extract_to_target(
+                    source_config=source_config,
+                    target_config=target_config,
+                    source_query=extraction_query,
+                    target_table=staging_fqn,
+                    mode="full-refresh",
+                    primary_key=None,
                 )
-                self.adapter.commit_if_has_connection()
-            except Exception as rename_err:
-                logger.warning(
-                    f"DVT [{model.name}]: staging rename failed: {rename_err}"
-                )
+
+                # Step 2: Rewrite compiled SQL — replace remote source ref with staging table
+                # The compiled SQL has the source ref as resolved by dbt, e.g.:
+                #   "devdb"."devdb"."test_seed"  (database.schema.table with quotes)
+                # We need to replace it with the staging table on the target.
+                source_node = manifest.sources.get(remote.source_unique_id)
+                if source_node:
+                    # Build the ref string that dbt generated for this source
+                    src_db = getattr(source_node, "database", "")
+                    src_sch = getattr(source_node, "schema", "")
+                    src_id = getattr(source_node, "identifier", "") or getattr(
+                        source_node, "name", ""
+                    )
+
+                    # Try various formats dbt might have generated
+                    candidates = []
+                    if src_db and src_sch:
+                        candidates.append(f'"{src_db}"."{src_sch}"."{src_id}"')
+                        candidates.append(f"{src_db}.{src_sch}.{src_id}")
+                    if src_sch:
+                        candidates.append(f'"{src_sch}"."{src_id}"')
+                        candidates.append(f"{src_sch}.{src_id}")
+                    candidates.append(f'"{src_id}"')
+                    candidates.append(src_id)
+
+                    # Target staging ref — unquoted for simplicity
+                    target_ref = staging_fqn
+
+                    for candidate in candidates:
+                        if candidate in compiled_sql:
+                            compiled_sql = compiled_sql.replace(candidate, target_ref)
+                            break
+
+            # Step 3: Execute rewritten model SQL on target via adapter
+            target_table = self._model_table_name(model)
+            create_sql = f"DROP TABLE IF EXISTS {target_table};\nCREATE TABLE {target_table} AS (\n{compiled_sql}\n)"
+
+            for stmt in create_sql.split(";\n"):
+                stmt = stmt.strip()
+                if stmt:
+                    self.adapter.execute(stmt, auto_begin=True)
+            self.adapter.commit_if_has_connection()
+
+            # Step 4: Drop staging tables
+            for stg in staging_tables:
+                try:
+                    self.adapter.execute(f"DROP TABLE IF EXISTS {stg}", auto_begin=True)
+                    self.adapter.commit_if_has_connection()
+                except Exception:
+                    pass
 
             elapsed = time.time() - start
-            msg = f"Sling Direct → {self._model_table_name(model)} (mode=full-refresh)"
+            msg = f"Sling Direct → {target_table}"
             return _make_run_result(model, RunStatus.Success, msg, elapsed)
 
         except Exception as e:
             elapsed = time.time() - start
             logger.error(f"DVT [{model.name}]: Sling Direct failed: {e}")
+            # Cleanup staging on error
+            for stg in staging_tables:
+                try:
+                    self.adapter.execute(f"DROP TABLE IF EXISTS {stg}", auto_begin=True)
+                    self.adapter.commit_if_has_connection()
+                except Exception:
+                    pass
             return _make_run_result(model, RunStatus.Error, str(e), elapsed)
 
     # ------------------------------------------------------------------

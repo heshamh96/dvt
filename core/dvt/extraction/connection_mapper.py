@@ -173,7 +173,8 @@ def _map_oracle(c: Dict[str, Any]) -> str:
     host = _safe(c.get("host", ""))
     port = _safe(c.get("port", "1521"))
     service = _safe(c.get("service", c.get("database", "")))
-    return f"oracle://{user}:{password}@{host}:{port}/{service}"
+    # Oracle Sling connection uses service_name parameter
+    return f"oracle://{user}:{password}@{host}:{port}?service_name={service}"
 
 
 def _map_clickhouse(c: Dict[str, Any]) -> str:
