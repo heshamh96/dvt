@@ -41,12 +41,12 @@ setup(
     author="dbt Labs",
     author_email="info@dbtlabs.com",
     url="https://github.com/dbt-labs/dbt-core",
-    packages=find_namespace_packages(include=["dbt", "dbt.*"]),
+    packages=find_namespace_packages(include=["dbt", "dbt.*", "dvt", "dvt.*"]),
     include_package_data=True,
     test_suite="test",
     entry_points={
         "console_scripts": [
-            "dvt = dbt.cli.main:cli",
+            "dvt = dvt.cli.main:cli",
             "dbt = dbt.cli.main:cli",
         ],
     },
@@ -86,7 +86,8 @@ setup(
         "daff>=1.3.46",
         "typing-extensions>=4.4",
         # ----
-        # DVT-specific: DuckDB federation engine
+        # DVT-specific: Sling data movement + DuckDB cross-engine compute
+        "sling>=1.2.0",
         "sqlglot>=20.0.0",
         "duckdb>=0.9.0",
         "pyarrow>=14.0.0",
