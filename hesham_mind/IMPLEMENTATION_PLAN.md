@@ -84,15 +84,14 @@ Update entry_points to include `dvt = dvt.cli.main:cli` (already done).
 - Types: timestamp, date, integer, string
 - Unit tests: one test per dialect × type combination
 
-### P1.3: Model connection config detection (Week 4)
+### P1.3: Source-target mismatch detection (Week 4)
 
 `core/dvt/config/target_resolver.py`
 
-- Detect `connection` config on models during compilation
-- Validate connection exists in profiles.yml
-- Validate extraction models are not ephemeral or snapshot
-- Validate extraction models reference sources from one connection only
-- Map dbt incremental strategy → Sling mode/merge strategy
+- For each model, check if any `source()` reference has a `connection` (from sources.yml) that differs from the model's target (from profiles.yml default or model config)
+- Validate that remote source connections exist in profiles.yml
+- Build extraction plan: which source tables need Sling extraction to `_dvt` staging
+- Determine staging table names: `_dvt.{source_name}__{table_name}`
 
 ### P1.4: Sling client wrapper (Week 4)
 
@@ -114,10 +113,9 @@ Update entry_points to include `dvt = dvt.cli.main:cli` (already done).
   - Reuse ALL dbt lifecycle decorators
 
 - `DvtModelRunner(ModelRunner)`:
-  - Detect `connection` config → route to Sling extraction path
-  - For extraction models: compile SQL, pre-resolve watermarks (dialect-specific),
-    call Sling with compiled SQL as src_stream, map materialization to Sling mode
-  - For pushdown models: delegates to `super().execute()` (stock dbt)
+  - Detect source-target mismatch → auto-extract remote sources via Sling to `_dvt` staging
+  - For models with remote sources: extract source tables to staging, then run model SQL on target via adapter
+  - For pushdown models (all sources local): delegates to `super().execute()` (stock dbt)
   - For cross-target models: execute on default target, then Sling to model target
 
 ### P1.6: Cross-engine incremental wiring (Weeks 5-6)
@@ -130,14 +128,14 @@ Update entry_points to include `dvt = dvt.cli.main:cli` (already done).
 
 ### P1.7: Integration testing (Week 7)
 
-- End-to-end test: extraction model (Postgres source → Postgres target)
-- End-to-end test: extraction model + pushdown model (Postgres → Snowflake)
-- Verify incremental extraction works across runs with dialect-specific watermarks
+- End-to-end test: model with remote source (Postgres source → Postgres target via _dvt staging)
+- End-to-end test: remote source extraction + pushdown model (Postgres → Snowflake)
+- Verify incremental models with remote sources work across runs with dialect-specific watermarks
 - Verify `--full-refresh` forces full extraction + full rebuild
 - Verify `--select` only runs selected models
 
-**Phase 1 Deliverable:** `dvt run` with user-written extraction models via Sling
-and pushdown models via adapter. Cross-engine incremental works.
+**Phase 1 Deliverable:** `dvt run` with automatic source extraction via Sling
+(transparent to user) and pushdown models via adapter. Cross-engine incremental works.
 
 ---
 
@@ -180,12 +178,12 @@ and pushdown models via adapter. Cross-engine incremental works.
   or via Sling's native file writing
 - Path construction: `{bucket_prefix}/{path}/{model_name}/`
 
-### P2.4: Two-model pattern support (Weeks 11-12)
+### P2.4: Source-side view pushdown (Weeks 11-12)
 
-- Support models that target a source connection (pushdown on source)
+- Support models that target a source connection for source-side filtering
 - These are standard dbt models with `config(target='source_xxx')`
-- The extraction model then refs the source-side model
-- Test: filter on SQL Server via T-SQL, extract filtered result via Sling
+- DVT detects when a model targets a source connection and pushes SQL there
+- Test: filter on SQL Server via T-SQL, DVT auto-extracts filtered result to target
 
 ### P2.5: DvtBuildTask (Week 12)
 
@@ -232,7 +230,7 @@ and incremental extraction + transformation.
 ### P3.4: dvt init template (Week 15)
 
 - Create DVT-specific starter project template
-- Includes: multi-adapter profiles.yml, sources.yml with sling config,
+- Includes: multi-adapter profiles.yml, sources.yml with connection metadata,
   example cross-engine model
 
 ### P3.5: Documentation and lineage (Week 16)
@@ -305,6 +303,6 @@ debugging, and documentation.
 | dbt adapter config parsing for Sling URLs | Start with top 6 adapters, add others incrementally |
 | Watermark formatting for exotic dialects | Start with top 12 dialects, add others as needed |
 | Cross-engine incremental watermark resolution | Pre-resolve from target, substitute literal. Test extensively. |
-| Model SQL dialect must match source engine | Document clearly. Two-model pattern for complex filtering. |
+| Source extraction performance for large tables | Use incremental watermarks to limit extraction volume. Monitor staging table sizes. |
 | Sling CDC requires Pro license | Document as optional feature, ensure free-tier works without CDC |
 | DuckDB ATTACH limitations (read-only, limited dialect support) | Use as dev tool only, not production path |

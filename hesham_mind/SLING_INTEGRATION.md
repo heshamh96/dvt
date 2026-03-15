@@ -46,34 +46,36 @@ MinIO, Cloudflare R2, Wasabi, SFTP
 
 ## How DVT Uses Sling
 
-### 1. Extraction Models (Models with `connection` Config)
+### 1. Automatic Source Extraction
 
-When `dvt run` encounters a model with `connection` config:
+When `dvt run` detects that a model references sources whose `connection` (from sources.yml)
+differs from the model's `target` (from profiles.yml default or model config), DVT
+automatically extracts those source tables to the `_dvt` staging schema on the target.
+
+The user writes standard dbt models — no `connection` config, no `sling` config.
+DVT generates the Sling extraction calls internally:
 
 ```python
 from sling import Replication, ReplicationStream
 
-# DVT compiles the model SQL (Jinja → SQL in source dialect)
-# For incremental: watermark is pre-resolved and substituted as dialect-specific literal
-compiled_sql = dvt_compile_extraction_model(model, manifest)
-
-replication = Replication(
-    source=source_connection_url,       # from model's connection config → profiles.yml
-    target=target_connection_url,       # model's target from profiles.yml
-    streams={
-        f"{model.name}.custom": ReplicationStream(
-            sql=compiled_sql,                   # the model's compiled SQL
-            object=f"{schema}.{model.name}",    # target table
-            mode=sling_mode,                    # mapped from dbt materialization
-            primary_key=model.unique_key,       # from model config
-        ),
-    },
-)
-replication.run()
+# DVT auto-generates this for each remote source table referenced by the model
+# The user never sees or configures this directly
+for source_table in remote_source_tables:
+    replication = Replication(
+        source=source_connection_url,       # from source's connection in sources.yml
+        target=target_connection_url,       # model's target from profiles.yml
+        streams={
+            f"{source_schema}.{source_table}": ReplicationStream(
+                object=f"_dvt.{source_name}__{table_name}",  # staging table
+                mode="full-refresh",                          # staging always full-refresh
+            ),
+        },
+    )
+    replication.run()
 ```
 
-The user controls the SQL — column selection, filtering, joins — by writing it
-in their extraction model. DVT does NOT auto-generate extraction queries.
+Staging tables (`_dvt.{source_name}__{table_name}`) are NOT visible in the DAG or lineage.
+They are implementation details managed entirely by DVT.
 
 ### 2. Seed Loading
 
@@ -175,36 +177,24 @@ This mapping lives in `core/dvt/extraction/connection_mapper.py`. It handles:
 
 DVT maps dbt model materializations to Sling modes for extraction models:
 
-### table → Sling full-refresh
+### table → Sling full-refresh (staging extraction)
 
-```sql
-{{ config(materialized='table', connection='source_postgres') }}
-SELECT * FROM {{ source('crm', 'customers') }}
-```
+When a `table` model references remote sources, DVT extracts source tables to `_dvt` staging
+via Sling full-refresh, then runs the model SQL on the target.
 
-- Sling drops and recreates the target table every run
-- Default write behavior (no `--full-refresh` needed)
+### incremental → Sling extraction with watermark filtering
 
-### incremental → Sling incremental (with merge)
+When an `incremental` model references remote sources, DVT:
+- Pre-resolves the watermark from the target in dialect-specific format
+- Filters the Sling extraction query to only pull delta rows into staging
+- Runs the model SQL on the target with incremental logic against staged data
+- `unique_key` is used by the dbt adapter for merge on the target (standard dbt behavior)
 
-```sql
-{{ config(materialized='incremental', connection='source_postgres', unique_key='id') }}
-SELECT * FROM {{ source('crm', 'orders') }}
-{% if is_incremental() %}
-WHERE updated_at > (SELECT MAX(updated_at) FROM {{ this }})
-{% endif %}
-```
+### --full-refresh
 
-- DVT pre-resolves the watermark from the target in dialect-specific format
-- Sling executes the filtered SQL on the source (only delta rows)
-- Sling merges the result into the target table using the mapped merge strategy
-- `unique_key` maps to Sling's `primary_key`
-- dbt strategies map to Sling: `merge` → `update_insert`, `delete+insert` → `delete_insert`, `append` → no primary_key
-
-### --full-refresh on any extraction model
-
-- `is_incremental()` returns false → full SQL, no watermark
-- Sling uses `full-refresh` mode → drop + create + full load
+- `is_incremental()` returns false → no watermark filter
+- Sling re-extracts full source tables to `_dvt` staging
+- Model runs full SQL on target
 - Matches stock dbt `--full-refresh` behavior exactly
 
 ## Dialect-Specific Watermark Formatting
@@ -244,65 +234,23 @@ decimals) map cleanly across all engines. No user intervention needed.
 Exotic types (`GEOGRAPHY`, `HSTORE`, `TSVECTOR`, `INTERVAL`, nested ARRAY/STRUCT)
 are mapped to `text` or `json` with a DVT002 warning.
 
-Users can override column types via model `sling` config:
-```sql
-{{ config(
-    connection='source_oracle',
-    sling={'columns': {'amount': 'decimal(18,4)', 'notes': 'text'}}
-) }}
-```
+DVT manages column type mapping internally via Sling's general type system.
+No user configuration is needed — standard analytics types map cleanly across engines.
 
-## Sling Transforms (Inline Row-Level)
+## Sling Transforms and Hooks
 
-Sling supports 50+ built-in transform functions applied during extraction.
-These are NOT SQL transforms — they're applied row-by-row in Go during streaming.
-
-```sql
--- model config
-{{ config(
-    connection='source_postgres',
-    sling={
-        'transforms': {
-            'email': ['lower', 'trim_space'],
-            'phone': ['replace_non_printable'],
-            'name': ['trim_space', 'replace_accents'],
-        }
-    }
-) }}
-```
-
-Available functions: `upper`, `lower`, `trim_space`, `replace_accents`,
-`replace_non_printable`, `hash` (md5/sha256), `cast`, `coalesce`,
-`date_parse`, `date_format`, `int_parse`, `float_parse`, `uuid`, etc.
-
-These are useful for data cleansing during extraction, before the data
-reaches the target for SQL-based transformation.
-
-## Sling Hooks in DVT Context
-
-Sling's hook system (pre/post SQL, HTTP webhooks, checks) can be exposed
-in model sling config for advanced extraction workflows:
-
-```sql
--- models/staging/stg_orders.sql (future feature)
-{{ config(
-    connection='source_postgres',
-    sling={
-        'hooks': {
-            'pre': [{'type': 'query', 'query': 'ANALYZE public.orders'}],
-            'post': [{'type': 'check', 'check': 'run.total_rows > 0', 'on_failure': 'warn'}],
-        }
-    }
-) }}
-```
+Sling supports 50+ built-in transform functions and a hook system (pre/post SQL,
+checks, webhooks). These are capabilities of Sling that DVT may leverage internally
+for staging extractions, but they are NOT exposed as user-facing model config.
+Users perform all data transformations in standard dbt SQL models on the target.
 
 ## Error Handling
 
 When a Sling extraction fails:
-1. The extraction node is marked as FAILED in the DVT DAG
-2. All downstream models that depend on this source are SKIPPED
+1. The model that triggered the extraction is marked as FAILED in the DVT DAG
+2. All downstream models that depend on this model are SKIPPED
 3. The error message from Sling is surfaced in DVT's run results
-4. `dvt retry` will re-attempt failed extraction nodes and their downstream models
+4. `dvt retry` will re-attempt failed models and their downstream dependencies
 
 For incremental extractions, failure is safe — the watermark was not updated,
 so the next run will re-attempt the same range.

@@ -5,7 +5,7 @@
 DVT extends dbt's configuration system with these additions:
 1. **profiles.yml** — multi-adapter + bucket connections (extended from dbt)
 2. **sources.yml** — metadata only: connection + schema + tables (extended from dbt, NO sling config)
-3. **Model config** — `connection` (extraction), `target` (materialization target), `format` (bucket), `sling` (Sling options)
+3. **Model config** — `target` (materialization target override), `format` (bucket output format)
 
 All standard dbt configuration (dbt_project.yml, selectors.yml, packages.yml) works unchanged.
 
@@ -144,35 +144,34 @@ sources:
 
 **Key points:**
 - `connection` is **required** on every source
-- No `sling:` blocks — extraction config belongs on models
+- No `sling:` blocks — DVT manages extraction automatically
 - Standard dbt source features (descriptions, tests, freshness) work unchanged
 
 ## Model Config
 
-DVT extends dbt's model config with `connection`, `target`, `format`, `path`, and `sling` options.
+DVT extends dbt's model config with `target`, `format`, and `path` options.
+Users write **standard dbt models** — no `connection` or `sling` config on models.
+DVT automatically detects when Sling extraction is needed by comparing
+`source.connection` (from sources.yml) vs `model.target` (from profiles.yml default or model config).
 
-### connection (extraction from remote source)
-
-The `connection` config tells DVT this model extracts data from a remote source via Sling.
-The model's compiled SQL runs on the **source** database. Sling streams the result to the target.
+### Standard model referencing a remote source
 
 ```sql
 -- models/staging/stg_customers.sql
-{{ config(
-    materialized='table',
-    connection='source_postgres'     -- source database to extract from
-) }}
+-- This is a standard dbt model. DVT detects that source('crm', 'customers')
+-- lives on source_postgres (remote) and auto-extracts it to _dvt staging.
+{{ config(materialized='table') }}
 SELECT * FROM {{ source('crm', 'customers') }}
 ```
 
-### connection + incremental (cross-engine incremental)
+### Incremental model referencing a remote source
 
 ```sql
 -- models/staging/stg_orders.sql
+-- Standard dbt incremental model. DVT handles cross-engine extraction transparently.
 {{ config(
     materialized='incremental',
-    connection='source_postgres',
-    unique_key='id'                  -- maps to Sling's primary_key for merge
+    unique_key='id'
 ) }}
 SELECT id, customer_id, order_date, total, updated_at
 FROM {{ source('crm', 'orders') }}
@@ -181,28 +180,7 @@ WHERE updated_at > (SELECT MAX(updated_at) FROM {{ this }})
 {% endif %}
 ```
 
-DVT pre-resolves the watermark and formats it in the source's dialect.
-
-### connection + sling (Sling-specific options)
-
-```sql
--- models/staging/stg_invoices.sql
-{{ config(
-    materialized='table',
-    connection='source_sqlserver',
-    sling={
-        'target_options': {
-            'column_casing': 'snake',
-            'column_typing': {
-                'string': {'length_factor': 2},
-                'decimal': {'min_precision': 18},
-                'boolean': {'cast_as': 'integer'},
-            }
-        }
-    }
-) }}
-SELECT * FROM {{ source('erp', 'invoices') }}
-```
+DVT pre-resolves the watermark and formats it in the source's dialect for the extraction query.
 
 ### target (per-model target override)
 
@@ -269,29 +247,28 @@ seeds:
 
 # DVT-specific project config (optional)
 dvt:
-  sling:                           # project-level sling defaults
-    target_options:
-      column_casing: snake
+  staging_schema: _dvt             # schema for auto-extracted source staging tables
+                                   # default: _dvt. Tables: _dvt.{source_name}__{table_name}
 ```
 
-## Extraction Model Naming
+## Model Naming
 
-DVT does NOT auto-generate extraction nodes. Users name their extraction models
-whatever they want, following their project's conventions:
+Users name their models following standard dbt conventions. DVT manages extraction
+transparently — no special naming or config required for models that reference remote sources:
 
 ```
 models/
   staging/
-    stg_customers.sql          ← config(connection='source_postgres')
-    stg_orders.sql             ← config(connection='source_postgres', incremental)
-    stg_invoices.sql           ← config(connection='source_sqlserver')
+    stg_customers.sql          ← standard model, refs source('crm', 'customers')
+    stg_orders.sql             ← incremental, refs source('crm', 'orders')
+    stg_invoices.sql           ← standard model, refs source('erp', 'invoices')
   marts/
     dim_customers.sql          ← pushdown (refs stg_customers)
     fct_orders.sql             ← pushdown (refs stg_orders + stg_customers)
 ```
 
-Downstream models reference extraction models via `{{ ref('stg_customers') }}` —
-standard dbt behavior.
+DVT auto-extracts remote sources into `_dvt` staging tables before model execution.
+Downstream models reference staging models via `{{ ref('stg_customers') }}` — standard dbt behavior.
 
 ## Environment Variables
 
