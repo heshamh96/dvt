@@ -99,9 +99,9 @@ def build(ctx, **kwargs):
 @requires.manifest
 def run(ctx, **kwargs):
     """Compile SQL and execute against the current target database."""
-    from dbt.task.run import RunTask
+    from dvt.tasks.run import DvtRunTask
 
-    task = RunTask(
+    task = DvtRunTask(
         ctx.obj["flags"],
         ctx.obj["runtime_config"],
         ctx.obj["manifest"],
