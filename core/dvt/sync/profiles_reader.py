@@ -12,10 +12,14 @@ def default_profiles_dir() -> str:
     """Return default profiles directory.
 
     Search order:
-    1. Current working directory (if profiles.yml exists)
-    2. ~/.dvt (DVT-specific)
-    3. ~/.dbt (dbt-compatible, works with VS Code dbt extensions)
+    1. DBT_PROFILES_DIR env var (set by DVT CLI to ~/.dvt if it exists)
+    2. Current working directory (if profiles.yml exists)
+    3. ~/.dvt (DVT-specific)
+    4. ~/.dbt (dbt-compatible, works with VS Code dbt extensions)
     """
+    env_dir = os.environ.get("DBT_PROFILES_DIR")
+    if env_dir and (Path(env_dir) / "profiles.yml").exists():
+        return env_dir
     if (Path.cwd() / "profiles.yml").exists():
         return str(Path.cwd())
     dvt_dir = Path.home() / ".dvt"

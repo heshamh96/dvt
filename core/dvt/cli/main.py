@@ -6,7 +6,18 @@ The resilient entry point in dvt.cli.__init__ handles the broken-env case
 and falls back to a sync-only CLI.
 """
 
+import os
+from pathlib import Path
+
 import click
+
+# Set DBT_PROFILES_DIR to ~/.dvt if it exists and isn't already set.
+# This makes dbt's profile loader aware of ~/.dvt as a profiles location.
+# Fallback: ~/.dbt (dbt's default, compatible with VS Code dbt extensions).
+if "DBT_PROFILES_DIR" not in os.environ:
+    dvt_profiles = Path.home() / ".dvt" / "profiles.yml"
+    if dvt_profiles.exists():
+        os.environ["DBT_PROFILES_DIR"] = str(Path.home() / ".dvt")
 
 from dbt.cli import params as p
 from dbt.cli import requires
