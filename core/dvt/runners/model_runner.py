@@ -269,7 +269,13 @@ class DvtModelRunner(ModelRunner):
 
                     source_type = source_config.get("type", "")
                     source_dialect = ADAPTER_TO_SQLGLOT_DIALECT.get(
-                        source_type, source_type
+                        source_type, "duckdb"
+                    )
+                    extraction_query = opt.build_query(
+                        src_schema, src_identifier, source_dialect
+                    )
+                    logger.info(
+                        f"DVT [{model.name}]: optimized → {source_dialect}: {extraction_query[:120]}"
                     )
                     extraction_query = opt.build_query(
                         src_schema, src_identifier, source_dialect

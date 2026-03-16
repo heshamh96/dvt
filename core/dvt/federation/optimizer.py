@@ -53,49 +53,44 @@ class OptimizedExtraction:
         source_table: str,
         source_dialect: str = "duckdb",
     ) -> str:
-        """Build the optimized extraction SQL for the source.
+        """Build the optimized extraction SQL and transpile it to the source dialect.
 
-        Transpiles predicates from DuckDB SQL to the source's dialect
-        via SQLGlot, so pushdown queries are valid on the source engine.
+        Builds the full query in DuckDB SQL, then transpiles the entire statement
+        to the source dialect via SQLGlot. This handles:
+        - Column quoting and reserved words
+        - Predicate syntax (simple comparisons only)
+        - LIMIT → TOP (SQL Server), FETCH FIRST (Oracle), etc.
 
-        Args:
-            source_schema: Schema on the source database.
-            source_table: Table name on the source database.
-            source_dialect: SQLGlot dialect name for the source engine.
+        If transpilation fails, falls back to untranspiled SQL.
         """
-        # Column selection
-        if self.columns:
-            col_list = ", ".join(self.columns)
-        else:
-            col_list = "*"
-
-        # Table reference
         if source_schema:
             table_ref = f"{source_schema}.{source_table}"
         else:
             table_ref = source_table
 
-        sql = f"SELECT {col_list} FROM {table_ref}"
+        col_list = ", ".join(self.columns) if self.columns else "*"
 
-        # WHERE predicates — transpile from DuckDB to source dialect
+        duckdb_sql = f"SELECT {col_list} FROM {table_ref}"
+
         if self.predicates:
-            transpiled_preds = []
-            for pred in self.predicates:
-                try:
-                    transpiled = sqlglot.transpile(
-                        pred, read="duckdb", write=source_dialect, pretty=False
-                    )[0]
-                    transpiled_preds.append(transpiled)
-                except Exception:
-                    # If transpilation fails, use the predicate as-is
-                    transpiled_preds.append(pred)
-            sql += " WHERE " + " AND ".join(transpiled_preds)
+            duckdb_sql += " WHERE " + " AND ".join(self.predicates)
 
-        # LIMIT
         if self.limit is not None:
-            sql += f" LIMIT {self.limit}"
+            duckdb_sql += f" LIMIT {self.limit}"
 
-        return sql
+        # Transpile the full query from DuckDB → source dialect
+        if source_dialect != "duckdb":
+            try:
+                transpiled = sqlglot.transpile(
+                    duckdb_sql, read="duckdb", write=source_dialect
+                )[0]
+                return transpiled
+            except Exception as e:
+                logger.debug(
+                    f"Optimizer: transpilation failed ({e}), using DuckDB SQL as-is"
+                )
+
+        return duckdb_sql
 
 
 def optimize_extractions(
@@ -264,9 +259,9 @@ def _extract_predicates(
             tables_in_condition.add(list(alias_to_cache.values())[0])
 
         # Only push if ALL columns belong to exactly ONE source table
-        if len(tables_in_condition) == 1:
+        # AND the predicate is simple universal SQL (no function calls)
+        if len(tables_in_condition) == 1 and _is_safe_predicate(condition):
             cache_table = tables_in_condition.pop()
-            # Generate the predicate SQL without the table alias
             pred_sql = _strip_table_alias(condition, alias_to_cache)
             if cache_table not in predicates:
                 predicates[cache_table] = []
@@ -284,6 +279,46 @@ def _extract_limit(parsed: exp.Select) -> Optional[int]:
         except (ValueError, AttributeError):
             pass
     return None
+
+
+# Simple comparison operators that are universal across all SQL engines
+_SAFE_PREDICATE_TYPES = (
+    exp.GT,  # >
+    exp.GTE,  # >=
+    exp.LT,  # <
+    exp.LTE,  # <=
+    exp.EQ,  # =
+    exp.NEQ,  # != / <>
+    exp.Is,  # IS NULL / IS NOT NULL
+    exp.In,  # IN (...)
+    exp.Between,  # BETWEEN x AND y
+    exp.Like,  # LIKE
+    exp.Not,  # NOT (wraps another predicate)
+)
+
+
+def _is_safe_predicate(condition: exp.Expression) -> bool:
+    """Check if a predicate is simple, universal SQL safe for any engine.
+
+    Safe: column > 20, column = 'value', column IS NULL, column IN (1,2,3),
+          column BETWEEN 1 AND 10, column LIKE '%foo%', NOT column = 5
+
+    Unsafe: anything with function calls (STRFTIME, DATE_TRUNC, LIST_CONTAINS,
+            CURRENT_TIMESTAMP, etc.) — these are dialect-specific.
+    """
+    # Reject if any function call is present
+    if condition.find(exp.Anonymous) or condition.find(exp.Func):
+        return False
+
+    # Must be a known safe comparison type
+    if isinstance(condition, _SAFE_PREDICATE_TYPES):
+        return True
+
+    # NOT wrapping a safe predicate
+    if isinstance(condition, exp.Not):
+        return _is_safe_predicate(condition.this)
+
+    return False
 
 
 def _split_and(expr: exp.Expression) -> List[exp.Expression]:
