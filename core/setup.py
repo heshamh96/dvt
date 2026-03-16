@@ -91,13 +91,11 @@ setup(
         "sqlglot>=20.0.0",
         "duckdb>=0.9.0",
         "pyarrow>=14.0.0",
-        "deltalake>=0.14.0",
-        "adbc-driver-manager>=0.11.0",
         # ----
     ],
     zip_safe=False,
     classifiers=[
-        "Development Status :: 5 - Production/Stable",
+        "Development Status :: 3 - Alpha",
         "License :: OSI Approved :: Apache Software License",
         "Operating System :: Microsoft :: Windows",
         "Operating System :: MacOS :: MacOS X",
