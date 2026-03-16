@@ -46,80 +46,98 @@ MinIO, Cloudflare R2, Wasabi, SFTP
 
 ## How DVT Uses Sling
 
-### 1. Sling Direct — Single Remote Source Extraction
+### 1. Source Extraction — Sling → DuckDB Cache
 
-When `dvt run` detects that a model references exactly ONE source whose `connection`
-differs from the model's `target`, DVT uses **Sling Direct**: Sling streams data
-directly from the source to the model's named table on the target.
-
-No hidden staging tables. No `_dvt` schema. Result lands directly as the model's table.
+When `dvt run` detects that a model references ANY source whose `connection` differs
+from the model's `target`, DVT extracts each remote source into the persistent DuckDB
+cache via Sling. This is the unified extraction path — no branching based on source count.
 
 ```python
 from sling import Replication, ReplicationStream
 
+# Step 1: Sling extracts each remote source into DuckDB cache
 # DVT auto-generates this — the user never sees or configures it
-replication = Replication(
-    source=source_connection_url,       # from source's connection in sources.yml
-    target=target_connection_url,       # model's target from profiles.yml
-    streams={
-        f"{source_schema}.{source_table}": ReplicationStream(
-            object=f"{target_schema}.{model_name}",  # model's named table directly
-            mode="full-refresh",                       # for table materialization
-        ),
-    },
-)
-replication.run()
-```
-
-For `incremental` models, Sling uses incremental mode with watermark filtering
-and merges delta directly into the model's table (see watermark section below).
-
-### 2. DuckDB Compute — Multiple Remote Source Extraction
-
-When a model references 2+ remote sources, DVT uses **DuckDB Compute**:
-
-1. Sling streams each remote source into DuckDB (in-memory)
-2. Model SQL executes in DuckDB (user wrote DuckDB SQL)
-3. Sling streams the result from DuckDB to the model's named table on the target
-
-```python
-import duckdb
-
-# Step 1: Sling streams each remote source into DuckDB
-duckdb_conn = duckdb.connect()  # ephemeral in-memory
-for source_table in remote_source_tables:
+for source_ref in remote_sources:
     replication = Replication(
-        source=source_connection_url,
-        target="duckdb://",                 # in-memory DuckDB
+        source=source_connection_url,       # from source's connection in sources.yml
+        target="duckdb://.dvt/cache.duckdb",  # persistent DuckDB cache
         streams={
             f"{source_schema}.{source_table}": ReplicationStream(
-                object=f"{source_name}__{table_name}",  # DuckDB table name
-                mode="full-refresh",
+                object=f"{source_name}__{table_name}",  # cache table name
+                mode="full-refresh",                      # or "incremental" for delta
             ),
         },
     )
     replication.run()
+```
 
-# Step 2: Execute model SQL in DuckDB
-result = duckdb_conn.execute(compiled_model_sql)
+Cache is per-source: if two models reference `crm.orders`, it's extracted once
+into DuckDB cache as `crm__orders`. Both models query the same cached table.
 
-# Step 3: Sling streams result from DuckDB to target
+### 2. Result Loading — DuckDB Cache → Target via Sling
+
+After model SQL executes in DuckDB, Sling streams the result to the model's named
+table on the target.
+
+```python
+# Step 2: Model SQL executes in DuckDB (handled by DVT extraction runner)
+# Step 3: Sling streams result from DuckDB cache to target
 replication = Replication(
-    source="duckdb://",
+    source="duckdb://.dvt/cache.duckdb",
     target=target_connection_url,
     streams={
-        "duckdb_result_table": ReplicationStream(
-            object=f"{target_schema}.{model_name}",  # model's named table
-            mode="full-refresh",
+        model_name: ReplicationStream(             # model result in cache
+            object=f"{target_schema}.{model_name}",  # model's named table on target
+            mode="full-refresh",                      # or "incremental" for delta
         ),
     },
 )
 replication.run()
-duckdb_conn.close()
 ```
 
-DuckDB Compute only supports `table` materialization. Incremental is not supported
-for multi-source extraction (DVT112 error).
+No hidden staging tables on the target. Result lands directly as the model's named table.
+
+### 3. Incremental Extraction via Sling
+
+For `incremental` extraction models, Sling handles delta-only extraction using
+watermark filtering. This works for ANY extraction model (single or multi-source).
+
+```python
+# Incremental extraction flow:
+# 1. DVT checks DuckDB cache → is_incremental() = true
+# 2. DVT queries TARGET for watermark value
+# 3. DVT formats watermark in source dialect
+
+# Step 1: Sling extracts delta from source → DuckDB cache (merge)
+replication = Replication(
+    source=source_connection_url,
+    target="duckdb://.dvt/cache.duckdb",
+    streams={
+        f"SELECT * FROM {source_schema}.{source_table} WHERE {watermark_col} > {formatted_watermark}":
+            ReplicationStream(
+                object=f"{source_name}__{table_name}",
+                mode="incremental",
+                primary_key=[unique_key],        # for merge into cached table
+            ),
+    },
+)
+replication.run()
+
+# Step 2: Model SQL runs in DuckDB (with is_incremental() WHERE clause)
+# Step 3: Sling loads delta result → target (incremental merge)
+replication = Replication(
+    source="duckdb://.dvt/cache.duckdb",
+    target=target_connection_url,
+    streams={
+        model_name: ReplicationStream(
+            object=f"{target_schema}.{model_name}",
+            mode="incremental",
+            primary_key=[unique_key],            # maps from model's unique_key
+        ),
+    },
+)
+replication.run()
+```
 
 ### 3. Seed Loading
 
@@ -221,28 +239,26 @@ This mapping lives in `core/dvt/extraction/connection_mapper.py`. It handles:
 
 DVT maps dbt model materializations to Sling modes for extraction models:
 
-### table → Sling full-refresh (direct to model table)
+### table → Sling full-refresh (via DuckDB cache)
 
-**Sling Direct (single source):** Sling streams source data directly to the model's
-named table on the target using `full-refresh` mode.
+Sling extracts each remote source into DuckDB cache using `full-refresh` mode.
+Model SQL runs in DuckDB. Sling loads the result to the target using `full-refresh` mode.
 
-**DuckDB Compute (multi-source):** Sling streams each source into DuckDB, model SQL
-runs in DuckDB, then Sling streams the result to the model's table on the target.
+### incremental → Sling delta extraction + incremental load (via DuckDB cache)
 
-### incremental → Sling extraction with watermark filtering (single source only)
-
-Only supported for **Sling Direct** (single remote source). DVT:
-- Pre-resolves the watermark from the model's target table in dialect-specific format
-- Filters the Sling extraction query to only pull delta rows
-- Sling merges delta directly into the model's named table on the target
+Fully supported for ALL extraction models (single-source and multi-source). DVT:
+- Checks DuckDB cache for `is_incremental()` (fast, local)
+- Resolves watermark from the target table in dialect-specific format
+- Sling extracts only delta rows from source → DuckDB cache merge
+- Model SQL runs in DuckDB with `is_incremental()` WHERE clause
+- Sling loads delta result to target using `incremental` mode with `primary_key`
 - `unique_key` maps to Sling's `primary_key` for the merge
-
-Multi-source incremental is not supported (DVT112 error).
 
 ### --full-refresh
 
+- `.dvt/cache.duckdb` is deleted
 - `is_incremental()` returns false → no watermark filter
-- Sling re-extracts full source table → model table on target
+- Sling re-extracts full source tables → DuckDB cache → model SQL → target
 - Matches stock dbt `--full-refresh` behavior exactly
 
 ## Dialect-Specific Watermark Formatting

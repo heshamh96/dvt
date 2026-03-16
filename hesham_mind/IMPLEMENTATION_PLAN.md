@@ -1,332 +1,234 @@
-# DVT Implementation Plan
+# DVT Implementation Plan — Shared Memory
+
+> **Last Updated:** March 2026  
+> **Status:** Living document — updated after each phase
+
+This file tracks everything that has been done and what is upcoming.
+It acts as shared memory between sessions.
+
+---
 
 ## Foundation
 
-- **Base:** dbt-core 1.9.10 (branch `new_dev` from `upstream/1.9.latest`)
-- **Package:** `dvt-ce` v0.1.2
-- **Internals:** `dbt.*` namespace (untouched upstream code)
-- **DVT layer:** `core/dvt/` (new, extends dbt via subclassing)
-- **CLI:** `dvt` entry point → `dvt.cli.main:cli`; `dbt` entry point → `dbt.cli.main:cli`
+- **dvt-ce**: dbt-core 1.9.10 with package renamed to `dvt-ce`. Provides `dbt.*` + `dvt.*` namespaces.
+- **dvt-adapters**: All 13 engine adapters in one package. Provides `dbt.adapters.*` + `dbt.include.*`.
+- **Branch:** `new_dev` on dvt-ce repo, `dev` on dvt-adapters repo.
+- **Test project:** `Testing_Playground/trial_19_dvt_ce_pypi/Coke_DB` with 5 Docker databases.
+- **Both packages installed as local editable** in trial_19 `.venv`.
 
-## Phase 0: Project Scaffold + dvt sync (Weeks 1-2)
+---
 
-### P0.1: DVT project structure
+## COMPLETED
 
-Create `core/dvt/` with the module skeleton:
+### Phase 0: Scaffold + Sync [DONE]
+
+| Item | Status | Details |
+|------|--------|---------|
+| P0.1: DVT CLI scaffold | DONE | `dvt` entry point with all dbt commands + `dvt sync`. Resilient `dvt.cli.__init__` falls back to sync-only CLI when dbt imports fail. |
+| P0.2: `dvt sync` | DONE | Self-healing: purges dbt-core conflicts, installs database drivers (not dbt-* packages), installs DuckDB extensions, verifies Sling. Favors `uv` over `pip`. |
+
+### Phase 1: Core Extraction Pipeline [DONE]
+
+| Item | Status | Details |
+|------|--------|---------|
+| P1.1: Connection mapper | DONE | 16 adapter types → Sling URLs. Fixed: postgres sslmode, sqlserver TLS, oracle service_name, databricks token/port/http_path format. |
+| P1.2: Watermark formatter | DONE | 13 dialects × 4 types (timestamp, date, integer, string). Oracle TO_TIMESTAMP, SQL Server CONVERT, BigQuery TIMESTAMP prefix, etc. |
+| P1.3: Source connection parsing | DONE | Reads `connection:` directly from sources.yml (parallel to dbt parsing). Also added `connection` field to dbt's `UnparsedSourceDefinition`. |
+| P1.4: Target resolver | DONE | `resolve_all_models()` classifies each model into execution paths. Reads source connections, compares vs model target. |
+| P1.5: Sling client | DONE | `SlingClient` with lazy import. Methods: `extract_to_target`, `extract_to_duckdb`, `load_from_duckdb`, `load_seed`, `load_cross_target`. |
+| P1.6: DuckDB compute engine | DONE | `DuckDBCompute` — ephemeral DuckDB instance (temp file). Extract sources → DuckDB, run SQL, load result → target. |
+| P1.7: DvtRunTask + DvtModelRunner | DONE | `DvtRunTask(RunTask)` resolves models, returns `DvtModelRunner` for extraction. `DvtModelRunner(ModelRunner)` dispatches: pushdown vs extraction. Source ref rewriting (longest-first replacement). |
+| P1.8: DvtBuildTask | DONE | `DvtBuildTask(DvtRunTask, BuildTask)` — inherits extraction paths for `dvt build`. |
+
+### Phase 2: Seeds, Debug, Show [DONE]
+
+| Item | Status | Details |
+|------|--------|---------|
+| P2.1: `dvt seed` via Sling | DONE | `DvtSeedTask` + `DvtSeedRunner`. Sling bulk loads CSV → target (COPY, bcp). 10-100x faster than dbt's agate INSERT. Supports `--full-refresh` and `--target`. |
+| P2.2: `dvt show` via DuckDB | DONE | `DvtShowTask`. Starts DuckDB in-memory, ATTACHes to Postgres/MySQL sources, runs inline SQL. Cross-engine JOINs locally. |
+| P2.3: `dvt debug` | DONE | `DvtDebugTask`. Tests all connections (or `--target X`) via Sling replication ping. Oracle uses `SELECT 1 FROM DUAL`. Reports Sling/DuckDB availability. |
+| P2.4: Broad testing | DONE | 7/7 federation models PASS. 27/27 nodes in `dvt build` PASS. 9/9 connections OK. |
+
+### Phase 3: Package Consolidation [DONE]
+
+| Item | Status | Details |
+|------|--------|---------|
+| P3.1: dvt-adapters rebuild | DONE | Fresh from upstream dbt-adapters monorepo + community repos. 13 engines: postgres, snowflake, bigquery, redshift, spark, databricks, duckdb, sqlserver, mysql, mysql5, mariadb, oracle, fabric. |
+| P3.2: Import fixes | DONE | MySQL adapters: `dbt.contracts.connection` → `dbt.adapters.contracts.connection`, `dbt.events.AdapterLogger` → `dbt.adapters.events.logging.AdapterLogger`, etc. Databricks: `metadata.version("dbt-core")` → fallback to `dvt-ce`. |
+| P3.3: dvt-ce depends on dvt-adapters | DONE | Replaced `dbt-adapters` dependency with `dvt-adapters>=0.2.1`. Clean stack: zero dbt-core, zero dbt-adapters from PyPI. |
+| P3.4: Sync installs drivers only | DONE | No longer installs `dbt-*` packages. Only installs driver deps (psycopg2, oracledb, etc.) that dvt-adapters needs. |
+
+### E2E Test Results (Trial 19)
+
+| Test | Result |
+|------|--------|
+| `dvt sync` | 6/6 adapters, DuckDB, Sling |
+| `dvt debug` | 9/9 connections OK (pg, mysql, mssql, oracle, mariadb, pg-dev, sf x2, databricks) |
+| `dvt seed test_seed` | PASS (Sling bulk load, 5 rows) |
+| `dvt run pushdown_pg` | PASS (adapter pushdown) |
+| `dvt run mysql_to_pg` | PASS (extraction: MySQL→PG) |
+| `dvt run mariadb_to_pg` | PASS (extraction: MariaDB→PG) |
+| `dvt run mssql_to_pg` | PASS (extraction: MSSQL→PG) |
+| `dvt run oracle_to_pg` | PASS (extraction: Oracle→PG) |
+| `dvt run cross_pg_mysql` | PASS (extraction: PG+MySQL JOIN→PG) |
+| `dvt run cross_all_docker_to_pg` | PASS (extraction: 5-engine JOIN→PG via DuckDB, 4 rows) |
+| `dvt build` (27 nodes) | 27/27 PASS |
+| `dvt show` cross-engine JOIN | PASS (PG+MySQL via DuckDB ATTACH) |
+
+---
+
+## UPCOMING
+
+### Phase 4: Persistent DuckDB Cache + Incremental Extraction [NEXT]
+
+This is the big architectural change: kill Sling Direct sub-path, ALL extraction goes through DuckDB with persistent cache.
+
+**Core concept:** DuckDB cache at `.dvt/cache.duckdb` persists between runs. Sources are cached per-source (shared across models). Incremental models use the cache for `is_incremental()` detection and the target for watermark values.
+
+| Item | Priority | Details |
+|------|----------|---------|
+| P4.1: `.dvt/` cache directory management | HIGH | Create `.dvt/` in project dir. Manage `cache.duckdb` lifecycle. `--full-refresh` deletes it. `dvt clean` deletes it. |
+| P4.2: Persistent DuckDB cache engine | HIGH | Replace ephemeral `DuckDBCompute` with persistent `DvtCache`. Opens `.dvt/cache.duckdb` (creates if missing). Manages source tables and model result tables. |
+| P4.3: Unified extraction path | HIGH | Remove Sling Direct sub-path from DvtModelRunner. All extraction: Sling→DuckDB cache→Sling→target. Two-way dispatch (pushdown vs extraction). |
+| P4.4: Cache-per-source extraction | HIGH | Extract each remote source once into DuckDB cache as `{source_name}__{table_name}`. Multiple models share the same cached source. |
+| P4.5: Incremental extraction | HIGH | `is_incremental()` checks DuckDB cache (fast). Watermark from TARGET (accurate). Format watermark in source dialect. Sling extracts delta only. DuckDB merges delta into cache. Model SQL runs with incremental WHERE. Sling loads delta to target. |
+| P4.6: `--full-refresh` cache cleanup | HIGH | Delete `.dvt/cache.duckdb` (or drop relevant tables). Re-extract everything. |
+| P4.7: View/ephemeral coercion | HIGH | If extraction model is `view` or `ephemeral`, coerce to `table` with DVT001 warning. |
+| P4.8: Test incremental extraction E2E | HIGH | Create cross-engine incremental model in Coke_DB. Test first run (full) + subsequent run (delta) + `--full-refresh`. |
+
+### Phase 5: Federation Optimizer [HIGH PRIORITY]
+
+Reduce data movement — critical for single-machine operation.
+
+| Item | Priority | Details |
+|------|----------|---------|
+| P5.1: Column pruning | HIGH | Analyze model SQL (SQLGlot AST) to determine which columns are actually used from each source. Extract only those columns. |
+| P5.2: Predicate pushdown | HIGH | Identify WHERE predicates that can be pushed to the source extraction query. Reduce rows extracted. |
+| P5.3: LIMIT pushdown | MEDIUM | If model has LIMIT, propagate to extraction query. |
+| P5.4: Source-side aggregation | LOW | If model only uses aggregated data from a source, push the GROUP BY to the source. |
+
+### Phase 6: Non-Default Pushdown + Polish
+
+| Item | Priority | Details |
+|------|----------|---------|
+| P6.1: Non-default pushdown path | HIGH | When model targets non-default adapter and all sources match, compile and execute using non-default adapter (not DuckDB). |
+| P6.2: `~/.dvt` profiles directory | MEDIUM | Add `~/.dvt` as fallback alongside `~/.dbt`. VS Code dbt extension compatibility. |
+| P6.3: DVT error codes | MEDIUM | Replace RuntimeError strings with proper DVT error classes (DVT100-DVT111). |
+| P6.4: DVT event logging | MEDIUM | Log Sling extraction, DuckDB compute, watermark resolution via dbt's event system. |
+| P6.5: `dvt init` template | MEDIUM | DVT-specific starter project with multi-adapter profiles.yml example. |
+
+### Phase 7: DuckDB Connectivity to All Engines
+
+| Item | Priority | Details |
+|------|----------|---------|
+| P7.1: Research DuckDB extensions | HIGH | Inventory which engines DuckDB can ATTACH to natively (postgres, mysql, sqlite confirmed). Research: Snowflake (via httpfs?), BigQuery, MSSQL, Oracle. |
+| P7.2: Sling-as-bridge for non-ATTACHable engines | MEDIUM | For engines DuckDB can't ATTACH to, use Sling to extract into DuckDB. This is the current approach — formalize it. |
+| P7.3: `dvt show` for all engines | MEDIUM | Make `dvt show` work with all 13 engines. ATTACH where possible, Sling-extract where not. |
+
+### Phase 8: Advanced Features
+
+| Item | Priority | Details |
+|------|----------|---------|
+| P8.1: Bucket materialization | MEDIUM | `config(target='s3_bucket', format='delta')`. SQL on default target → Sling → bucket. |
+| P8.2: CDC extraction | LOW | Sling `change-capture` mode for transaction log reading. |
+| P8.3: Virtual federation | LOW | `materialized='virtual'` via DuckDB ATTACH — ephemeral cross-source queries. |
+| P8.4: `dvt docs` lineage enhancement | LOW | Show extraction paths in lineage graph. |
+
+### Phase 9: Testing + Release
+
+| Item | Priority | Details |
+|------|----------|---------|
+| P9.1: Unit tests | MEDIUM | Watermark formatter, connection mapper, target resolver, source connection parser. |
+| P9.2: Integration tests | MEDIUM | Cross-engine incremental, multi-source DuckDB, pushdown, seed, show, debug. |
+| P9.3: Publish to PyPI | MEDIUM | dvt-ce + dvt-adapters with matching versions. |
+| P9.4: Documentation | LOW | README, getting started guide, migration from dbt guide. |
+
+---
+
+## Architecture Summary (Current)
 
 ```
-core/dvt/
-  __init__.py
-  cli/
-    __init__.py
-    main.py              # Click CLI group mirroring dbt commands
-  tasks/
-    __init__.py
-    sync.py              # DvtSyncTask
-  config/
-    __init__.py
-  extraction/
-    __init__.py
-    connection_mapper.py
-  sync/
-    __init__.py
-    adapter_installer.py
-    duckdb_extensions.py
-    cloud_deps.py
-    sling_checker.py
+dvt-ce (provides dbt.* + dvt.*)
+├── dbt/                           # Upstream dbt-core 1.9.10 (1 field added to UnparsedSourceDefinition)
+├── dvt/
+│   ├── cli/
+│   │   ├── __init__.py            # Resilient entry point (falls back to sync-only)
+│   │   └── main.py                # Full CLI: all dbt commands + dvt sync
+│   ├── tasks/
+│   │   ├── run.py                 # DvtRunTask — resolves models, dispatches runners
+│   │   ├── build.py               # DvtBuildTask — DvtRunTask + BuildTask
+│   │   ├── seed.py                # DvtSeedTask — Sling-based CSV loading
+│   │   ├── show.py                # DvtShowTask — DuckDB local queries
+│   │   ├── debug.py               # DvtDebugTask — multi-connection health check
+│   │   └── sync.py                # DvtSyncTask — env bootstrap + self-healing
+│   ├── config/
+│   │   ├── source_connections.py  # Read connection: from sources.yml
+│   │   └── target_resolver.py     # Execution path resolution per model
+│   ├── extraction/
+│   │   ├── connection_mapper.py   # 16 adapters → Sling URLs
+│   │   ├── watermark_formatter.py # 13 dialects × 4 types
+│   │   └── sling_client.py        # Sling Python wrapper (lazy import)
+│   ├── runners/
+│   │   ├── model_runner.py        # DvtModelRunner — pushdown vs extraction
+│   │   └── seed_runner.py         # DvtSeedRunner — Sling CSV loading
+│   ├── federation/
+│   │   └── duckdb_compute.py      # Ephemeral DuckDB (TODO: replace with persistent cache)
+│   └── sync/
+│       ├── profiles_reader.py     # Read profiles.yml
+│       ├── adapter_installer.py   # Install database drivers
+│       ├── duckdb_extensions.py   # Install DuckDB extensions
+│       ├── cloud_deps.py          # Install cloud SDKs
+│       └── sling_checker.py       # Verify/bootstrap Sling binary
+
+dvt-adapters (provides dbt.adapters.* + dbt.include.*)
+├── Framework: base, sql, contracts, catalogs, events, exceptions, record, etc.
+├── Engines: postgres, snowflake, bigquery, redshift, spark, databricks,
+│            duckdb, sqlserver, mysql, mysql5, mariadb, oracle, fabric
+└── Each engine: Python adapter + SQL macros in dbt.include.<engine>/
 ```
 
-**Deliverable:** `dvt --help` shows the command list. All commands initially
-route to stock dbt behavior except `dvt sync`.
+## Execution Paths
 
-### P0.2: dvt sync
+```
+For each model:
+  1. Resolve target (CLI --target > model config > profiles.yml default)
+  2. Check all source().connection vs model.target
+  3. If ALL local → PUSHDOWN (adapter SQL on target, standard dbt)
+  4. If ANY remote → EXTRACTION (Sling → DuckDB cache → Sling → target)
+```
 
-Implement environment bootstrap:
+## DuckDB Cache (Phase 4 — upcoming)
 
-1. Read profiles.yml (respect `--profiles-dir`)
-2. Map adapter types to pip packages (`postgres` → `dbt-postgres`, etc.)
-3. Map bucket types to cloud SDKs (`s3` → `boto3`, etc.)
-4. Map adapter types to DuckDB extensions (`postgres` → `postgres_scanner`, etc.)
-5. Always install: `delta` extension (default bucket format)
-6. Check Sling binary (`which sling` or `sling --version`)
-7. Optionally test all connections
-8. Report status to terminal
+```
+my_project/
+  .dvt/
+    cache.duckdb           ← persistent DuckDB database
+      crm__customers       ← cached source table (extracted via Sling)
+      crm__orders          ← cached source table
+      stg_orders           ← model result (for incremental {{ this }})
 
-**Deliverable:** `dvt sync` installs all dependencies for a project.
+Flow: Source → Sling → .dvt/cache.duckdb → model SQL in DuckDB → Sling → Target
 
-### P0.3: Update setup.py
+Incremental: watermark from TARGET, delta extraction via Sling,
+             merge into cache, model SQL with is_incremental(),
+             delta load to target via Sling
+```
 
-Add `sling` to install_requires. Ensure `deltalake` is included.
-Update entry_points to include `dvt = dvt.cli.main:cli` (already done).
+## Key Design Decisions
 
----
-
-## Phase 1: Core Pipeline — Extraction + Pushdown (Weeks 3-7)
-
-### P1.1: Connection mapper (Week 3)
-
-`core/dvt/extraction/connection_mapper.py`
-
-- Map profiles.yml adapter configs → Sling connection URL strings
-- Handle: postgres, snowflake, bigquery, redshift, mysql, sqlserver,
-  databricks, oracle, duckdb, clickhouse, trino, sqlite
-- Handle: s3, gcs, azure bucket configs
-- Handle special auth: key-pair, OAuth, service accounts
-- Unit tests: one test per adapter type
-
-### P1.2: Watermark formatter (Week 3)
-
-`core/dvt/extraction/watermark_formatter.py`
-
-- Dialect-specific literal formatting for watermark values
-- Support: postgres, mysql, sqlserver, oracle, snowflake, bigquery,
-  redshift, databricks, clickhouse, trino, duckdb, sqlite
-- Types: timestamp, date, integer, string
-- Unit tests: one test per dialect × type combination
-
-### P1.3: Source-target mismatch detection (Week 4)
-
-`core/dvt/config/target_resolver.py`
-
-- For each model, check if any `source()` reference has a `connection` (from sources.yml) that differs from the model's target (from profiles.yml default or model config)
-- Validate that remote source connections exist in profiles.yml
-- **Count** remote sources per model to determine extraction sub-path:
-  - 1 remote source → Sling Direct (sub-path 3a)
-  - 2+ remote sources → DuckDB Compute (sub-path 3b)
-- Build extraction plan: which source tables need extraction and via which sub-path
-- Validate materialization constraints:
-  - DuckDB Compute + `incremental` → DVT112 error
-  - Any extraction + `ephemeral` → DVT110 error
-  - Any extraction + `view` → coerce to `table` (DVT001 warning)
-
-### P1.4: Sling client wrapper (Week 4)
-
-`core/dvt/extraction/sling_client.py`
-
-- Wrapper around `sling` Python package
-- Methods: `extract_source()`, `load_seed()`, `load_to_target()`
-- Error handling: capture Sling errors, surface in DVT run results
-- Logging: integrate Sling output with DVT's event system
-
-### P1.5: DvtRunTask + DvtModelRunner (Weeks 5-6)
-
-`core/dvt/tasks/run.py`
-`core/dvt/runners/model_runner.py`
-`core/dvt/runners/extraction_runner.py`
-
-- `DvtRunTask(RunTask)`:
-  - Override `get_runner()` to return DvtModelRunner
-  - Reuse ALL dbt lifecycle decorators
-
-- `DvtModelRunner(ModelRunner)` — three-way dispatch + two sub-paths:
-  - **Pushdown** (all sources local): delegates to `super().execute()` (stock dbt)
-  - **Sling Direct** (1 remote source): Sling streams source → model's named table on target. Supports incremental (Sling handles watermark + merge).
-  - **DuckDB Compute** (2+ remote sources): Sling streams each source → DuckDB (in-memory). Model SQL runs in DuckDB. Sling streams result → model's table on target. Table materialization only.
-  - For cross-target models (target != default, all sources local): execute on default target, then Sling to model target
-
-### P1.7: DuckDB extraction compute engine (Week 6)
-
-`core/dvt/federation/duckdb_compute.py`
-
-- DuckDB in-process engine for multi-source extraction
-- Methods: `load_sources()`, `execute_model_sql()`, `export_result()`
-- Sling integration: stream sources into DuckDB, stream result out
-- Memory management: configurable memory_limit, temp_directory for spill
-- Ephemeral: DuckDB instance created per model, destroyed after completion
-
-### P1.6: Cross-engine incremental wiring (Weeks 5-6)
-
-- Pre-resolve `{{ this }}` watermark queries from target before compilation
-- Format watermark as dialect-specific literal for source engine
-- Substitute literal into compiled SQL before sending to Sling
-- Map dbt incremental strategy → Sling merge strategy
-- **Only for single-source extraction (Sling Direct).** Multi-source incremental → DVT112 error.
-- Test: incremental extraction model across Postgres → Snowflake
-
-### P1.8: Integration testing (Week 7)
-
-- End-to-end test: single remote source → Sling Direct (Postgres → Snowflake, direct to model table)
-- End-to-end test: multiple remote sources → DuckDB Compute (Postgres + SQL Server → DuckDB → Snowflake)
-- End-to-end test: pushdown model (all sources on target)
-- Verify incremental single-source models work across runs with dialect-specific watermarks
-- Verify multi-source incremental raises DVT112 error
-- Verify `--full-refresh` forces full extraction + full rebuild
-- Verify `--select` only runs selected models
-- Verify no `_dvt` staging tables are created anywhere
-
-**Phase 1 Deliverable:** `dvt run` with three-way dispatch: pushdown, Sling Direct
-(single-source extraction), and DuckDB Compute (multi-source extraction). Cross-engine
-incremental works for single-source models. No hidden staging tables.
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| Internal namespace | `dbt.*` (not renamed) | Compatible with all dbt adapters and extensions |
+| Adapter consolidation | `dvt-adapters` (one package, all engines) | No dependency hell, no dbt-core conflicts |
+| Extraction engine | DuckDB (persistent cache) | Handles JOINs, incremental, auto-spills to disk |
+| Data movement | Sling | Go-based streaming, 30+ connectors, low memory |
+| Extraction model dialect | DuckDB SQL | One dialect for all cross-engine models |
+| Incremental detection | DuckDB cache (fast) | Avoids querying target for existence check |
+| Watermark value | From TARGET (accurate) | Reflects what actually landed |
+| Cache strategy | Per-source (shared) | Extract once, multiple models reuse |
+| View/ephemeral extraction | Coerce to table (DVT001) | Can't create view from remote extraction |
+| Profiles directory | `~/.dvt` then `~/.dbt` | VS Code dbt extension compatibility |
 
 ---
 
-## Phase 2: Seeds, Cross-Target, Buckets (Weeks 8-12)
-
-### P2.1: Sling-based seed loading (Week 8)
-
-`core/dvt/tasks/seed.py`
-`core/dvt/runners/seed_runner.py`
-
-- `DvtSeedTask(SeedTask)`:
-  - Override to use Sling instead of dbt's agate-based loader
-  - Support `--full-refresh` (drop + create) and default (truncate + load)
-  - Support `--target <target_name>` to redirect seeds
-
-- `DvtSeedRunner`:
-  - Calls Sling client: `sling.run(src_stream=csv_path, tgt_conn=target, ...)`
-  - Uses Sling's native bulk loading for performance
-  - Reports: rows loaded, duration
-
-### P2.2: Cross-target model materialization (Weeks 9-10)
-
-`core/dvt/loading/sling_loader.py`
-
-- When model target != default target:
-  1. Execute model SQL on default target → temp result table
-  2. Sling streams temp result → model's target
-  3. Drop temp result table
-- Handle both database targets and bucket targets
-- For databases: standard Sling DB-to-DB streaming
-- For buckets: Sling DB-to-file streaming
-
-### P2.3: Bucket materialization (Weeks 10-11)
-
-`core/dvt/loading/bucket_materializer.py`
-
-- Handle `config(target='s3_bucket', format='delta')`
-- Supported formats: delta (default), parquet, csv, json, jsonlines
-- Delta Lake integration via Sling's DuckDB target + delta extension,
-  or via Sling's native file writing
-- Path construction: `{bucket_prefix}/{path}/{model_name}/`
-
-### P2.4: Source-side view pushdown (Weeks 11-12)
-
-- Support models that target a source connection for source-side filtering
-- These are standard dbt models with `config(target='source_xxx')`
-- DVT detects when a model targets a source connection and pushes SQL there
-- Test: filter on SQL Server via T-SQL, DVT auto-extracts filtered result to target
-
-### P2.5: DvtBuildTask (Week 12)
-
-`core/dvt/tasks/build.py`
-
-- `DvtBuildTask(BuildTask)`: combines extraction, models, tests, seeds, snapshots
-- Uses DVT runners for all node types
-
-**Phase 2 Deliverable:** Full ELT pipeline with seeds via Sling,
-cross-target materialization, bucket outputs in Delta format,
-and incremental extraction + transformation.
-
----
-
-## Phase 3: Local Dev, Debug, Polish (Weeks 13-16)
-
-### P3.1: dvt show (Weeks 13-14)
-
-`core/dvt/tasks/show.py`
-`core/dvt/federation/engine.py`
-
-- DuckDB in-process engine (reuses `duckdb_compute.py` infrastructure from P1.7)
-- ATTACH to source databases where supported
-- SQLGlot transpilation for target-dialect SQL → DuckDB SQL
-- Source resolution: `{{ source() }}` → ATTACH'd table or scanner view
-- Display results in terminal (table, csv, json formats)
-- Note: DuckDB is already integrated for multi-source extraction in P1;
-  `dvt show` reuses the same DuckDB infrastructure
-
-### P3.2: dvt debug (Week 14)
-
-`core/dvt/tasks/debug.py`
-
-- Test all connections from profiles.yml
-- Check Sling binary
-- Check DuckDB extensions
-- Check dbt adapter installations
-- Report per-connection: type, version, latency, status
-
-### P3.3: dvt compile enhancements (Week 15)
-
-- Show extraction plan alongside compiled SQL
-- Show execution path per model (pushdown vs cross-target)
-- Show target per model
-
-### P3.4: dvt init template (Week 15)
-
-- Create DVT-specific starter project template
-- Includes: multi-adapter profiles.yml, sources.yml with connection metadata,
-  example cross-engine model
-
-### P3.5: Documentation and lineage (Week 16)
-
-- Extraction nodes appear in `dvt docs` lineage graph
-- Cross-target models show their target in the docs
-- Bucket targets shown in lineage
-
-**Phase 3 Deliverable:** Complete developer experience with local query,
-debugging, and documentation.
-
----
-
-## Phase 4: Advanced Features (Weeks 17-24)
-
-### P4.1: Federation optimizer (Weeks 17-19)
-
-`core/dvt/federation/optimizer.py`
-
-- Analyze model SQL (via SQLGlot AST) to determine:
-  - Which columns are actually needed from each source (column pruning)
-  - Which WHERE predicates can be pushed to source extraction queries
-  - Which LIMIT clauses can be pushed down
-- Generate optimized extraction queries instead of `SELECT *`
-- This reduces data movement significantly for large sources
-
-### P4.2: CDC integration (Weeks 19-20)
-
-- Wire Sling's `change-capture` mode into DVT extraction nodes
-- Handle CDC metadata columns (_sling_synced_at, _sling_synced_op)
-- Support soft deletes in downstream models
-- Requires SLING_STATE configuration
-
-### P4.3: Virtual federation via DuckDB (Weeks 21-23)
-
-- New materialization: `materialized='virtual'`
-- Model SQL runs in DuckDB against ATTACH'd sources
-- No materialization — result computed on-demand
-- Useful for real-time cross-source queries
-- DuckDB ATTACH supports: Postgres, MySQL, SQLite
-
-### P4.4: Snapshot models with Sling (Week 24)
-
-- Enhance snapshot handling with Sling extraction
-- Snapshot sources across engines
-
-**Phase 4 Deliverable:** Advanced federation, CDC, and virtual queries.
-
----
-
-## Summary Timeline
-
-| Phase | Weeks | Deliverable |
-|-------|-------|-------------|
-| P0: Scaffold + Sync | 1-2 | `dvt sync`, project structure, CLI |
-| P1: Core Pipeline | 3-7 | `dvt run` with Sling Direct + DuckDB Compute + pushdown |
-| P2: Seeds, Cross-Target, Buckets | 8-12 | Full ELT, Sling seeds, Delta buckets |
-| P3: Local Dev, Debug, Polish | 13-16 | `dvt show`, `dvt debug`, docs |
-| P4: Advanced | 17-24 | Federation optimizer, CDC, virtual |
-
-**MVP (P0-P2): ~3 months**
-**Full product (P0-P4): ~6 months**
-
-## Technical Risks
-
-| Risk | Mitigation |
-|------|-----------|
-| Sling Python wrapper limitations | Fall back to subprocess calls to sling CLI |
-| SQLGlot transpilation gaps (dvt show only) | Maintain dialect_patches.py for manual overrides |
-| dbt adapter config parsing for Sling URLs | Start with top 6 adapters, add others incrementally |
-| Watermark formatting for exotic dialects | Start with top 12 dialects, add others as needed |
-| Cross-engine incremental watermark resolution | Pre-resolve from target, substitute literal. Test extensively. |
-| Source extraction performance for large tables | Use incremental watermarks to limit extraction volume (single-source only). |
-| **DuckDB memory limits for multi-source extraction** | **Configurable memory_limit + temp_directory for spill-to-disk. Monitor and document sizing guidelines. Large multi-source joins may exceed memory — recommend splitting into smaller models or using incremental single-source extraction where possible.** |
-| Sling CDC requires Pro license | Document as optional feature, ensure free-tier works without CDC |
-| DuckDB ATTACH limitations (read-only, limited dialect support) | Use as dev tool only (dvt show), not production pushdown path |
+*This document is updated after each development session.*

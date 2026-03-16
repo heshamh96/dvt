@@ -6,8 +6,19 @@ DVT extends dbt's configuration system with these additions:
 1. **profiles.yml** — multi-adapter + bucket connections (extended from dbt)
 2. **sources.yml** — metadata only: connection + schema + tables (extended from dbt, NO sling config)
 3. **Model config** — `target` (materialization target override), `format` (bucket output format)
+4. **`.dvt/` directory** — runtime cache directory (persistent DuckDB cache, gitignored)
 
 All standard dbt configuration (dbt_project.yml, selectors.yml, packages.yml) works unchanged.
+
+### Profiles Directory
+
+DVT searches for `profiles.yml` in this order:
+1. `DVT_PROFILES_DIR` environment variable (if set)
+2. `~/.dvt/` — DVT-specific profiles directory
+3. `~/.dbt/` — standard dbt profiles directory (VS Code dbt extension compatibility)
+
+This allows DVT and dbt to coexist without conflicts. If you use the VS Code dbt extension,
+keep your profiles in `~/.dbt/` — DVT will find them automatically.
 
 ## profiles.yml
 
@@ -102,8 +113,7 @@ my_project:
 | Connection role | How DVT uses it |
 |----------------|----------------|
 | Default target | dbt adapter pushes down model SQL (pushdown models) |
-| Source connection (1 remote) | Sling Direct: streams source → model table on target |
-| Source connection (2+ remote) | DuckDB Compute: Sling → DuckDB → model SQL → Sling → model table on target |
+| Source connection (any remote) | Extraction: Sling → DuckDB cache → model SQL → Sling → model table on target |
 | Non-default target (all sources local) | Non-default pushdown: adapter pushes down on non-default target |
 | Alternate target (DB) | Sling loads model results to this DB |
 | Alternate target (bucket) | Sling writes model results as Delta/Parquet/CSV |
@@ -156,23 +166,24 @@ Users write **standard dbt models** — no `connection` or `sling` config on mod
 DVT automatically detects when Sling extraction is needed by comparing
 `source.connection` (from sources.yml) vs `model.target` (from profiles.yml default or model config).
 
-### Extraction model — single remote source (Sling Direct)
+### Extraction model — single remote source
 
 ```sql
 -- models/staging/stg_customers.sql
--- EXTRACTION MODEL: Written in DuckDB SQL (universal for single-source SELECT)
--- DVT detects: source on source_postgres, target is prod_snowflake → Sling Direct
--- Result lands directly as stg_customers table on target. No hidden staging.
+-- EXTRACTION MODEL: Written in DuckDB SQL.
+-- DVT detects: source on source_postgres, target is prod_snowflake → Extraction path
+-- Sling extracts source → DuckDB cache → model SQL → Sling → target
 {{ config(materialized='table') }}
 SELECT * FROM {{ source('crm', 'customers') }}
 ```
 
-### Extraction model — single remote source, incremental (Sling Direct)
+### Extraction model — single remote source, incremental
 
 ```sql
 -- models/staging/stg_orders.sql
--- EXTRACTION MODEL: Written in DuckDB SQL. Incremental supported for single source.
--- DVT pre-resolves watermark, formats in source dialect, Sling merges into model table.
+-- EXTRACTION MODEL: Written in DuckDB SQL. Incremental via persistent DuckDB cache.
+-- DVT checks cache for is_incremental(), resolves watermark from target,
+-- extracts delta via Sling, DuckDB merges, loads result to target.
 {{ config(
     materialized='incremental',
     unique_key='id'
@@ -184,17 +195,20 @@ WHERE updated_at > (SELECT MAX(updated_at) FROM {{ this }})
 {% endif %}
 ```
 
-### Extraction model — multiple remote sources (DuckDB Compute)
+### Extraction model — multiple remote sources (incremental supported)
 
 ```sql
 -- models/staging/stg_combined.sql
 -- EXTRACTION MODEL: Written in DuckDB SQL. DuckDB is the compute engine.
--- Must be 'table' materialization (incremental NOT supported for multi-source).
--- Sling streams each source → DuckDB, SQL runs in DuckDB, result → target.
-{{ config(materialized='table') }}
+-- Incremental IS supported via persistent DuckDB cache.
+-- Sling extracts each source → DuckDB cache, SQL runs in DuckDB, result → target.
+{{ config(materialized='incremental', unique_key='id') }}
 SELECT c.id, c.name, i.invoice_total
 FROM {{ source('crm', 'customers') }} c
 JOIN {{ source('erp', 'invoices') }} i ON c.id = i.customer_id
+{% if is_incremental() %}
+WHERE i.updated_at > (SELECT MAX(updated_at) FROM {{ this }})
+{% endif %}
 ```
 
 ### target (per-model target override)
@@ -245,6 +259,13 @@ test-paths: ["tests"]
 analysis-paths: ["analyses"]
 macro-paths: ["macros"]
 
+# DVT-specific configuration
+dvt:
+  cache_dir: ".dvt"                # directory for persistent DuckDB cache (default: .dvt)
+  duckdb:
+    memory_limit: "4GB"            # max DuckDB memory for extraction compute
+    threads: 4                     # DuckDB parallel threads
+
 models:
   my_project:
     staging:
@@ -262,6 +283,7 @@ seeds:
 
 # No dvt.staging_schema needed — DVT does not create hidden staging tables.
 # Results land directly as model tables on the target.
+# DuckDB cache at .dvt/cache.duckdb is for extraction compute only.
 ```
 
 ## Model Naming
@@ -283,13 +305,43 @@ models/
 DVT handles extraction automatically — no hidden staging tables. Extraction model results
 land directly as model tables. Downstream models reference them via `{{ ref('stg_customers') }}`.
 
+## .dvt/ Directory
+
+DVT creates a `.dvt/` directory in the project root for runtime artifacts:
+
+```
+.dvt/
+  cache.duckdb          # Persistent DuckDB cache for extraction
+                        # Contains: cached source tables + model results
+                        # Enables incremental extraction across runs
+```
+
+**IMPORTANT:** Add `.dvt/` to your `.gitignore`:
+
+```gitignore
+# DVT runtime cache
+.dvt/
+```
+
+The cache is machine-specific and should not be committed to version control. Each
+developer/environment will build its own cache on first `dvt run`.
+
+### Cache management commands
+
+| Command | Effect on cache |
+|---------|----------------|
+| `dvt run` | Creates/updates cache as needed |
+| `dvt run --full-refresh` | **Deletes** cache, rebuilds from scratch |
+| `dvt clean` | **Deletes** cache and other build artifacts |
+
 ## Environment Variables
 
 DVT respects all dbt environment variables plus:
 
 | Variable | Description |
 |----------|-------------|
-| `DVT_PROFILES_DIR` | Override profiles.yml location |
+| `DVT_PROFILES_DIR` | Override profiles.yml location (checked first, before `~/.dvt` and `~/.dbt`) |
+| `DVT_CACHE_DIR` | Override cache directory location (default: `.dvt` in project root) |
 | `SLING_THREADS` | Number of parallel Sling extractions |
 | `SLING_STATE` | State store for CDC (Sling native) |
 | `DUCKDB_PATH` | Path to DuckDB binary (for extensions) |
