@@ -48,12 +48,14 @@ def read_profiles_yml(profiles_dir: str) -> Dict[str, Any]:
 def extract_outputs(raw_profiles: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Extract all outputs from all profiles, returning list of output configs.
 
-    Each output dict has at minimum: 'name', 'type', and the adapter-specific fields.
+    Each output dict has at minimum: '_name', '_profile', 'type', and adapter-specific fields.
+    Output names must be unique within each profile. Across profiles, duplicates are
+    deduplicated (first profile wins) since DVT resolves connections by output name globally.
     """
-    outputs = []
+    seen: Dict[str, Dict[str, Any]] = {}  # output_name → first output config
     for profile_name, profile_config in raw_profiles.items():
         if profile_name.startswith("config"):
-            continue  # skip dbt config blocks
+            continue
         if not isinstance(profile_config, dict):
             continue
         profile_outputs = profile_config.get("outputs", {})
@@ -62,9 +64,13 @@ def extract_outputs(raw_profiles: Dict[str, Any]) -> List[Dict[str, Any]]:
         for output_name, output_config in profile_outputs.items():
             if not isinstance(output_config, dict):
                 continue
-            output = {**output_config, "_name": output_name, "_profile": profile_name}
-            outputs.append(output)
-    return outputs
+            if output_name not in seen:
+                seen[output_name] = {
+                    **output_config,
+                    "_name": output_name,
+                    "_profile": profile_name,
+                }
+    return list(seen.values())
 
 
 def get_adapter_types(outputs: List[Dict[str, Any]]) -> Set[str]:
