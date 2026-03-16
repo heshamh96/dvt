@@ -282,25 +282,14 @@ def snapshot(ctx, **kwargs):
 @requires.project
 @requires.runtime_config
 def show(ctx, **kwargs):
-    """Generates executable SQL, runs it, and returns a preview of the results."""
-    from dbt.adapters.factory import register_adapter
-    from dbt.cli.requires import setup_manifest
-    from dbt.mp_context import get_mp_context
-    from dbt.task.show import ShowTask, ShowTaskDirect
+    """Run a query locally via DuckDB without hitting the warehouse."""
+    from dvt.tasks.show import DvtShowTask
 
-    if ctx.obj["flags"].inline_direct:
-        register_adapter(ctx.obj["runtime_config"], get_mp_context())
-        task = ShowTaskDirect(
-            ctx.obj["flags"],
-            ctx.obj["runtime_config"],
-        )
-    else:
-        setup_manifest(ctx)
-        task = ShowTask(
-            ctx.obj["flags"],
-            ctx.obj["runtime_config"],
-            ctx.obj["manifest"],
-        )
+    task = DvtShowTask(
+        ctx.obj["flags"],
+        ctx.obj["runtime_config"],
+        ctx.obj.get("manifest"),
+    )
     results = task.run()
     success = task.interpret_results(results)
     return results, success
