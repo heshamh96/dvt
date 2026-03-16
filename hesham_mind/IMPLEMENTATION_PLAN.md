@@ -89,15 +89,15 @@ Also: `dvt sync` 6/6, `dvt debug` 9/9, `dvt seed` PASS, `dvt build` 27/27, `dvt 
 
 ## UPCOMING
 
-### Phase 7: DuckDB Connectivity to All Engines [NEXT]
+### Phase 7: DuckDB Connectivity to All Engines [DONE]
 
-| Item | Priority | Details |
-|------|----------|---------|
-| P7.1: DuckDB ATTACH research | HIGH | postgres ✓, mysql ✓, sqlite ✓. Research: Snowflake, BigQuery, MSSQL, Oracle via extensions or community scanners. |
-| P7.2: `dvt show` for all engines | HIGH | ATTACH where DuckDB supports it natively. For unsupported engines, use Sling to extract into DuckDB temp, then query. Make `dvt show` work with ALL 13 engines. |
-| P7.3: `dvt show --select model_name` | MEDIUM | Compile model SQL, resolve sources, run in DuckDB locally. |
+| Item | Status | Details |
+|------|--------|---------|
+| P7.1: DuckDB ATTACH research | DONE | postgres ✓, redshift (PG-compat) ✓, mysql ✓, mariadb (MySQL-compat) ✓, sqlite ✓. Snowflake/BigQuery/MSSQL/Oracle/Databricks → no native extension, Sling fallback. |
+| P7.2: `dvt show` for ATTACHable engines | DONE | PG, MySQL, MariaDB, SQLite, Redshift via ATTACH. Cross-engine JOINs work (3-way PG+MySQL+MariaDB tested). Non-ATTACHable engines logged as "use dvt run". |
+| P7.3: DuckDB extensions in dvt sync | DONE | Added redshift→postgres_scanner, mariadb→mysql_scanner to sync. |
 
-### Phase 8: Advanced Features
+### Phase 8: Advanced Features [NEXT]
 
 | Item | Priority | Details |
 |------|----------|---------|
@@ -105,6 +105,7 @@ Also: `dvt sync` 6/6, `dvt debug` 9/9, `dvt seed` PASS, `dvt build` 27/27, `dvt 
 | P8.2: CDC extraction | LOW | Sling `change-capture` mode for transaction log reading. |
 | P8.3: Virtual federation | LOW | `materialized='virtual'` via DuckDB ATTACH — ephemeral cross-source queries. |
 | P8.4: `dvt docs` lineage enhancement | LOW | Show extraction paths in lineage graph. |
+| P8.5: `dvt show --select model_name` | MEDIUM | Compile model SQL, resolve source refs, run in DuckDB locally. |
 
 ### Phase 9: Testing + Release
 
