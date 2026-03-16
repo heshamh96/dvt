@@ -28,7 +28,7 @@ with open(os.path.join(this_directory, "README.md")) as f:
 
 
 package_name = "dvt-ce"
-package_version = "0.1.3"
+package_version = "0.1.4"
 description = """DVT — cross-engine data transformation tool with DuckDB federation."""
 
 
