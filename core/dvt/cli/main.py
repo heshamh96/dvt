@@ -362,7 +362,6 @@ def deps(ctx, **kwargs):
 @cli.command("debug")
 @click.pass_context
 @global_flags
-@p.debug_connection
 @p.config_dir
 @p.profiles_dir_exists_false
 @p.project_dir
@@ -370,10 +369,10 @@ def deps(ctx, **kwargs):
 @requires.postflight
 @requires.preflight
 def debug(ctx, **kwargs):
-    """Show information about the current DVT environment and check dependencies."""
-    from dbt.task.debug import DebugTask
+    """Check connections to all targets in profiles.yml, or a specific --target."""
+    from dvt.tasks.debug import DvtDebugTask
 
-    task = DebugTask(ctx.obj["flags"])
+    task = DvtDebugTask(ctx.obj["flags"])
     results = task.run()
     success = task.interpret_results(results)
     return results, success
