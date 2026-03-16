@@ -82,7 +82,16 @@ class DvtModelRunner(ModelRunner):
             return super().execute(model, manifest)
 
         elif path in (ExecutionPath.SLING_DIRECT, ExecutionPath.DUCKDB_COMPUTE):
-            # Both old sub-paths now route to unified extraction
+            # Coerce view/ephemeral to table for extraction models (DVT001)
+            materialization = model.get_materialization()
+            if materialization in ("view", "ephemeral"):
+                logger.warning(
+                    f"DVT001: Model '{model.name}' is '{materialization}' but requires "
+                    f"cross-engine extraction. Coercing to 'table'."
+                )
+                # Force table materialization
+                model.config["materialized"] = "table"
+
             logger.info(f"DVT [{model.name}]: extraction via DuckDB cache")
             return self._execute_extraction(model, manifest)
 
