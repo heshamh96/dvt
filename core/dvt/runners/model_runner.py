@@ -275,6 +275,34 @@ class DvtModelRunner(ModelRunner):
             ):
                 compiled_sql = compiled_sql.replace(old_ref, new_ref)
 
+            # Also rewrite {{ this }} for incremental models.
+            # {{ this }} compiles to the target table ref (e.g., "devdb"."public"."model_name").
+            # In DuckDB cache, it's __model__model_name.
+            if is_incremental:
+                model_cache_table = cache.model_table_name(model.name)
+                target_table_fqn = self._model_table_name(model)
+                # Try various formats dbt might have generated for {{ this }}
+                this_candidates = []
+                if model.database and model.schema:
+                    this_candidates.append(
+                        f'"{model.database}"."{model.schema}"."{model.name}"'
+                    )
+                    this_candidates.append(
+                        f"{model.database}.{model.schema}.{model.name}"
+                    )
+                if model.schema:
+                    this_candidates.append(f'"{model.schema}"."{model.name}"')
+                    this_candidates.append(f"{model.schema}.{model.name}")
+                this_candidates.append(f'"{model.name}"')
+                this_candidates.append(model.name)
+
+                for candidate in this_candidates:
+                    if candidate in compiled_sql:
+                        compiled_sql = compiled_sql.replace(
+                            candidate, model_cache_table
+                        )
+                        break
+
             # ----------------------------------------------------------
             # Step 3: Execute model SQL in DuckDB + cache the result
             # ----------------------------------------------------------
