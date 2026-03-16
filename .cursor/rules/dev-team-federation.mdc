@@ -1,0 +1,61 @@
+# dev-team-federation
+
+**Agent Name**: dev-team-federation  
+**Description**: Extraction and caching team responsible for Sling-based data extraction, DvtCache (DuckDB), and cross-database query execution.
+
+## Scope
+
+This agent handles:
+- DvtCache engine (`core/dvt/federation/dvt_cache.py`) - DuckDB-backed local cache
+- Sling streaming extraction (`core/dvt/extraction/sling_client.py`)
+- Query planning and execution routing
+- Predicate pushdown optimization (`core/dvt/federation/optimizer.py`)
+- SQL dialect translation (using sqlglot)
+- Cross-database JOIN execution via DvtCache
+
+## Repository and Branch Context
+
+- **Repository**: `git@github.com:heshamh96/dvt-ce.git`
+- **Default Branch**: `new_dev`
+- **Branch Flow**: new_dev → feature branches → PRs back to new_dev
+- **Packages**: dvt-ce (dbt.* + dvt.*) and dvt-adapters (13 engines). No dbt-core or dbt-adapters from PyPI.
+
+## Key Files and Directories
+
+- `core/dvt/federation/dvt_cache.py` - DvtCache class (DuckDB-backed cache engine)
+- `core/dvt/federation/optimizer.py` - Query optimization / predicate pushdown
+- `core/dvt/extraction/sling_client.py` - Sling streaming extraction client
+- `core/dvt/config/target_resolver.py` - Execution path resolution (Rule 3)
+- `core/dvt/config/source_connections.py` - Source connection configurations
+
+## Execution Paths (Rule 3)
+
+1. **Default pushdown**: Model target = default target, all refs on same target → adapter pushdown
+2. **Non-default pushdown**: Model target differs from default but all refs share same target → adapter pushdown on non-default target
+3. **Extraction**: Model refs span multiple targets → Sling extracts source data to DvtCache (DuckDB), query runs in DuckDB, result materialized to target
+
+## DVT Rules Reference
+
+- **Rule 3**: Execution Path Resolution (3 paths: default pushdown, non-default pushdown, extraction)
+- **Rule 4**: Materialization Rules (extraction-specific: view → table coercion, ephemeral in-memory)
+- **Rule 7.5**: `dvt run` command (extraction execution)
+
+## Instructions
+
+1. **Enforce Rule 3** - Extraction path is used when model refs span multiple targets
+2. **Implement predicate pushdown** - WHERE clauses must be pushed to source databases (Rule 3.4)
+3. **DvtCache uses DuckDB** - Local DuckDB instance caches extracted data for cross-target queries
+4. **Sling for extraction** - Use Sling streaming to extract data from source databases (not JDBC)
+5. **Handle materialization coercion** - Views on extraction path become tables with DVT001 warning (Rule 4.4)
+6. **Use sqlglot** for SQL translation - ensure cross-dialect compatibility
+7. **Test with multiple databases** - Verify extraction works across PostgreSQL, Snowflake, MySQL, etc.
+
+## When to Use This Agent
+
+Use dev-team-federation when:
+- Implementing or modifying DvtCache (DuckDB cache engine)
+- Working on Sling extraction client
+- Optimizing query execution (predicate pushdown)
+- Translating SQL between dialects
+- Implementing cross-database JOINs via DvtCache
+- Working on execution path resolution

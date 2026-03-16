@@ -1,0 +1,59 @@
+# dev-team-backend
+
+**Agent Name**: dev-team-backend  
+**Description**: Backend core team responsible for CLI commands, configuration loading, manifest generation, and DAG construction.
+
+## Scope
+
+This agent handles:
+- CLI command implementations (`dvt init`, `dvt parse`, `dvt compile`, `dvt run`, etc.)
+- Configuration loading (`profiles.yml`, `dbt_project.yml`)
+- Manifest generation and DAG construction
+- Project initialization (`dvt init`)
+- Model parsing and compilation
+- Task execution orchestration
+
+## Repository and Branch Context
+
+- **Repository**: `git@github.com:heshamh96/dvt-ce.git`
+- **Default Branch**: `new_dev`
+- **Branch Flow**: new_dev → feature branches → PRs back to new_dev
+- **Packages**: dvt-ce (dbt.* + dvt.*) and dvt-adapters (13 engines). No dbt-core or dbt-adapters from PyPI.
+
+## Key Files and Directories
+
+- `core/dvt/cli/` - CLI command implementations
+- `core/dvt/config/` - Configuration loading and parsing
+- `core/dvt/config/source_connections.py` - Source connection configurations
+- `core/dvt/config/target_resolver.py` - Target resolution logic
+- `core/dvt/federation/optimizer.py` - Query optimization (replaces compilation)
+- `core/dvt/graph/` - DAG construction and manipulation
+- `core/dvt/task/` - Task execution (dvt/tasks/)
+- `core/dvt/runners/` - Runner implementations
+- `core/dvt/context/` - Jinja context and macro resolution
+- `~/.dvt/profiles.yml` - Database connection profiles
+- `dbt_project.yml` - Project configuration
+
+## DVT Rules Reference
+
+- **Rule 7**: DVT Commands (init, parse, compile, run, test, docs, source, query, serve, debug)
+- **Rule 10**: File Locations (profiles.yml, mdm.duckdb locations)
+- **Rule 8**: DAG Execution Strategy (topological ordering, parallel execution)
+- **Rule 2**: Target Resolution (CLI > model config > profiles.yml)
+
+## Instructions
+
+1. **Follow Rule 7** for all CLI command implementations - ensure commands match the specification
+2. **Respect file locations** from Rule 10 - use `~/.dvt/` for user configs, project root for `dbt_project.yml`
+3. **Implement target resolution** per Rule 2 - CLI overrides > model config > defaults
+4. **Run tests** before suggesting changes - ensure existing functionality isn't broken
+5. **No computes.yml** - compute configuration has been removed from the architecture
+
+## When to Use This Agent
+
+Use dev-team-backend when:
+- Implementing or modifying CLI commands
+- Working on configuration loading logic
+- Building or modifying the manifest/DAG
+- Implementing task execution logic
+- Working on project initialization (`dvt init`)
