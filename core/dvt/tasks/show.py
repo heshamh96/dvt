@@ -175,21 +175,96 @@ class DvtShowTask:
         return ""
 
     def _get_model_sql(self, select: Tuple) -> str:
-        """Get compiled SQL for a selected model."""
+        """Get compiled SQL for a selected model and rewrite source refs for DuckDB.
+
+        The compiled SQL has source refs in target dialect (e.g., "devdb"."public"."test_seed").
+        For dvt show, we need refs pointing to ATTACHed databases (e.g., pg_docker.public.test_seed).
+        """
         if not self.manifest:
             raise RuntimeError("No manifest available. Run dvt parse first.")
 
-        # Find the model by name
         select_name = select[0] if isinstance(select, (list, tuple)) else select
+
+        # Find the model
+        model_node = None
         for uid, node in self.manifest.nodes.items():
             if getattr(node, "name", "") == select_name:
-                compiled = getattr(node, "compiled_code", None)
-                if compiled:
-                    return compiled
-                raw = getattr(node, "raw_code", None) or getattr(node, "raw_sql", "")
-                return raw
+                model_node = node
+                break
 
-        raise RuntimeError(f"Model '{select_name}' not found in manifest")
+        if not model_node:
+            raise RuntimeError(f"Model '{select_name}' not found in manifest")
+
+        # Get compiled SQL — try multiple sources
+        compiled = getattr(model_node, "compiled_code", None)
+
+        # Check if it's actually compiled (not raw Jinja)
+        if not compiled or "{{" in str(compiled):
+            # Try reading from target/compiled/ directory (written by dvt compile)
+            import os, glob
+
+            project_dir = getattr(self.flags, "PROJECT_DIR", None) or "."
+            # Search for the compiled file
+            pattern = os.path.join(
+                project_dir, "target", "compiled", "**", f"{select_name}.sql"
+            )
+            matches = glob.glob(pattern, recursive=True)
+            if matches:
+                with open(matches[0]) as f:
+                    compiled = f.read()
+
+        if not compiled or "{{" in str(compiled):
+            raise RuntimeError(
+                f"Model '{select_name}' has uncompiled Jinja. "
+                f"Run 'dvt compile --select {select_name}' first."
+            )
+
+        # Rewrite source refs to point to ATTACHed database names
+        # Load source connections to know which connection each source uses
+        project_dir = getattr(self.flags, "PROJECT_DIR", None) or "."
+        source_connections = load_source_connections(project_dir)
+
+        depends_on = getattr(model_node, "depends_on", None)
+        if depends_on:
+            source_uids = [
+                n
+                for n in (getattr(depends_on, "nodes", []) or [])
+                if n.startswith("source.")
+            ]
+            for source_uid in source_uids:
+                source_node = self.manifest.sources.get(source_uid)
+                if not source_node:
+                    continue
+
+                src_name = getattr(source_node, "source_name", "")
+                src_db = getattr(source_node, "database", "")
+                src_schema = getattr(source_node, "schema", "")
+                src_identifier = getattr(source_node, "identifier", "") or getattr(
+                    source_node, "name", ""
+                )
+                connection_name = source_connections.get(src_name, "")
+
+                if not connection_name:
+                    continue
+
+                # Build the compiled ref (how dbt compiled it) and the DuckDB ref
+                duckdb_ref = f"{connection_name}.{src_schema}.{src_identifier}"
+
+                # Try various formats dbt might have generated
+                candidates = []
+                if src_db and src_schema:
+                    candidates.append(f'"{src_db}"."{src_schema}"."{src_identifier}"')
+                    candidates.append(f"{src_db}.{src_schema}.{src_identifier}")
+                if src_schema:
+                    candidates.append(f'"{src_schema}"."{src_identifier}"')
+                    candidates.append(f"{src_schema}.{src_identifier}")
+
+                for candidate in sorted(candidates, key=len, reverse=True):
+                    if candidate in compiled:
+                        compiled = compiled.replace(candidate, duckdb_ref)
+                        break
+
+        return compiled
 
     def _get_output_config(
         self, output_name: str, raw_profiles: Dict[str, Any]

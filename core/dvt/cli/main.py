@@ -285,10 +285,19 @@ def show(ctx, **kwargs):
     """Run a query locally via DuckDB without hitting the warehouse."""
     from dvt.tasks.show import DvtShowTask
 
+    # Load manifest if --select is used (needed to find model SQL)
+    manifest = None
+    select = getattr(ctx.obj.get("flags"), "SELECT", None)
+    if select:
+        from dbt.cli.requires import setup_manifest
+
+        setup_manifest(ctx)
+        manifest = ctx.obj.get("manifest")
+
     task = DvtShowTask(
         ctx.obj["flags"],
         ctx.obj["runtime_config"],
-        ctx.obj.get("manifest"),
+        manifest,
     )
     results = task.run()
     success = task.interpret_results(results)
