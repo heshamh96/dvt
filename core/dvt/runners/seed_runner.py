@@ -56,11 +56,14 @@ class DvtSeedRunner(SeedRunner):
                 f"{model.schema}.{model.name}" if model.schema else model.name
             )
 
-            # Determine mode from flags
             full_refresh = getattr(self.config.args, "FULL_REFRESH", False)
-            mode = "full-refresh" if full_refresh else "truncate"
+            # Always use 'truncate' for seeds — Sling's 'full-refresh' mode
+            # has quoting issues with DROP TABLE on some engines.
+            # 'truncate' clears and reloads the data, which achieves the
+            # same result for seeds. If the table doesn't exist, Sling
+            # creates it automatically.
+            mode = "truncate"
 
-            # Load via Sling
             client = SlingClient()
             client.load_seed(
                 csv_path=csv_path,
