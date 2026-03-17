@@ -64,6 +64,32 @@ For each model in the DAG:
 | `dvt/runners/seed_runner.py` | Seed loading |
 | `dvt/cli/main.py` | CLI entry point |
 
+## Two Dialects in One Project
+
+A DVT project naturally contains SQL in two dialects:
+
+- **Pushdown models** → written in the **target's native SQL dialect** (Snowflake SQL, PostgreSQL, etc.). SQL runs on the target engine via the dbt adapter.
+- **Extraction models** → written in **DuckDB SQL** (universal, Postgres-like). SQL runs in the local DuckDB cache after Sling extracts remote sources.
+
+Both coexist in the same project. The dialect is determined by the execution path, not by config. This is the most important thing to understand about DVT model authoring.
+
+## `--target` Philosophy
+
+`--target` switches between **same-engine environments**, not between engines.
+
+- **Correct**: `--target dev_snowflake` → `--target prod_snowflake` (both Snowflake)
+- **Risky**: `--target dev_snowflake` → `--target mysql_docker` (different engine — pushdown models will break)
+
+When `--target` changes the adapter type, DVT emits **DVT007** warning but does not block. Extraction models (DuckDB SQL) are unaffected. Pushdown models (target dialect) will fail if the new engine cannot parse the original dialect's syntax.
+
+## Sling Invisibility
+
+Sling output must **never** be shown to the user during normal operation. The extraction path (Sling → DuckDB → Sling) is a black box. DVT shows standard dbt-like output only. Sling errors are caught and re-raised as DVT errors with actionable messages.
+
+## Seed Robustness
+
+DVT's Sling-based seed loader must handle dirty CSV data at least as gracefully as dbt's agate-based loader: encoding issues, mixed types, null handling, schema inference. Seeds must "just work."
+
 ## dbt Backward Compatibility
 
 When using only 1 adapter with no cross-target references, DVT works identically to dbt.

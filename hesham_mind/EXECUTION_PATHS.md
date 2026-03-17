@@ -21,7 +21,7 @@ the flow is the same unified path through the persistent DuckDB cache.
 
 **When:** A model references source(s) whose `connection` (from sources.yml) differs from the model's target (from profiles.yml default or model config).
 
-**User-facing rule:** All extraction models must be written in **DuckDB SQL** syntax.
+**User-facing rule:** All extraction models must be written in **DuckDB SQL** syntax. DuckDB SQL is a Postgres-like universal dialect. This is the key distinction from pushdown models which use the target's native dialect. Both dialects coexist in the same project.
 
 ### Unified Extraction Flow
 
@@ -188,6 +188,8 @@ class DvtModelRunner(ModelRunner):
 
 **When:** A model's sources are all on the same connection as its target, and its target is the default target.
 
+**Dialect:** Pushdown models are written in the **target's native SQL dialect** (e.g., Snowflake SQL, PostgreSQL, BigQuery SQL). The SQL runs directly on the target engine via the dbt adapter.
+
 **What happens:**
 1. dbt compiles the model (Jinja → SQL)
 2. `{{ ref('stg_customers') }}` resolves to the physical table on the target
@@ -199,6 +201,8 @@ class DvtModelRunner(ModelRunner):
 ### Non-Default Pushdown
 
 **When:** Model targets a non-default adapter (e.g., `config(target='mysql_prod')`) but ALL its sources are on that same non-default target.
+
+**Dialect:** Written in the **non-default target's native SQL dialect** (e.g., MySQL SQL if the non-default target is MySQL).
 
 **What happens:**
 1. DVT uses the non-default adapter instead of the global default
@@ -341,3 +345,26 @@ def resolve_execution_path(node, manifest, config):
 | Cross-target output | target is bucket or other DB | result → other target/bucket | Target DB (adapter) + Sling (move) | Yes | YES | no |
 | Local query | `dvt show` | streamed to memory | DuckDB | n/a | no | YES |
 | Seed loading | `dvt seed` | CSV → target | Sling (bulk load) | n/a | YES | no |
+
+## `--target` Behavior
+
+The `--target` CLI flag overrides the default target from `profiles.yml`. It is designed for switching between **same-engine environments** (e.g., `--target dev_snowflake` vs `--target prod_snowflake`).
+
+### Why `--target` should not change adapter type
+
+Pushdown models are written in the target engine's native SQL dialect. If the default target is Snowflake and the user runs `--target mysql_docker`:
+- All **pushdown models** written in Snowflake SQL will fail — MySQL cannot parse Snowflake-specific syntax (e.g., `FLATTEN()`, `QUALIFY`, `::VARIANT`).
+- All **extraction models** will still work — they use DuckDB SQL which is engine-independent.
+- **Seeds** and **tests** generally work across engines.
+
+### DVT007 Warning
+
+When the `--target` adapter type differs from the profile's default target adapter type, DVT emits:
+
+```
+DVT007: Target override 'mysql_docker' (mysql) differs in adapter type from
+default target 'prod_snowflake' (snowflake). Pushdown models written in
+snowflake SQL may fail on mysql. Extraction models (DuckDB SQL) are unaffected.
+```
+
+DVT warns but does **not** block execution. The user may have a valid reason (e.g., running only extraction models, or running only seeds/tests).

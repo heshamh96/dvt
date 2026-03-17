@@ -124,6 +124,33 @@ DuckDB serves as a **persistent cache and compute engine** in DVT:
 
 5. **Virtual federation (future)** — ephemeral cross-source queries via ATTACH.
 
+### 1.6 DVT Philosophy on Dialects and `--target`
+
+#### The DVT Philosophy on `--target`
+
+**In dbt**, `--target` switches between environments of the SAME engine — e.g., dev Snowflake vs prod Snowflake. The SQL dialect is the same, just credentials/database change.
+
+**In DVT**, `--target` does the same — but with multiple engines in play, there's a critical distinction:
+
+**RULE 1.6.1: `--target` switches environments, NOT engines.**
+
+- **Pushdown models** are written in the target adapter's dialect. A Postgres model uses Postgres SQL. If `--target` points to another Postgres instance, it works. If it points to SQL Server, the SQL breaks. This is EXPECTED — DVT cannot translate adapter-specific SQL.
+
+- **Extraction models** (cross-engine) use DuckDB SQL, which is engine-agnostic. These work regardless of target — DuckDB handles compute, Sling handles movement.
+
+- DVT SHOULD warn (not block) when `--target` changes the adapter type:
+  `"DVT007: --target '<name>' uses '<adapter_type>', but default target uses '<default_type>'. Pushdown models may fail with syntax errors."`
+
+#### Two Dialects in One Project
+
+A DVT project has two types of SQL:
+
+1. **Target dialect** (pushdown models) — written for the target engine. Leverages full engine-specific features (Snowflake QUALIFY, Postgres JSONB, BigQuery STRUCT, etc.). Runs directly on the target via the adapter.
+
+2. **DuckDB dialect** (extraction models) — written in DuckDB SQL for cross-engine models. Engine-agnostic. Runs in DuckDB cache. Result loaded to any target via Sling.
+
+Both coexist in the same project. DVT's value is exactly this: use the full power of each engine for pushdown, AND have universal cross-engine capability via DuckDB.
+
 ---
 
 ## 2. Target Rules
@@ -183,6 +210,10 @@ Result:
 - Sources with connection != snowflake_prod → Sling extracts automatically
 - Sources with connection == snowflake_prod → Pushdown (no data movement)
 ```
+
+**RULE 2.4.3:** When `--target` changes the adapter type (e.g., default is `postgres` but `--target` points to a `sqlserver` output), DVT emits a warning:
+- `"DVT007: --target '<name>' uses '<adapter_type>', but default target uses '<default_type>'. Pushdown models may fail with syntax errors."`
+- DVT does **NOT** block execution — the user may have only extraction models, which are engine-agnostic (DuckDB SQL). The warning ensures they understand pushdown models written in the original target dialect will likely fail.
 
 ### 2.5 Bucket Targets
 
@@ -757,6 +788,7 @@ If no extraction needed → DVT works without Sling.
 | DVT002 | Type precision loss | Exotic type mapped to text/json during extraction |
 | DVT003 | Extraction slow | Large table full-refresh, suggest incremental |
 | DVT006 | Ephemeral multi-ref | Ephemeral referenced by multiple downstream models |
+| DVT007 | Target adapter mismatch | `--target` changes adapter type from default; pushdown models may fail |
 
 ### Errors
 
@@ -935,6 +967,8 @@ test-paths: ["tests"]
 | Bucket targets | First-class. Delta default. Configurable format. |
 | Sling not installed | Error only if extraction needed. Optional otherwise. |
 | Profiles directory | DVT checks `~/.dvt` in addition to `~/.dbt` for profiles.yml. |
+| `--target` behavior | Switches environments, not engines. Warn if adapter type changes (DVT007). |
+| SQL dialects | Pushdown = target dialect, Extraction = DuckDB SQL. Both coexist in one project. |
 
 ---
 

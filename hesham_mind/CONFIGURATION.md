@@ -334,6 +334,48 @@ developer/environment will build its own cache on first `dvt run`.
 | `dvt run --full-refresh` | **Deletes** cache, rebuilds from scratch |
 | `dvt clean` | **Deletes** cache and other build artifacts |
 
+## `--target` Usage Guidance
+
+The `--target` CLI flag overrides the default target from `profiles.yml` for a single run. It is designed for switching between **same-engine environments**.
+
+### Correct usage: same adapter type
+```bash
+# profiles.yml has default: prod_snowflake (type: snowflake)
+dvt run --target dev_snowflake       # OK: snowflake → snowflake
+dvt run --target staging_snowflake   # OK: snowflake → snowflake
+dvt seed --target dev_snowflake      # OK: seeds work across same engine
+```
+
+### Risky usage: different adapter type
+```bash
+# profiles.yml has default: prod_snowflake (type: snowflake)
+dvt run --target mysql_docker        # WARNING: pushdown models will fail
+dvt seed --target mysql_docker       # OK: seeds don't depend on SQL dialect
+dvt run --select extraction_model --target mysql_docker  # OK if only extraction models selected
+```
+
+### DVT007 Warning
+
+When the `--target` adapter type differs from the profile's default target adapter type, DVT emits a warning:
+
+```
+DVT007: Target override 'mysql_docker' (mysql) differs in adapter type from
+default target 'prod_snowflake' (snowflake). Pushdown models written in
+snowflake SQL may fail on mysql. Extraction models (DuckDB SQL) are unaffected.
+```
+
+**DVT warns but does not block.** The user may have a valid reason:
+- Running only extraction models (DuckDB SQL, engine-independent)
+- Running only seeds (CSV loading, engine-independent)
+- Running only tests (test SQL is typically simple/portable)
+- Intentionally testing cross-engine compatibility
+
+### Why this matters: two dialects in one project
+
+A DVT project contains two SQL dialects:
+- **Pushdown models**: target's native SQL dialect (e.g., Snowflake SQL). Switching `--target` to a different engine breaks these.
+- **Extraction models**: DuckDB SQL (universal). These are unaffected by `--target` changes because DuckDB is always the compute engine.
+
 ## Environment Variables
 
 DVT respects all dbt environment variables plus:

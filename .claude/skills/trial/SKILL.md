@@ -98,6 +98,12 @@ dvt compile --select pushdown_pg cross_pg_mysql
 dvt show --select pushdown_pg
 dvt show --inline "SELECT * FROM pg_docker.public.test_seed LIMIT 5"
 
+# Target override tests (--target behavior)
+dvt run --target <same_adapter_type_target>                    # should work (same engine)
+dvt run --target <different_adapter_type_target> 2>&1 | head   # should show DVT007 warning
+dvt seed --select test_seed --target <different_adapter_type>  # seeds should still work
+dvt run --select <extraction_model> --target <different_adapter_type>  # extraction models should work (DuckDB SQL)
+
 # Snapshot
 dvt snapshot
 

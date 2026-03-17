@@ -9,112 +9,174 @@
 
 - **dvt-ce**: dbt-core 1.9.10 renamed to `dvt-ce`. Provides `dbt.*` + `dvt.*`.
 - **dvt-adapters**: 13 engine adapters in one package. Provides `dbt.adapters.*` + `dbt.include.*`.
-- **Test project:** `Testing_Playground/trial_19_dvt_ce_pypi/Coke_DB` (5 Docker DBs + remote SF/PG/DBX).
-- **Both packages:** local editable in trial_19 `.venv`.
+- **Test projects:**
+  - `trial_19_dvt_ce_pypi/Coke_DB` — original 12-model test (Docker DBs)
+  - `trial_20_full_coverage/Coke_DB` — full 68-model test (Docker + remote SF/PG/DBX)
+- **Both packages:** local editable via `pyproject.toml` + `[tool.uv.sources]`
+- **Profiles:** `~/.dvt/profiles.yml` (DVT-first, `~/.dbt` fallback)
 
 ---
 
 ## COMPLETED
 
 ### Phase 0: Scaffold + Sync [DONE]
-- DVT CLI (all dbt commands + `dvt sync`). Resilient fallback to sync-only CLI.
-- `dvt sync`: self-healing — purges dbt-core, installs drivers, DuckDB extensions, verifies Sling. Favors uv.
-
 ### Phase 1: Core Extraction Pipeline [DONE]
-- Connection mapper (16 adapters → Sling URLs)
-- Watermark formatter (13 dialects × 4 types)
-- Source connection parsing from sources.yml
-- Target resolver (execution path classification per model)
-- Sling client (lazy import, 5 operations)
-- DvtRunTask + DvtModelRunner + DvtBuildTask
-
 ### Phase 2: Seeds, Debug, Show [DONE]
-- `dvt seed` via Sling (bulk CSV loading, 10-100x faster)
-- `dvt show` via DuckDB (local queries, ATTACH to PG/MySQL)
-- `dvt debug` (all connections or `--target X`, Sling ping)
-
 ### Phase 3: Package Consolidation [DONE]
-- dvt-adapters: 13 engines from upstream + community repos, import fixes
-- dvt-ce depends on dvt-adapters (zero dbt-core/dbt-adapters from PyPI)
-- Sync installs drivers only (no dbt-* packages)
-
 ### Phase 4: Persistent DuckDB Cache + Incremental [DONE]
-- `.dvt/cache.duckdb` persistent cache. Thread-safe file lock.
-- Unified extraction: ALL cross-engine goes through DuckDB cache (killed Sling Direct)
-- Cache-per-source (shared across models). Model results cached for `{{ this }}`.
-- Incremental: `is_incremental()` via cache, watermark from TARGET, delta extraction, `{{ this }}` rewriting
-- `--full-refresh` destroys cache. View/ephemeral coerced to table (DVT001).
-- Fix: stale `is_incremental()` stripped when cache is empty.
-
 ### Phase 5: Federation Optimizer [DONE]
-- Query decomposition via SQLGlot AST → per-source extraction queries
-- Predicate pushdown (safe comparisons only, function calls stay in DuckDB)
-- LIMIT pushdown (transpiled: LIMIT→TOP for TSQL, LIMIT→FETCH FIRST for Oracle)
-- Full extraction query transpiled DuckDB → source dialect via SQLGlot
-- Column pruning disabled at extraction (cache shared); DuckDB handles it internally
-
 ### Phase 6: Non-Default Pushdown + Polish [DONE]
-- **Non-default pushdown**: models targeting non-default engines (MySQL, Oracle, MSSQL, MariaDB) correctly route through DuckDB cache and load to the right target with the right schema (dbo for MSSQL, SYSTEM for Oracle, devdb for MySQL/MariaDB)
-- Target resolver reads `config.target` from `_extra` (AdditionalPropertiesAllowed)
-- `_model_table_name` uses target's schema from profiles.yml for non-default targets
-- `~/.dvt` profiles directory fallback (before `~/.dbt`)
-- `dvt clean` deletes `.dvt/` cache directory
-- `.gitignore` template includes `.dvt/`
-- DVT error classes (DVT001-DVT109) in `dvt/exceptions.py`
+### Phase 7: DuckDB Connectivity [DONE]
+### Phase 8.5: dvt show --select [DONE]
 
-### E2E Test Results (Trial 19 — Latest)
+### E2E Test Results
 
-**12/12 models PASS on BOTH run 1 (fresh) and run 2 (incremental):**
-
-| Test | Path | Target | Result |
-|------|------|--------|--------|
-| `pushdown_pg` | Default pushdown | pg_docker | PASS |
-| `pushdown_mysql` | Non-default pushdown | mysql_docker | PASS |
-| `pushdown_oracle` | Non-default pushdown | oracle_docker | PASS |
-| `pushdown_mssql` | Non-default pushdown | mssql_docker | PASS |
-| `pushdown_mariadb` | Non-default pushdown | mariadb_docker | PASS |
-| `mysql_to_pg` | Extraction | MySQL→PG | PASS |
-| `mariadb_to_pg` | Extraction | MariaDB→PG | PASS |
-| `mssql_to_pg` | Extraction | MSSQL→PG | PASS |
-| `oracle_to_pg` | Extraction | Oracle→PG | PASS |
-| `cross_pg_mysql` | Extraction | PG+MySQL→PG | PASS |
-| `cross_all_docker_to_pg` | Extraction | 5-engine JOIN→PG | PASS |
-| `incremental_mysql_to_pg` | Incremental extraction | MySQL→PG (delta) | PASS |
-
-Also: `dvt sync` 6/6, `dvt debug` 9/9, `dvt seed` PASS, `dvt build` 27/27, `dvt show` PASS.
-
-**No known issues.**
+**Trial 19 (scoped — 12 models):** 12/12 PASS (both run 1 + run 2)
+**Trial 20 (full DAG — 68 models):** Many failures exposed (see Feedback section below)
 
 ---
 
-## UPCOMING
+## USER FEEDBACK (v1) — CRITICAL ITEMS
 
-### Phase 7: DuckDB Connectivity to All Engines [DONE]
+From `hesham_tests/Feedback_v1/design_and_branding_feedback.md`:
 
-| Item | Status | Details |
-|------|--------|---------|
-| P7.1: DuckDB ATTACH research | DONE | postgres ✓, redshift (PG-compat) ✓, mysql ✓, mariadb (MySQL-compat) ✓, sqlite ✓. Snowflake/BigQuery/MSSQL/Oracle/Databricks → no native extension, Sling fallback. |
-| P7.2: `dvt show` for ATTACHable engines | DONE | PG, MySQL, MariaDB, SQLite, Redshift via ATTACH. Cross-engine JOINs work (3-way PG+MySQL+MariaDB tested). Non-ATTACHable engines logged as "use dvt run". |
-| P7.3: DuckDB extensions in dvt sync | DONE | Added redshift→postgres_scanner, mariadb→mysql_scanner to sync. |
+### F1: dvt --version (BRANDING)
+**Problem:** Shows "dbt-core", "Your version of dbt-core is out of date", links to getdbt.com. Lists adapter versions from PyPI, not from dvt-adapters.
+**Fix needed:**
+- Replace all "dbt-core" branding with "dvt-ce"
+- Show DVT version only, no "update available" against PyPI dbt-core
+- Adapter versions should come from dvt-adapters (one version for all)
+- Link to `https://github.com/heshamh96/dvt-ce`
+- Suppress oracle adapter "thin mode" warning and thrift SSL warning
 
-### Phase 8: Advanced Features [NEXT]
+### F2: dvt debug (UX)
+**Problem:** Sling output is noisy, connection URLs exposed, inconsistent formatting.
+**Fix needed:**
+- Use 🟩 `[OK]` / 🟥 `[FAIL]` symbols
+- Suppress ALL Sling output (connection URLs, temp file paths, CLI banners)
+- User should NOT know Sling is involved — just show adapter connectivity status
+- Clean, consistent formatting per connection
+
+### F3: dvt sync (UX)
+**Problem:** Functional but poorly formatted. Adapter warnings leak through.
+**Fix needed:**
+- Use 🟩/🟥 symbols for status
+- Suppress oracle "thin mode" and thrift SSL warnings
+- Clean formatting
+
+### F4: dvt seed (FUNCTIONAL + UX)
+**Problem:** Sling output is noisy. 3/11 seeds FAIL on type inference (dirty CSV data: "1.25%", "_4").
+**Fix needed:**
+- Suppress ALL Sling output during seeds — show only dbt-style "OK loaded seed file" / "ERROR loading seed file"
+- Fix type inference: either pass `adjust_column_type: true` to Sling, or default columns to text/varchar (like dbt's agate loader does), or use `SLING_SAMPLE_SIZE` env var
+- On error: show clean DVT error message, not raw Sling/pq errors
+- The user should feel at home (dbt-like output)
+
+### F5: dvt run (FUNCTIONAL + UX)
+**Problem:** Sling output floods the terminal. Many models fail. Output is not dbt-like.
+**Fix needed:**
+- **UX:** Suppress ALL Sling/DuckDB output during model execution. The extraction path (source→Sling→DuckDB→Sling→target) is a BLACK BOX. Show only dbt-style model output ("OK created sql table model", "ERROR creating sql table model").
+- **Functional:** Many failures in trial_20 are from:
+  - Seeds that failed to load (cascading failures for models that depend on them)
+  - Source tables not existing on `pg_dev` (the default target is `pg_dev` port 5433, not `pg_docker` port 5432)
+  - Models with syntax errors for their target engines
+- Need to fix Coke_DB models + seeds before re-testing
+
+### F6: --target Philosophy (ARCHITECTURE)
+**Problem:** `--target` can switch to a different adapter type, causing pushdown models to fail with syntax errors.
+**Rule (added to DVT_RULES.md):**
+- `--target` switches environments (same engine), NOT engines
+- Pushdown models use target dialect — work on same engine type only
+- Extraction models use DuckDB dialect — work on any engine
+- DVT warns (DVT007) when `--target` changes adapter type, doesn't block
+- This is the DVT philosophy: two dialects coexist in one project
+
+---
+
+## UPCOMING PHASES
+
+### Phase 10: UX/Branding Overhaul [NEXT — HIGH PRIORITY]
+
+Sling is an implementation detail. The user should NEVER see it.
 
 | Item | Priority | Details |
 |------|----------|---------|
-| P8.1: Bucket materialization | MEDIUM | `config(target='s3_bucket', format='delta')`. SQL on default target → Sling → bucket. |
-| P8.2: CDC extraction | LOW | Sling `change-capture` mode for transaction log reading. |
-| P8.3: Virtual federation | LOW | `materialized='virtual'` via DuckDB ATTACH — ephemeral cross-source queries. |
-| P8.4: `dvt docs` lineage enhancement | LOW | Show extraction paths in lineage graph. |
-| P8.5: `dvt show --select model_name` | MEDIUM | Compile model SQL, resolve source refs, run in DuckDB locally. |
+| P10.1: Suppress Sling stdout/stderr | CRITICAL | Redirect all Sling subprocess output to /dev/null or capture and log at DEBUG level only. ALL dvt commands (run, seed, debug, show) should produce clean, dbt-like output. |
+| P10.2: dvt --version rebranding | HIGH | Replace dbt-core version check with DVT-only output. Show dvt-ce version + dvt-adapters version. No PyPI update check against dbt-core. Link to github.com/heshamh96/dvt-ce. |
+| P10.3: dvt debug clean output | HIGH | 🟩 `[OK]` / 🟥 `[FAIL]` per connection. No Sling URLs, no temp paths, no CLI banners. Suppress adapter import warnings (oracle thin mode, thrift SSL). |
+| P10.4: dvt sync clean output | HIGH | 🟩/🟥 symbols. Suppress adapter warnings. |
+| P10.5: dvt seed clean output | HIGH | dbt-style output only. Suppress Sling. On error: clean DVT error message. |
+| P10.6: dvt run clean output | CRITICAL | Black-box extraction path. Suppress ALL Sling/DuckDB output. dbt-style model output only. |
+| P10.7: --target adapter type warning | MEDIUM | DVT007 warning when --target changes adapter type. |
 
-### Phase 9: Testing + Release
+### Phase 11: Seed Robustness
 
 | Item | Priority | Details |
 |------|----------|---------|
-| P9.1: Unit tests | MEDIUM | Watermark formatter, connection mapper, target resolver, optimizer. |
-| P9.2: Integration tests | MEDIUM | Full E2E test suite as automated tests. |
-| P9.3: PyPI publish | MEDIUM | dvt-ce + dvt-adapters with all fixes. |
-| P9.4: Documentation | LOW | README, getting started, migration from dbt guide. |
+| P11.1: Type inference fix | HIGH | Default to text/varchar for all CSV columns (like dbt's agate). Or pass `adjust_column_type: true` to Sling. Dirty CSV data ("1.25%", "_4") must not crash seeding. |
+| P11.2: Seed --target cross-engine | HIGH | Verify seeding works across all engine targets. Tested: pg, mysql, oracle, mssql, mariadb, snowflake, databricks. |
+| P11.3: Large seed performance | MEDIUM | Verify streaming + low memory footprint for 1M+ row CSVs across all targets. |
+
+### Phase 12: Full DAG Testing (Trial 20 Fixes)
+
+| Item | Priority | Details |
+|------|----------|---------|
+| P12.1: Fix Coke_DB seeds | HIGH | Fix dirty CSV data (customers_db_1/2 Discount column, transactions_a Day column). |
+| P12.2: Fix Coke_DB models | HIGH | Review all 68 models. Fix syntax errors for their intended targets. Ensure sources match. |
+| P12.3: Verify pg_dev vs pg_docker | HIGH | Default target is `pg_dev` (port 5433). Many models use `pg_docker` (port 5432) sources. Ensure seeds are loaded to the right target. |
+| P12.4: Full DAG run with clean data | HIGH | Re-run all 68 models after fixing seeds and models. Target: 0 errors. |
+
+### Phase 13: README + Documentation
+
+| Item | Priority | Details |
+|------|----------|---------|
+| P13.1: GitHub README (master branch) | HIGH | Comprehensive README for the Sling+DuckDB architecture. Not the old Spark stuff. Getting started, installation, examples, philosophy. |
+| P13.2: PyPI description | MEDIUM | Update setup.py long_description for PyPI listing. |
+| P13.3: Create README update skill | LOW | Skill that auto-generates README from hesham_mind/ docs when merging to master. |
+
+### Phase 14: Advanced Features
+
+| Item | Priority | Details |
+|------|----------|---------|
+| P14.1: Bucket materialization | MEDIUM | `config(target='s3_bucket', format='delta')` |
+| P14.2: CDC extraction | LOW | Sling `change-capture` mode |
+| P14.3: Virtual federation | LOW | `materialized='virtual'` via DuckDB ATTACH |
+| P14.4: `dvt docs` lineage enhancement | LOW | Show extraction paths in lineage graph |
+
+### Phase 15: Testing + Release
+
+| Item | Priority | Details |
+|------|----------|---------|
+| P15.1: Unit tests | MEDIUM | Watermark formatter, connection mapper, target resolver, optimizer |
+| P15.2: Integration test suite | MEDIUM | Automated E2E tests for all execution paths |
+| P15.3: PyPI publish (clean release) | MEDIUM | dvt-ce + dvt-adapters with all UX fixes |
+| P15.4: GitHub release notes | LOW | Changelog, migration guide from dbt |
+
+---
+
+## DVT Philosophy
+
+### Two Dialects, One Project
+
+DVT projects have two types of SQL:
+
+1. **Target dialect** (pushdown models) — written for the target engine. Uses engine-specific features (Snowflake QUALIFY, Postgres JSONB, etc.). Runs directly on the target via adapter.
+
+2. **DuckDB dialect** (extraction models) — written in DuckDB SQL. Engine-agnostic. Runs in DuckDB cache. Result loaded to any target via Sling.
+
+### `--target` Switches Environments, Not Engines
+
+- `dvt run --target prod_snowflake` → switches from dev to prod Snowflake. Same dialect. Works.
+- `dvt run --target mssql_docker` → switches from Postgres to SQL Server. Pushdown models break. Expected.
+- DVT warns (DVT007) but doesn't block — the user might know what they're doing.
+
+### Sling is Invisible
+
+The user should NEVER see Sling output, URLs, or errors. The extraction path (source→Sling→DuckDB→Sling→target) is a black box. DVT shows only dbt-like output. Sling details are logged at DEBUG level for troubleshooting.
+
+### Seeds Must Be Robust
+
+Sling seed loading must handle dirty CSV data as gracefully as dbt's agate loader. Default to text/varchar. Never crash on type inference.
 
 ---
 
@@ -123,18 +185,19 @@ Also: `dvt sync` 6/6, `dvt debug` 9/9, `dvt seed` PASS, `dvt build` 27/27, `dvt 
 ```
 Execution flow:
   1. dbt compiles model (Jinja → SQL in target dialect)
-  2. DVT rewrites source refs → DuckDB cache table names
-  3. Federation optimizer decomposes → per-source extraction queries
-     (predicate pushdown + LIMIT, transpiled to source dialect)
-  4. Sling extracts each source → .dvt/cache.duckdb
-  5. DuckDB executes rewritten model SQL
-  6. Sling loads result → target (default or non-default)
-     (incremental: watermark from target, delta-only)
+  2. DVT detects remote sources (source.connection != model.target)
+  3. If pushdown: adapter executes SQL on target (standard dbt)
+  4. If extraction:
+     a. Federation optimizer decomposes → per-source queries
+     b. Sling extracts sources → .dvt/cache.duckdb (INVISIBLE)
+     c. DuckDB executes model SQL (INVISIBLE)
+     d. Sling loads result → target (INVISIBLE)
+     e. User sees only: "OK created sql table model" (like dbt)
 
 Paths:
   Default pushdown:     source.connection == default target → adapter SQL
-  Non-default pushdown: source.connection == non-default target → DuckDB cache → non-default target
-  Extraction:           source.connection != model target → DuckDB cache → model target
+  Non-default pushdown: target override, same adapter type → DuckDB cache → target
+  Extraction:           source.connection != model target → DuckDB cache → target
 
 Cache: .dvt/cache.duckdb (persistent, per-project, thread-safe)
   Sources: {source}__{table} (SELECT *, shared across models)

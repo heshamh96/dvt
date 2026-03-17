@@ -271,6 +271,31 @@ Flow:
   4. Done.
 ```
 
+## DVT Philosophy
+
+### Two Dialects in One Project
+
+A DVT project naturally contains SQL in two dialects:
+
+- **Pushdown models** use the **target's native dialect** (Snowflake SQL, PostgreSQL, BigQuery, etc.). These models' SQL runs directly on the target database via the dbt adapter.
+- **Extraction models** use **DuckDB SQL** (a universal, Postgres-like dialect). These models' SQL runs in the local DuckDB cache engine after Sling extracts remote sources.
+
+Both coexist in the same project. The dialect a model uses is determined by its execution path, not by any config flag. If all a model's sources are on the target, it's pushdown (target dialect). If any source is remote, it's extraction (DuckDB dialect).
+
+### `--target` Switches Environments, Not Engines
+
+The `--target` flag selects which named output from `profiles.yml` to use as the default target. It is designed for switching between **same-engine environments** (e.g., `--target dev_snowflake` vs `--target prod_snowflake`).
+
+**`--target` should NOT change the adapter type.** If the default target is Snowflake and the user runs `--target mysql_docker`, all pushdown models written in Snowflake SQL will fail because MySQL cannot parse Snowflake-specific syntax. DVT emits a **DVT007** warning when the `--target` adapter type differs from the profile default, but does not block execution — the user may have a valid reason (e.g., running only extraction models that use DuckDB SQL anyway).
+
+### Sling Is Invisible
+
+Users should **never** see Sling output during normal operation. The extraction path (Sling → DuckDB → Sling) is a black box. DVT shows standard dbt-like output (model name, status, timing). Sling errors are caught and re-raised as DVT errors with actionable messages.
+
+### Seeds Must Be Robust
+
+DVT's Sling-based seed loader must handle dirty CSV data at least as gracefully as dbt's agate-based loader. This includes: encoding issues, mixed types, null handling, and schema inference. Seeds should "just work" for the same CSVs that dbt handles.
+
 ### Example 4: Seed via Sling
 
 ```

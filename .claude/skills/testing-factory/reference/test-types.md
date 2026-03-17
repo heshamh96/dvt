@@ -186,3 +186,36 @@ cd Testing_Factory/Testing_OSs_docker
 docker compose up --build               # Build and test all distros
 docker compose up --build ubuntu-24.04  # Single distro
 ```
+
+## Target Override Tests
+
+**Purpose**: Verify that `--target` correctly switches between same-engine environments and warns when switching adapter types. Validates the two-dialect contract: pushdown models use target dialect, extraction models use DuckDB SQL.
+
+**What it catches**:
+- Missing or incorrect DVT007 warning when `--target` changes adapter type
+- Pushdown models incorrectly succeeding on a different engine (dialect mismatch not caught)
+- Extraction models incorrectly failing on `--target` override (should be engine-independent)
+- Seed loading failures when `--target` changes adapter type (seeds should be portable)
+
+**Test matrix**:
+
+| Scenario | Expected Result |
+|----------|----------------|
+| `--target` same adapter type (e.g., SF → SF) | All models succeed, no warnings |
+| `--target` different adapter type (e.g., SF → PG) | DVT007 warning emitted |
+| `--target` different type + only extraction models | Models succeed (DuckDB SQL is universal) |
+| `--target` different type + pushdown models | Pushdown models fail with SQL syntax errors |
+| `--target` different type + seeds only | Seeds succeed (CSV loading is engine-independent) |
+| `--target` different type + tests only | Tests generally succeed (simple SQL) |
+
+**When to run**: After changes to target resolution, CLI flag handling, or execution path classification.
+
+**How to run**:
+```bash
+# In a trial project with both pushdown and extraction models
+dvt run --target <same_engine_target>                          # Should pass
+dvt run --target <different_engine_target> 2>&1 | grep DVT007  # Should warn
+dvt run --select <extraction_model> --target <different_engine> # Should pass
+dvt run --select <pushdown_model> --target <different_engine>   # Should fail
+dvt seed --target <different_engine>                            # Should pass
+```
